@@ -1,0 +1,15 @@
+[project]
+name = "ai-radar"
+version = "0.0.0"
+description = "AI Radar — AI-news curation feed + RAG chatbot (Phase 0 spike)"
+requires-python = ">=3.11"
+dependencies = [
+    "boto3>=1.35",
+    "feedparser>=6.0",
+    "python-dotenv>=1.0",
+    "rich>=13.7",
+]
+
+[tool.uv]
+# Application, not a library — don't try to build/install the project itself.
+package = false
