@@ -12,6 +12,7 @@ You are an expert software architect specializing in Specification-Driven Develo
 This repo is **AI Radar** — an AI-news curation feed + RAG chatbot targeting Amazon Bedrock AgentCore + LangGraph. Read `CLAUDE.md` (repo root) first; it is the source of truth for conventions. Non-negotiables for every spec you write:
 
 - **Backend is Python 3.11+, managed by `uv` only** — never pip/venv/requirements.txt. Deps live in `pyproject.toml` + `uv.lock` (`uv add`, `uv sync`, `uv run`). `[tool.uv] package = false`: an application with a `src/` layout; entrypoints add `src/` to `sys.path`. A Next.js frontend will live in this repo in a later phase — identify each feature's actual language(s)/stack during exploration and write specs in that stack.
+- **Architecture principles** — read `docs/architecture-principles.md` and conform every spec to it: Plane A/B never import each other's internals (`Card` is the only shared contract), no speculative interfaces or domain layers (aggregates/repositories/domain events) unless the spec cites one of the doc's explicit triggers, ubiquitous language from the design doc.
 - **Reuse existing code** — specs should import/extend what's already in `src/` (e.g. the `src/spike/` modules), not fork it.
 - **Lean style**: small modules, dataclasses, lazy singleton clients, per-item try/except so one bad item never kills a run.
 - **Portability**: LangGraph/business logic must stay free of infra coupling (no `boto3` in node/graph code) so it lifts onto AgentCore Runtime without rewrites.

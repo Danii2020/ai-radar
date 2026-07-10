@@ -53,7 +53,7 @@ src/spike/
   chat.py               # RagChat: retrieve + Sonnet grounded answer + multi-turn history
   cards.py              # Card model + rich console rendering
   pipeline.py           # Plane A orchestration
-docs/                   # design + research
+docs/                   # design + research + architecture principles
 ```
 
 ## AWS / Bedrock — verified facts
@@ -76,6 +76,11 @@ docs/                   # design + research
 
 ## Conventions
 
+- **Architecture rules for new specs/features live in
+  [`docs/architecture-principles.md`](docs/architecture-principles.md)** —
+  strategic-DDD boundaries (planes never import each other; `Card` is the only
+  shared contract), explicit triggers before adding domain layers, no
+  speculative interfaces. Read it before architecting anything.
 - Match the existing lean style: small modules, dataclasses, lazy singleton client,
   per-item try/except so one bad item doesn't kill a run.
 - Keep **LangGraph-portable logic separate from infra** — the loop is plain Python now
