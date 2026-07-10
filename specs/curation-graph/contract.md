@@ -104,6 +104,10 @@ class JsonFileCardStore:
         NOTE: cards.json is written as the FULL current batch passed in
         (matches the spike, which writes the run's ranked cards). The seen set
         accumulates across runs.
+
+        NOTE: when `cards` is empty the seen.json write is short-circuited
+        (skipped), leaving seen.json byte-identical (per Guarantee 5); cards.json
+        is still always written, including an empty `[]`.
         """
         ...
 ```

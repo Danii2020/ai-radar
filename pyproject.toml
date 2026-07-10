@@ -6,6 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
     "boto3>=1.35",
     "feedparser>=6.0",
+    "langgraph>=1.2.9",
     "python-dotenv>=1.0",
     "rich>=13.7",
 ]
@@ -13,3 +14,8 @@ dependencies = [
 [tool.uv]
 # Application, not a library — don't try to build/install the project itself.
 package = false
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
