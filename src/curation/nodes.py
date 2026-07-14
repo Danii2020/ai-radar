@@ -6,7 +6,7 @@ is the existing `spike.bedrock.summarize` helper, imported as-is.
 """
 from __future__ import annotations
 
-from typing import Callable
+from typing import Protocol
 
 from spike.bedrock import summarize
 from spike.cards import Card
@@ -15,7 +15,19 @@ from .interfaces import CardStore, Discoverer
 from .state import CurationState
 
 
-def discover_node(discoverer: Discoverer) -> Callable[[CurationState], CurationState]:
+class NodeFn(Protocol):
+    """Shape LangGraph's `add_node` expects: a `state`-keyword-callable.
+
+    `Callable[[CurationState], CurationState]` erases the parameter name and
+    is treated as position-only, which doesn't structurally match LangGraph's
+    node Protocol (`__call__(self, state: ...) -> Any`) — this named-Protocol
+    form does.
+    """
+
+    def __call__(self, state: CurationState) -> CurationState: ...
+
+
+def discover_node(discoverer: Discoverer) -> NodeFn:
     def _discover(state: CurationState) -> CurationState:
         raw = discoverer.discover()
         return {"raw": raw, "discovered": len(raw)}
@@ -23,7 +35,7 @@ def discover_node(discoverer: Discoverer) -> Callable[[CurationState], CurationS
     return _discover
 
 
-def dedup_node(store: CardStore) -> Callable[[CurationState], CurationState]:
+def dedup_node(store: CardStore) -> NodeFn:
     def _dedup(state: CurationState) -> CurationState:
         raw = state.get("raw", [])
         max_items = state.get("max_items")
@@ -54,7 +66,7 @@ def rank_node(state: CurationState) -> CurationState:
     return {"cards": ranked}
 
 
-def persist_node(store: CardStore) -> Callable[[CurationState], CurationState]:
+def persist_node(store: CardStore) -> NodeFn:
     def _persist(state: CurationState) -> CurationState:
         cards = state.get("cards", [])
         store.upsert(cards)
