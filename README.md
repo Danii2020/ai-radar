@@ -2,7 +2,55 @@
 
 AI-news curation feed + RAG chatbot. See [`docs/app-design-on-agentcore.md`](docs/app-design-on-agentcore.md) for the full design.
 
-## Phase 0 spike (current)
+## Phase 1 — Curation MVP (in progress)
+
+Refactors the Phase 0 loop into a **LangGraph `StateGraph`** with infra injected
+behind Protocols, so discovery and persistence can be swapped without touching
+graph/node code. See [`tasks/phase-1-curation-mvp/`](tasks/phase-1-curation-mvp/)
+for the full build plan and [`specs/`](specs/) for each shipped spec's contract.
+
+```
+discover (RSS + Tavily, composite, deduped)  →  dedup  →  summarize + tag  →  rank  →  persist
+```
+
+| Spec | Status | What it added |
+|---|---|---|
+| [`curation-graph`](specs/curation-graph/) | ✅ Shipped | The `StateGraph` itself (`src/curation/graph.py`), the `Discoverer`/`CardStore` Protocols (`interfaces.py`), and the local JSON-file defaults (`local.py`) — reproduces Phase 0 behavior exactly. |
+| [`tavily-discovery`](specs/tavily-discovery/) | ✅ Shipped | `TavilyDiscoverer` (web search) + `CompositeDiscoverer` (RSS + Tavily, cross-source deduped) behind the same `Discoverer` Protocol — no graph/node changes. |
+| `dynamodb-card-store` | ⏳ Not started | Swaps `JsonFileCardStore` for DynamoDB persistence + dedup. |
+| `runtime-packaging` | ⏳ Not started | Packages the graph for AgentCore Runtime (containerized, cloud-invocable). |
+| `eventbridge-schedule` | ⏳ Not started | Daily automated trigger. |
+| `run-observability` | ⏳ Not started | Structured run-summary logging. |
+
+### Run it
+
+```bash
+uv run run_curation.py            # RSS-only if TAVILY_API_KEY unset, else RSS + Tavily
+uv run run_curation.py --force    # re-summarize everything (ignore dedup cache)
+```
+
+Discovery source is auto-selected: set `TAVILY_API_KEY` in `.env` (get one at
+[tavily.com](https://tavily.com)) to pull from RSS + Tavily web search; leave it
+unset to fall back to RSS alone (same behavior as Phase 0). Tuning knobs
+(topic seeds, results-per-query, recency, domain filters, per-run cap) are
+env-overridable — see `.env.example` and `src/curation/config.py`.
+
+The Tavily key is **local-only** for now (`.env` / env var); Secrets Manager
+resolution is deferred to `runtime-packaging`, once real cloud infra exists.
+
+Output still lands in `.spike_cache/cards.json` / `seen.json` (unchanged from
+Phase 0 — the `JsonFileCardStore` default reproduces that behavior exactly).
+
+### Tests
+
+```bash
+uv run pytest tests/ -v   # 27 tests, all offline (Bedrock + Tavily calls are stubbed)
+```
+
+Live API calls (Bedrock + Tavily) only happen via the `uv run run_curation.py`
+manual smoke path above — never in the automated suite.
+
+## Phase 0 spike (reference baseline)
 
 Proves the core curation loop end-to-end with **zero infra**, using real Amazon Bedrock:
 
@@ -51,13 +99,13 @@ Output is also written to `.spike_cache/cards.json` for inspection.
 It answers only from retrieved cards (no hallucination) and says so when the corpus
 lacks the answer. The stable system prompt uses a Bedrock prompt-cache point.
 
-### Deliberately deferred to later phases
+### Deliberately deferred (superseded by Phase 1 progress above, or still later)
 
-- **Search API** (Tavily/Exa) — using free RSS for the spike; swap `feeds.py` for a search tool in Phase 1.
-- **LangGraph orchestration** — the loop is plain Python here; becomes a LangGraph graph on AgentCore Runtime.
-- **Persistence** — DynamoDB cards + a real vector store; spike uses local JSON.
-- **AgentCore Memory** — chat memory is an in-process list; becomes AgentCore Memory (STM/LTM).
-- **Scheduling** — EventBridge trigger.
+- ~~**Search API** (Tavily/Exa)~~ — done, see `tavily-discovery` above.
+- ~~**LangGraph orchestration**~~ — done, see `curation-graph` above.
+- **Persistence** — DynamoDB cards + a real vector store; spike/Phase 1 use local JSON (`dynamodb-card-store`, not started).
+- **AgentCore Runtime + scheduling** — cloud deployment + EventBridge trigger (`runtime-packaging`, `eventbridge-schedule`, not started).
+- **AgentCore Memory** — chat memory is an in-process list; becomes AgentCore Memory (STM/LTM) in a later phase (Plane B, untouched by Phase 1).
 
 ### Config knobs (`.env` or env vars)
 
