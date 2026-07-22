@@ -19,12 +19,19 @@ from rich.console import Console  # noqa: E402
 
 from curation import config as curation_config  # noqa: E402
 from curation.composite import CompositeDiscoverer  # noqa: E402
+from curation.dynamo import DynamoCardStore  # noqa: E402
 from curation.graph import build_graph  # noqa: E402
-from curation.interfaces import Discoverer  # noqa: E402
+from curation.interfaces import CardStore, Discoverer  # noqa: E402
 from curation.local import JsonFileCardStore, RssDiscoverer  # noqa: E402
 from curation.tavily import TavilyDiscoverer  # noqa: E402
 from spike import config  # noqa: E402
 from spike.cards import render  # noqa: E402
+
+
+def _build_store(force: bool) -> CardStore:
+    if curation_config.CARD_STORE_BACKEND == "dynamo":
+        return DynamoCardStore()
+    return JsonFileCardStore(force=force)
 
 
 def _build_discoverer() -> CompositeDiscoverer:
@@ -41,7 +48,7 @@ if __name__ == "__main__":
     console.rule("[bold]AI Radar — curation")
 
     force = "--force" in sys.argv
-    store = JsonFileCardStore(force=force)
+    store = _build_store(force)
     discoverer = _build_discoverer()
     graph = build_graph(store, discoverer)
 
@@ -53,14 +60,21 @@ if __name__ == "__main__":
     console.print()
     render(cards, console)
 
+    store_failures = f" store_failures={store.failures()}" if hasattr(store, "failures") else ""
     console.print(
         f"[dim]discovered={final.get('discovered', 0)} "
         f"deduped={final.get('deduped', 0)} "
         f"summarized={final.get('summarized', 0)} "
         f"failed={final.get('failed', 0)} "
-        f"discoverer_failures={discoverer.failures()}[/dim]"
+        f"discoverer_failures={discoverer.failures()}{store_failures}[/dim]"
     )
-    console.print(
-        f"[dim]Saved {len(cards)} cards → {config.CARDS_PATH} · "
-        f"seen db → {config.SEEN_PATH}[/dim]"
-    )
+    if curation_config.CARD_STORE_BACKEND == "dynamo":
+        console.print(
+            f"[dim]Saved {len(cards)} cards → DynamoDB table "
+            f"{curation_config.CARD_TABLE_NAME}[/dim]"
+        )
+    else:
+        console.print(
+            f"[dim]Saved {len(cards)} cards → {config.CARDS_PATH} · "
+            f"seen db → {config.SEEN_PATH}[/dim]"
+        )

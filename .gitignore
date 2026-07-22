@@ -5,3 +5,9 @@ __pycache__/
 .env
 .spike_cache/
 *.egg-info/
+
+# CDK (infra/)
+cdk.out/
+**/cdk.out/
+cdk.context.json
+**/cdk.context.json

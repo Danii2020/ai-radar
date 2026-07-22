@@ -95,3 +95,71 @@ def summarize_stub_factory(make_model_out):
         return _summarize
 
     return _build
+
+
+# --- Spec 03 (dynamodb-card-store) additions ---------------------------------
+# Additive only: the fixtures above (Specs 01/02) are untouched. These fixtures
+# stand up a `moto`-backed DynamoDB table matching the LOCKED key schema in
+# specs/dynamodb-card-store/contract.md so `tests/test_dynamo_store.py` makes
+# zero real-AWS calls. `moto`/`boto3` are imported at module scope here because
+# both are real installed dependencies (moto: dev group) - this does not risk
+# breaking collection of the Spec 01/02 suite the way importing the
+# not-yet-implemented `curation.dynamo` module would.
+
+import boto3
+from moto import mock_aws
+
+# Fixed per contract.md "Decisions" (author's choice, env-overridable in
+# production via curation.config.CARD_TABLE_NAME) - hardcoded here rather than
+# imported so this fixture never depends on the Spec 03 config block existing.
+CARD_TABLE_NAME = "ai-radar-cards"
+
+
+def _create_card_table(resource):
+    """Create the `ai-radar-cards` table with the exact LOCKED key schema:
+    PK `card_id` (S); GSI `feed-by-score` on `gsi_pk`(S)/`gsi_sk`(S), projection
+    ALL; on-demand (PAY_PER_REQUEST) billing."""
+    return resource.create_table(
+        TableName=CARD_TABLE_NAME,
+        KeySchema=[{"AttributeName": "card_id", "KeyType": "HASH"}],
+        AttributeDefinitions=[
+            {"AttributeName": "card_id", "AttributeType": "S"},
+            {"AttributeName": "gsi_pk", "AttributeType": "S"},
+            {"AttributeName": "gsi_sk", "AttributeType": "S"},
+        ],
+        BillingMode="PAY_PER_REQUEST",
+        GlobalSecondaryIndexes=[
+            {
+                "IndexName": "feed-by-score",
+                "KeySchema": [
+                    {"AttributeName": "gsi_pk", "KeyType": "HASH"},
+                    {"AttributeName": "gsi_sk", "KeyType": "RANGE"},
+                ],
+                "Projection": {"ProjectionType": "ALL"},
+            }
+        ],
+    )
+
+
+@pytest.fixture
+def dynamo_resource():
+    """`moto`-backed DynamoDB **resource** (ServiceResource) with the
+    `ai-radar-cards` table pre-created per contract.md's locked key schema.
+
+    Injected as `DynamoCardStore(client=...)` per contract.md's constructor
+    (`client` is an optional boto3 DynamoDB ServiceResource). Zero real-AWS
+    calls: `moto.mock_aws` intercepts boto3 for the fixture's lifetime.
+    """
+    with mock_aws():
+        resource = boto3.resource("dynamodb", region_name="us-east-1")
+        _create_card_table(resource)
+        yield resource
+
+
+@pytest.fixture
+def dynamo_table(dynamo_resource):
+    """The moto-backed `ai-radar-cards` `Table` resource directly, for
+    out-of-band assertions/pre-seeding the `DynamoCardStore` under test doesn't
+    expose (e.g. reading raw items, seeding a pre-existing `embedding`,
+    querying the `feed-by-score` GSI)."""
+    return dynamo_resource.Table(CARD_TABLE_NAME)

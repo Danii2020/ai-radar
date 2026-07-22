@@ -18,5 +18,10 @@ package = false
 
 [dependency-groups]
 dev = [
+    "moto>=5.2.2",
     "pytest>=9.1.1",
+]
+infra = [
+    "aws-cdk-lib>=2.261.0",
+    "constructs>=10.7.1",
 ]
