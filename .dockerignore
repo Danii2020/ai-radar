@@ -1,0 +1,35 @@
+# AgentCore Runtime build context excludes (Spec 04: runtime-packaging).
+# Critically: `.env` (holds the local Tavily key + AWS overrides) must never
+# enter the build context / image. The real Tavily key is resolved from
+# Secrets Manager at invocation time (runtime_app.py), never baked in.
+
+.env
+.env.*
+!.env.example
+
+.venv/
+.spike_cache/
+.git/
+.gitignore
+cdk.out/
+**/cdk.out/
+cdk.context.json
+**/cdk.context.json
+__pycache__/
+**/__pycache__/
+*.pyc
+*.egg-info/
+
+tests/
+specs/
+docs/
+
+.pytest_cache/
+.claude/
+tasks/
+
+# CDK app (not needed inside the agent container image)
+infra/
+
+README.md
+CLAUDE.md

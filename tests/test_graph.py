@@ -41,7 +41,7 @@ class FakeCardStore:
     def __init__(self, seen=None):
         self.seen = set(seen or ())
         self.upsert_calls = 0
-        self.upserted_cards: list[Card] | None = None
+        self.upserted_cards: list[Card] = []
 
     def dedup_filter(self, items):
         return [item for item in items if item.url_hash not in self.seen]

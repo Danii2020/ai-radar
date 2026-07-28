@@ -4,6 +4,7 @@ version = "0.0.0"
 description = "AI Radar — AI-news curation feed + RAG chatbot (Phase 0 spike)"
 requires-python = ">=3.11"
 dependencies = [
+    "bedrock-agentcore>=1.18.1",
     "boto3>=1.35",
     "feedparser>=6.0",
     "langgraph>=1.2.9",
@@ -18,6 +19,7 @@ package = false
 
 [dependency-groups]
 dev = [
+    "bedrock-agentcore-starter-toolkit>=0.3.10",
     "moto>=5.2.2",
     "pytest>=9.1.1",
 ]

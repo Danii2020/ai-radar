@@ -52,3 +52,18 @@ FEED_GSI_PARTITION: str = "CARD"           # single constant GSI partition (no b
 
 # Store selector for the local entrypoint: "json" (default) | "dynamo".
 CARD_STORE_BACKEND: str = os.getenv("CARD_STORE_BACKEND", "json")
+
+# --- Runtime packaging (Spec 04) -----------------------------------------
+# Secrets Manager secret NAME holding the Tavily API key. Resolved at runtime by
+# the AgentCore entrypoint (runtime_app.py); the KEY VALUE is never stored here,
+# in env at build time, or in the image. Matches the CDK-provisioned secret name.
+TAVILY_SECRET_NAME: str = os.getenv("TAVILY_SECRET_NAME", "ai-radar/tavily-api-key")
+
+# Sentinel value the CDK-provisioned Tavily secret (infra/lib/agent_runtime.py)
+# is pinned to at deploy time, before a human `put-secret-value`s the real key
+# (Task 3.5). NOT env-overridable — a fixed literal that MUST match the
+# construct's placeholder value exactly. `runtime_app._resolve_tavily_key`
+# treats a secret whose value equals this sentinel as "not yet populated" and
+# returns "" (degrade to RSS-only), so a freshly-deployed-but-unpopulated
+# secret never gets treated as a real, usable Tavily key.
+TAVILY_SECRET_UNSET_SENTINEL: str = "UNSET-populate-via-put-secret-value"
