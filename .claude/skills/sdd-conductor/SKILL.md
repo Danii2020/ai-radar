@@ -1,6 +1,6 @@
 ---
 name: sdd-conductor
-description: Orchestrate the Specification-Driven Development (SDD) subagent pipeline (sdd-architect → sdd-test-writer → sdd-executor → sdd-auditor). Use when driving/conducting the SDD workflow with subagents — starting a new spec, running the SDD workflow, or coordinating the sdd-* agents. Enforces human review gates, starts with TDD when the task warrants it, and handles subagent sequencing and failures.
+description: Orchestrate the Specification-Driven Development (SDD) subagent pipeline (sdd-architect → sdd-test-writer → sdd-executor → sdd-auditor → sdd-documentarian). Use when driving/conducting the SDD workflow with subagents — starting a new spec, running the SDD workflow, or coordinating the sdd-* agents. Enforces human review gates, starts with TDD when the task warrants it, and handles subagent sequencing and failures.
 metadata:
   author: daniel
   version: "1.0"
@@ -13,8 +13,10 @@ You are the **conductor** of the SDD subagent pipeline, not a participant. Your 
 Pipeline (default, when the task warrants TDD):
 
 ```
-sdd-architect → [HUMAN REVIEWS SPECS] → sdd-test-writer (red) → [HUMAN REVIEWS TESTS] → sdd-executor (green) → sdd-auditor → [HUMAN REVIEWS AUDIT]
+sdd-architect → [HUMAN REVIEWS SPECS] → sdd-test-writer (red) → [HUMAN REVIEWS TESTS] → sdd-executor (green) → sdd-auditor → [HUMAN REVIEWS AUDIT] → sdd-documentarian
 ```
+
+`sdd-documentarian` updates README.md/CLAUDE.md to reflect what actually shipped and was verified — it runs last, after the human has accepted the audit, and only touches the two living docs (never files under `specs/`).
 
 ## Hard rules (the mistakes this skill exists to prevent)
 
@@ -36,6 +38,7 @@ sdd-architect → [HUMAN REVIEWS SPECS] → sdd-test-writer (red) → [HUMAN REV
 
 **FLOW automatically (no per-step approval):**
 - The handoff `executor → auditor` (after the tests have been approved).
+- The handoff `auditor → documentarian` (after the human accepts the final audit) — docs-only, low blast radius, no separate gate needed. Still show the human a short summary of what the documentarian changed; they may ask for edits.
 - Re-running or fixing on transient/tooling failures.
 - Checking off `tasks.md` as work completes.
 
@@ -56,4 +59,6 @@ sdd-architect → [HUMAN REVIEWS SPECS] → sdd-test-writer (red) → [HUMAN REV
 ## Closing the loop
 
 - After the audit passes, fix any non-blocking findings the human wants addressed, update `audit.md`/`tasks.md` to reflect resolutions, and re-run the gates.
+- Once the human accepts the final audit, run `sdd-documentarian` to reconcile README.md/CLAUDE.md with what actually shipped. Pass it rich context, not just "go update the docs": the feature name, the audit's Final Verdict, and — critically — any real-world verification that happened in conversation but isn't captured in any spec file (an actual deploy, a manual smoke test, exact commands/flags that turned out to differ from what was planned, gotchas hit and fixed live). A cold-started documentarian can't see this conversation; if you don't hand it over explicitly, the docs will undersell or misdescribe what was actually verified.
+- Skip the documentarian only when the change genuinely has no operator/onboarding-facing surface (nothing in README's status table, runbooks, or CLAUDE.md's conventions/facts would need to change) — say so rather than silently omitting the step.
 - **Don't commit or push** unless the human asks.
