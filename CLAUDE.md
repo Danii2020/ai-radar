@@ -15,14 +15,20 @@ Research notes: [`docs/amazon-bedrock-agentcore-research.md`](docs/amazon-bedroc
 Budget anchor: **$500 in AWS credits** — avoid OpenSearch Serverless / Bedrock KB
 default vector backing (~$700/mo); it would burn the budget in under a month.
 
-## Current state: Phase 0 spike (local, no infra)
+## Current state
 
-The spike proves both planes end-to-end against **real Bedrock**, with zero AWS infra:
+**Phase 0 spike** (local, no infra) proves both planes end-to-end against **real Bedrock**:
 
 - `uv run run_spike.py` — Plane A loop: RSS discover → dedup → Haiku summarize/tag → ranked console cards.
 - `uv run run_chat.py` — Plane B: Titan embeddings + in-memory cosine RAG → Sonnet grounded chat with citations.
 
 Both write to `.spike_cache/` (gitignored): `cards.json`, `seen.json`, `embeddings.json`.
+
+**Phase 1 (curation MVP)** has since shipped `curation-graph`, `tavily-discovery`,
+`dynamodb-card-store`, and `runtime-packaging` (LangGraph pipeline, deployed and
+smoke-tested for real on AgentCore Runtime, then torn down). See the spec table
+and runbook in [`README.md`](README.md) for current status and how to redeploy —
+that table is the source of truth, not this file.
 
 ## Package management: uv (not pip)
 
@@ -73,6 +79,12 @@ docs/                   # design + research + architecture principles
 - Structured LLM output uses the **Converse API with a forced tool call**
   (`toolChoice: {tool: ...}`) — see `bedrock.py`. Prefer this over JSON-from-prose.
 - Chat uses a Bedrock **prompt-cache point** on the stable system prompt.
+- `bedrock-agentcore-starter-toolkit` (the `agentcore` CLI) is deprecated in favor
+  of a new `@aws/agentcore` npm CLI; it still works, but `agentcore launch` is now
+  `agentcore deploy`. See the `runtime-packaging` runbook in `README.md` for the
+  current flags and a real gotcha: `agentcore destroy` will delete *any* IAM role
+  in its config's `execution_role`, including a CDK-owned one, unless you null
+  that field first.
 
 ## Conventions
 
@@ -90,5 +102,5 @@ docs/                   # design + research + architecture principles
 
 ## Deferred (later phases)
 
-Search API (Tavily/Exa) · LangGraph orchestration on AgentCore Runtime · DynamoDB +
-real vector store · AgentCore Memory (STM/LTM) · EventBridge scheduling · Next.js feed.
+Real vector store for RAG (DynamoDB reserves an `embedding` attribute for it) ·
+AgentCore Memory (STM/LTM) · EventBridge scheduling · Next.js feed.
