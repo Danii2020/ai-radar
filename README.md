@@ -18,8 +18,9 @@ discover (RSS + Tavily, composite, deduped)  →  dedup  →  summarize + tag  �
 | [`curation-graph`](specs/curation-graph/) | ✅ Shipped | The `StateGraph` itself (`src/curation/graph.py`), the `Discoverer`/`CardStore` Protocols (`interfaces.py`), and the local JSON-file defaults (`local.py`) — reproduces Phase 0 behavior exactly. |
 | [`tavily-discovery`](specs/tavily-discovery/) | ✅ Shipped | `TavilyDiscoverer` (web search) + `CompositeDiscoverer` (RSS + Tavily, cross-source deduped) behind the same `Discoverer` Protocol — no graph/node changes. |
 | [`dynamodb-card-store`](specs/dynamodb-card-store/) | ✅ Shipped | `DynamoCardStore` (DynamoDB persistence + dedup) + a CDK construct (`infra/`) provisioning the table and a feed-read GSI (designed now for Phase 2) — same `CardStore` Protocol, opt-in via `CARD_STORE_BACKEND=dynamo`. |
-| [`runtime-packaging`](specs/runtime-packaging/) | ✅ Shipped & deploy-verified | Wraps the unchanged graph in a `BedrockAgentCoreApp` entrypoint (`runtime_app.py`), a least-privilege execution-role + Tavily-secret CDK stack (`infra/lib/agent_runtime.py`), and a `uv`-based Dockerfile. Deployed for real on 2026-07-28 (real Tavily key, cards landed in `ai-radar-cards`, teardown verified clean) — see the runbook below. Currently torn down between runs; nothing billing until the next deploy. |
-| `eventbridge-schedule` | ⏳ Not started | Daily automated trigger. |
+| [`runtime-packaging`](specs/runtime-packaging/) | ✅ Shipped & deploy-verified | Wraps the unchanged graph in a `BedrockAgentCoreApp` entrypoint (`runtime_app.py`), a least-privilege execution-role + Tavily-secret CDK stack (`infra/lib/agent_runtime.py`), and a `uv`-based Dockerfile. Deployed for real on 2026-07-28 (real Tavily key, cards landed in `ai-radar-cards`, teardown verified clean) — see the runbook below. Redeployed 2026-08-10 to support the `eventbridge-schedule` live fire and **currently still up** (not torn down) — see "Current live AWS state" below. |
+| [`eventbridge-schedule`](specs/eventbridge-schedule/) | ✅ Shipped & live-fire verified | Daily `EventBridge Scheduler` schedule (`infra/lib/curation_schedule.py` → `AiRadarSchedule` stack) invoking the deployed Runtime agent via the `Universal` target — SQS dead-letter queue, 15-min flexible window, 3 retries, 2h max event age. Deploys `DISABLED` by default. Real-deployed and live-fired for real on 2026-08-10. **That first live fire hit a real bug** (Scheduler's ~30s synchronous target timeout caused a double-run, finding F5) — fixed and re-verified by `async-invocation-ack` below. |
+| [`async-invocation-ack`](specs/async-invocation-ack/) | ✅ Shipped & live-fire verified | Fixes `eventbridge-schedule` finding F5. `runtime_app.py`'s entrypoint is now `async def handler`, acking immediately (`{"status": "accepted", "run_id": …}`) and running the **unchanged** curation graph as a background task via the SDK's `add_async_task`/`complete_async_task`; a single-flight guard rejects a second invocation mid-run with `already_running`. No `infra/`, `src/`, or Dockerfile change. Redeployed and live-fire re-tested 2026-08-10: one Scheduler fire → exactly one run (`InvocationAttemptCount=1`, **zero** `TargetErrorCount` datapoints, one `curation_run_complete` record), card count rose cleanly 48→56, DLQ stayed 0. See the runbook below. |
 | `run-observability` | ⏳ Not started | Structured run-summary logging. |
 
 ### Run it
@@ -144,13 +145,38 @@ agentcore invoke '{}'   # payload is ignored — all config is env-driven
 
 **Smoke test**
 
+> **Since `async-invocation-ack`, `agentcore invoke '{}'` no longer returns
+> the run's counts directly** — it acknowledges immediately
+> (`{"status": "accepted", "run_id": …}`) and runs the curation pipeline as a
+> background task, because EventBridge Scheduler's universal target has an
+> undocumented ~30s response timeout and a curation run takes 25–35s (see
+> `specs/async-invocation-ack/`, which closes
+> `specs/eventbridge-schedule/audit.md` finding F5). The counts move to a
+> `curation_run_complete` CloudWatch log record, joined to the ack by
+> `run_id`. Verify in two steps:
+
 ```bash
+# 1. Invoke — expect the ack shape in ~1s, not the pipeline's duration.
 agentcore invoke '{}'
+# {"status": "accepted", "run_id": "9f2c1b7e4a..."}
+
+# 2. ~30-60s later, find the matching completion record in the runtime log
+#    group (CloudWatch console, or `aws logs` against the log group/stream
+#    from `agentcore status`) and confirm the card count moved.
+#    curation_run_complete records look like:
+#    {"event": "curation_run_complete", "run_id": "9f2c1b7e4a...",
+#     "duration_s": 31.7, "discovered": 50, "deduped": 42, "summarized": 8,
+#     "failed": 0, "persisted": 8, "discoverer_failures": 0,
+#     "store_failures": 0, "tavily_enabled": true}
 aws dynamodb scan --table-name ai-radar-cards --select COUNT
-agentcore invoke '{}'   # re-invoke
+
+# 3. Re-invoke (after the first run's `curation_run_complete` record has
+#    appeared, so you are not just re-hitting the single-flight guard).
+agentcore invoke '{}'
 ```
 
-Verified 2026-07-28: first invoke returned
+Verified 2026-07-28 (pre-`async-invocation-ack`, when the ack shape still
+carried the counts directly): first invoke returned
 `{"discovered": 50, "summarized": 8, "persisted": 8, "tavily_enabled": true}`
 and the table went 0 → 8. Re-invoking is **not** a no-op: `deduped` dropped
 50 → 42 (the 8 already-stored cards were correctly excluded — dedup works),
@@ -160,6 +186,20 @@ previously-undiscovered items rather than repeating the first one. That's the
 intended incremental-curation shape (each scheduled run adds a bounded
 slice), not a dedup bug. True idempotency only shows up once the discoverer
 stops returning new candidates.
+
+**Re-verified 2026-08-10, after `async-invocation-ack` redeployed** (ECR tag
+`20260810-221147-104`): the two-step flow above is what was actually run, not
+just documented. `agentcore invoke '{}'` returned
+`{"status": "accepted", "run_id": "16f3c77a5b0a426e93d63f35c40cefb2"}`
+immediately; the matching `curation_run_complete` record appeared **36.5s**
+later — deliberately past the ~30s point where the old synchronous handler
+would have caused an EventBridge Scheduler timeout — with card count moving
+40 → 48 (one clean 8-card slice). See
+[`specs/async-invocation-ack/audit.md`](specs/async-invocation-ack/audit.md)
+(R11/T13) for the full CloudWatch evidence. **Not verified this session:** a
+genuine back-to-back double-invoke against the deployed agent (to observe
+`already_running` in production) — that guard is proven only by the offline
+test suite so far.
 
 **Re-target without a rebuild**: the same image reads `CARD_TABLE_NAME`,
 `AWS_REGION`, `SPIKE_MAX_ITEMS`, `SPIKE_PER_FEED`, `CURATION_TAVILY_*`, and
@@ -197,10 +237,187 @@ uv run cdk destroy --app "python infra/app.py" AiRadarRuntimeRole
 The `ai-radar-cards` table is provisioned by the separate `AiRadarCardStore`
 stack with `RemovalPolicy.RETAIN` and is untouched by either teardown step.
 
+#### EventBridge Scheduler — daily automated trigger (`eventbridge-schedule`)
+
+Automates the manual `agentcore invoke '{}'` above: a daily `EventBridge
+Scheduler` schedule (`infra/lib/curation_schedule.py` → `AiRadarSchedule`
+stack) calls the deployed Runtime agent unattended. EventBridge Scheduler has
+**no native/templated target for Bedrock AgentCore Runtime**, so this uses the
+generic `aws_cdk.aws_scheduler_targets.Universal` target instead, backed by a
+15-minute flexible time window, 3 bounded retry attempts (not Scheduler's
+default of 185), a 2-hour max event age, and an SQS dead-letter queue for runs
+that exhaust every retry. The schedule **deploys `DISABLED`** — it exists and
+costs nothing recurring until a human deliberately enables it.
+
+**Prerequisites**
+
+- The `runtime-packaging` agent deployed and `READY` (`agentcore status`) —
+  see the deploy steps above.
+- The `AiRadarCardStore` table `ACTIVE`.
+- `uv sync --group infra` (same as the runtime-packaging prerequisites).
+
+**1. Wire the agent ARN into SSM (manual, after every agent redeploy)**
+
+CDK reads the agent's ARN as a deploy-time SSM dynamic reference
+(`ssm.StringParameter.value_for_string_parameter`), because the ARN is created
+by the `agentcore` CLI, outside CloudFormation. A human must write it *after*
+`agentcore deploy`/`agentcore status` confirms the agent is `READY`:
+
+```bash
+agentcore status   # copy the value after "Agent ARN:"
+
+aws ssm put-parameter --name /ai-radar/agent-runtime-arn \
+  --type String --value "<agentRuntimeArn>" --overwrite
+```
+
+> **Gotcha, hit live during this feature's smoke test:** it is easy to paste
+> the **wrong** ARN here. The agent's execution-role ARN
+> (`arn:aws:iam::<account>:role/AiRadarRuntimeRole-AgentRuntimeExecutionRole...`)
+> is superficially similar-looking to the real Runtime agent ARN
+> (`arn:aws:bedrock-agentcore:<region>:<account>:runtime/<name>-<suffix>`) and
+> pasting the role ARN in by mistake causes a **silent failure**: `cdk synth`/
+> `deploy` succeed, the schedule looks fine, and every invocation lands
+> straight in the DLQ with no other visible error. Always confirm against
+> `agentcore status` → the `Agent ARN:` line (the `bedrock-agentcore:...
+> runtime/...` one), never a CDK stack's execution-role output.
+
+**2. Deploy the schedule stack (stays `DISABLED`)**
+
+```bash
+uv run --group infra cdk deploy --app "python infra/app.py" AiRadarSchedule
+```
+
+Verify it landed inert:
+
+```bash
+aws scheduler get-schedule --name <ScheduleName-output> --group-name default \
+  --query "{State:State,Expr:ScheduleExpression,Tz:ScheduleExpressionTimezone}"
+# {"State": "DISABLED", "Expr": "cron(0 6 * * ? *)", "Tz": "Etc/UTC"}
+```
+
+**3. One-shot live fire (safe way to prove the wire format for real)**
+
+Rather than flipping on the daily cadence, redeploy once with a one-time cron
+expression a few minutes in the future (UTC, explicit year so it matches
+exactly once) and `schedule_enabled=true`:
+
+```bash
+uv run --group infra cdk deploy --app "python infra/app.py" AiRadarSchedule \
+  -c schedule_enabled=true \
+  -c schedule_expression="cron(<MM> <HH> <DD> <month> ? <YYYY>)"
+```
+
+Wait up to 15 minutes (the flexible window), then check:
+
+```bash
+aws dynamodb scan --table-name ai-radar-cards --select COUNT   # count should move by one bounded slice
+
+# Since async-invocation-ack, confirm exactly one run fired by counting
+# curation_run_complete records in the window — don't rely on DLQ-empty
+# alone (see the gotcha below):
+aws logs filter-log-events --log-group-name <RuntimeLogGroup> \
+  --start-time <fire-time-epoch-ms> --filter-pattern '"curation_run_complete"'
+  # expect exactly one record
+
+aws sqs get-queue-attributes \
+  --queue-url <DeadLetterQueueUrl-output> \
+  --attribute-names ApproximateNumberOfMessages   # should be 0
+```
+
+**Verified 2026-08-10 (live fire, real AWS — first attempt, pre-`async-invocation-ack`):**
+card count rose 24 → 40, not 32 as first logged (a mid-run sample undercounted
+— see `specs/eventbridge-schedule/audit.md` finding F6), because the fire
+actually **delivered twice**. This surfaced a real bug (finding F5, HIGH):
+the `Universal` target is **synchronous with an undocumented ~30s response
+timeout**, and the curation run took 25–35s, so Scheduler treated the
+slow-but-successful response as a failure, retried it, and ran the whole
+curation pipeline a second time. The DLQ-empty check above passed cleanly
+throughout and gave false confidence — see the gotcha below.
+
+> **Gotcha — check `AWS/Scheduler`'s `TargetErrorCount` directly, don't infer
+> single-delivery from an empty DLQ (F5, RESOLVED by `async-invocation-ack`):**
+> DLQ depth only reflects deliveries that exhausted every retry attempt; a
+> delivery can be retried — and re-run the entire pipeline — without ever
+> reaching the DLQ. Query the `TargetErrorCount` metric for the fire's time
+> window if you need to be sure only one delivery happened.
+
+**Fixed and re-verified 2026-08-10, later the same day:** after redeploying
+the agent with [`async-invocation-ack`](specs/async-invocation-ack/)'s
+immediate-ack entrypoint (see the spec table above and the smoke-test section
+above), a fresh one-shot fire against the redeployed agent produced exactly
+**one** delivery: `InvocationAttemptCount=1`, **zero** `TargetErrorCount`
+datapoints, one `curation_run_complete` record, and a clean 48→56 card-count
+slice (not two). DLQ stayed at 0. Full evidence:
+[`specs/async-invocation-ack/audit.md`](specs/async-invocation-ack/audit.md)
+(R12/T14), and the dated F5-resolution entry in
+[`specs/eventbridge-schedule/audit.md`](specs/eventbridge-schedule/audit.md)'s
+Audit Log. **Not verified:** the prescribed double-fire dedup drill (does a
+double-*delivery* skip re-curating an already-stored URL) was never run as
+its own test — only incidentally observed during the original F5 bug, where
+the two runs happened to curate 16 disjoint URLs with zero overlap.
+
+> **Wire-format gotcha (load-bearing, don't "fix" it):** the `Universal`
+> target's `service` prop must be `"bedrockagentcore"` (the botocore/SDK
+> **service identifier**), which is deliberately a *different* string from the
+> IAM action prefix `bedrock-agentcore:InvokeAgentRuntime` (the **signing
+> name**). Both spellings are correct in their own place
+> (`infra/lib/curation_schedule.py`'s `UNIVERSAL_TARGET_SERVICE` vs.
+> `INVOKE_IAM_ACTION`) — harmonizing them to match reintroduces a defect. The
+> target `Input` payload also uses **PascalCase** member names
+> (`AgentRuntimeArn`, `RuntimeSessionId`, `ContentType`, `Payload`), with
+> `Payload` sent as a **plain UTF-8 JSON string** (`"{}"`, not base64). Both
+> details were unverifiable by `cdk synth` alone — only the live fire above
+> proved them.
+
+**4. Return to inert**
+
+A plain redeploy (no `-c` flags) always restores the safe default:
+
+```bash
+uv run --group infra cdk deploy --app "python infra/app.py" AiRadarSchedule
+```
+
+**Going live for real** — enables the actual daily 06:00 UTC cadence, which
+starts real recurring cost (one AgentCore Runtime curation run per day, Haiku-
+only, capped by `SPIKE_MAX_ITEMS`):
+
+```bash
+uv run --group infra cdk deploy --app "python infra/app.py" AiRadarSchedule \
+  -c schedule_enabled=true
+```
+
+**Pausing** without destroying anything — same command, `schedule_enabled`
+omitted (falls back to `DISABLED`) or explicitly `-c schedule_enabled=false`.
+
+**Teardown**
+
+```bash
+uv run --group infra cdk destroy --app "python infra/app.py" AiRadarSchedule
+```
+
+Removes the schedule, the DLQ, and the CDK-created Scheduler invoke role. The
+`ai-radar-cards` table, the SSM parameter, and the Spec 04 execution role/agent
+all survive (none of them are owned by this stack). If you are also tearing
+down the agent itself afterward, the **same `runtime-packaging` gotcha above
+still applies**: null `aws.execution_role` in `.bedrock_agentcore.yaml` before
+`agentcore destroy`, or it deletes the CDK-owned execution role out from under
+`AiRadarRuntimeRole`.
+
+**Current live AWS state (as of 2026-08-10):** both `AiRadarSchedule` and the
+`runtime-packaging` agent (`ai_radar_curation`) are deployed and **not** torn
+down — they were left up after the `eventbridge-schedule` and
+`async-invocation-ack` live-fire sessions. The agent is running the
+`async-invocation-ack` image (ECR tag `20260810-221147-104`, the immediate-ack
+entrypoint). The schedule itself is back to its safe default (`DISABLED`,
+`cron(0 6 * * ? *)` @ `Etc/UTC`), so it will not fire on its own, but both
+stacks/resources are live infrastructure incurring some ongoing
+(non-recurring-run) cost exposure until someone runs the teardown steps above
+and in the `runtime-packaging` section.
+
 ### Tests
 
 ```bash
-uv run pytest tests/ -v   # 67 tests, all offline (Bedrock/Tavily stubbed, DynamoDB via moto, CDK via synth-only assertions, AgentCore handler mocked)
+uv run pytest tests/ -v   # 92 tests, all offline (Bedrock/Tavily stubbed, DynamoDB via moto, CDK via synth-only assertions, AgentCore handler mocked)
 ```
 
 Live API/AWS calls (Bedrock, Tavily, real DynamoDB, the real `cdk deploy` +
@@ -261,8 +478,9 @@ lacks the answer. The stable system prompt uses a Bedrock prompt-cache point.
 - ~~**Search API** (Tavily/Exa)~~ — done, see `tavily-discovery` above.
 - ~~**LangGraph orchestration**~~ — done, see `curation-graph` above.
 - ~~**DynamoDB card persistence**~~ — done, see `dynamodb-card-store` above. A real vector store for RAG (Phase 3) is still deferred — the table reserves an unpopulated `embedding` attribute for it.
-- ~~**AgentCore Runtime packaging**~~ — done and deploy-verified, see `runtime-packaging` above. Torn down between runs until `eventbridge-schedule` gives it a reason to stay up.
-- **EventBridge scheduling** — daily automated trigger of the deployed agent (`eventbridge-schedule`, not started).
+- ~~**AgentCore Runtime packaging**~~ — done and deploy-verified, see `runtime-packaging` above.
+- ~~**EventBridge scheduling**~~ — done and live-fire verified, see `eventbridge-schedule` above. Deploys `DISABLED`; going live is a deliberate opt-in (real recurring cost). The first live fire hit a real duplicate-run bug (Scheduler's ~30s synchronous timeout, finding F5) — fixed by `async-invocation-ack`.
+- ~~**Async invocation acknowledgment**~~ — done and live-fire verified, see `async-invocation-ack` above. Fixes F5; `agentcore invoke '{}'` now returns an ack, not the run's counts (see the smoke-test section above).
 - **AgentCore Memory** — chat memory is an in-process list; becomes AgentCore Memory (STM/LTM) in a later phase (Plane B, untouched by Phase 1).
 
 ### Config knobs (`.env` or env vars)

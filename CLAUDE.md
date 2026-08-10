@@ -25,10 +25,16 @@ default vector backing (~$700/mo); it would burn the budget in under a month.
 Both write to `.spike_cache/` (gitignored): `cards.json`, `seen.json`, `embeddings.json`.
 
 **Phase 1 (curation MVP)** has since shipped `curation-graph`, `tavily-discovery`,
-`dynamodb-card-store`, and `runtime-packaging` (LangGraph pipeline, deployed and
-smoke-tested for real on AgentCore Runtime, then torn down). See the spec table
-and runbook in [`README.md`](README.md) for current status and how to redeploy —
-that table is the source of truth, not this file.
+`dynamodb-card-store`, `runtime-packaging` (LangGraph pipeline on AgentCore
+Runtime), `eventbridge-schedule` (daily `EventBridge Scheduler` trigger,
+deploys `DISABLED`), and `async-invocation-ack` (entrypoint now acks
+immediately and runs curation in the background — fixes a real
+Scheduler-caused duplicate-run bug found during `eventbridge-schedule`'s live
+fire). All are deploy-verified and live-fire-verified for real, and as of
+2026-08-10 the agent + schedule stacks are **still deployed** (not torn down),
+running the `async-invocation-ack` image. See the spec table and runbook in
+[`README.md`](README.md) for current status, exact commands, and how to
+redeploy/tear down — that table is the source of truth, not this file.
 
 ## Package management: uv (not pip)
 
@@ -85,6 +91,22 @@ docs/                   # design + research + architecture principles
   current flags and a real gotcha: `agentcore destroy` will delete *any* IAM role
   in its config's `execution_role`, including a CDK-owned one, unless you null
   that field first.
+- EventBridge Scheduler has no native target for AgentCore Runtime — CDK's
+  `aws_scheduler_targets.Universal` needs the SDK **service id**
+  `bedrockagentcore` (not the IAM signing name `bedrock-agentcore:...`, a
+  *different* string used for the IAM action), live-fire-verified 2026-08-10.
+  See the `eventbridge-schedule` runbook in `README.md` for the full wire
+  format and the SSM-parameter ARN gotcha.
+- The agent's entrypoint (`runtime_app.py`) is `async def handler` since
+  `async-invocation-ack` (2026-08-10, live-fire-verified): it acks in <1s and
+  runs curation as a background task, rather than blocking until the pipeline
+  finishes. `agentcore invoke '{}'` now returns
+  `{"status": "accepted", "run_id": …}`, **not** the run's counts — those now
+  land in a `curation_run_complete` CloudWatch log record joined by `run_id`.
+  This fixed a real bug: EventBridge Scheduler's `Universal` target has an
+  undocumented ~30s synchronous timeout, and the old blocking 25–35s handler
+  caused it to double-fire. See the `eventbridge-schedule` runbook's live-fire
+  section in `README.md` for the two-step verify flow and the gotcha.
 
 ## Conventions
 
@@ -103,4 +125,4 @@ docs/                   # design + research + architecture principles
 ## Deferred (later phases)
 
 Real vector store for RAG (DynamoDB reserves an `embedding` attribute for it) ·
-AgentCore Memory (STM/LTM) · EventBridge scheduling · Next.js feed.
+AgentCore Memory (STM/LTM) · Next.js feed.

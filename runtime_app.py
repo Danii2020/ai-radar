@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""AgentCore Runtime entrypoint for the curation pipeline (Spec 04).
+"""AgentCore Runtime entrypoint for the curation pipeline.
+
+Spec 04 (runtime-packaging), amended by the `async-invocation-ack` spec: the
+entrypoint ACKNOWLEDGES immediately and runs the pipeline as a background task,
+because EventBridge Scheduler's universal target is synchronous with an
+undocumented ~30s response timeout and the curation run takes 25-35s.
 
 Wraps the UNCHANGED compiled curation graph (Spec 01) in a BedrockAgentCoreApp
 handler. Constructs DynamoCardStore (Spec 03) + a composite RSS+Tavily
@@ -13,7 +18,12 @@ graph/node/state code, which stays byte-for-byte unchanged from Spec 01.
 """
 from __future__ import annotations
 
+import asyncio
+import json
+import logging
 import sys
+import time
+import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent / "src"))   # same as run_curation.py
@@ -30,6 +40,21 @@ from curation.tavily import TavilyDiscoverer
 from spike import config
 
 app = BedrockAgentCoreApp()
+
+#: Child of the SDK's own configured logger ("bedrock_agentcore.app"), so run
+#: records inherit its StreamHandler + INFO level and reach CloudWatch without
+#: calling logging.basicConfig() or reaching into `app.logger`.
+logger = logging.getLogger("bedrock_agentcore.app.curation")
+
+#: Strong references to in-flight background tasks. Mandatory: asyncio only
+#: holds a weak reference to a bare `create_task(...)` result, which can be
+#: garbage-collected mid-run.
+_background_tasks: set[asyncio.Task] = set()
+
+#: `run_id` of the curation run currently in flight in THIS process, else None.
+#: Single-flight guard. Read/written ONLY on the SDK's worker event loop
+#: (handler + background coroutine), so no lock is needed.
+_active_run_id: str | None = None
 
 
 def _resolve_tavily_key(secret_name: str) -> str:
@@ -76,13 +101,15 @@ def _build_discoverer() -> CompositeDiscoverer:
     return CompositeDiscoverer(sources)
 
 
-@app.entrypoint
-def handler(payload) -> dict:
-    """AgentCore entrypoint. `payload` is accepted (SDK signature) but ignored -
-    all config is env-driven. Builds store + discoverer + the UNCHANGED graph,
-    invokes it with max_items=spike.config.MAX_ITEMS, and returns a run summary
-    (counts). Never raises for a single bad item/source (inherited per-item
-    try/except from Specs 01-03)."""
+def _run_curation_pipeline() -> dict:
+    """Run one full curation pass and return the Spec 04 run-summary dict.
+
+    BLOCKING (boto3 + feedparser + sync LangGraph nodes) - always called via
+    `asyncio.to_thread`, never on the event loop. This is verbatim the body of
+    Spec 04's synchronous `handler`, extracted unchanged: build store +
+    discoverer, invoke the UNCHANGED compiled graph with
+    `max_items=spike.config.MAX_ITEMS`, return the counts. Never raises for a
+    single bad item/source (inherited per-item try/except from Specs 01-03)."""
     store = _build_store()
     discoverer = _build_discoverer()
     graph = build_graph(store, discoverer)
@@ -99,6 +126,99 @@ def handler(payload) -> dict:
         "store_failures": store.failures(),
         "tavily_enabled": bool(curation_config.TAVILY_API_KEY),
     }
+
+
+async def _curation_run(run_id: str, task_id: int) -> None:
+    """Background task body: run the pipeline off-loop, log the summary, and
+    always release both the async-task registration and the single-flight
+    guard.
+
+    Never re-raises: the HTTP response was already sent, so a raise here would
+    only surface as an unretrievable task exception. Failures are logged with
+    a stack trace via `logger.exception`.
+
+    `task_id` is created by `handler` BEFORE it returns (see Behavior
+    Guarantee 3) and completed here.
+    """
+    global _active_run_id
+
+    started = time.monotonic()
+    try:
+        summary = await asyncio.to_thread(_run_curation_pipeline)
+        # Success-path log emission lives INSIDE this try (not an `else:`
+        # outside it), so a bug in the log call itself - e.g. a
+        # non-serializable value in `summary` breaking `json.dumps` - is
+        # caught by the same `except Exception` below and reported as
+        # `curation_run_failed` instead of escaping as an unretrieved task
+        # exception (finding A5). `finally` still releases the task/guard
+        # either way.
+        duration_s = time.monotonic() - started
+        logger.info(
+            json.dumps(
+                {
+                    "event": "curation_run_complete",
+                    "run_id": run_id,
+                    "duration_s": round(duration_s, 1),
+                    **summary,
+                }
+            )
+        )
+    except Exception:
+        duration_s = time.monotonic() - started
+        logger.exception(
+            json.dumps(
+                {
+                    "event": "curation_run_failed",
+                    "run_id": run_id,
+                    "duration_s": round(duration_s, 1),
+                }
+            )
+        )
+    finally:
+        app.complete_async_task(task_id)
+        _active_run_id = None
+
+
+@app.entrypoint
+async def handler(payload) -> dict:
+    """AgentCore entrypoint. `payload` is accepted (SDK signature) and IGNORED -
+    all config is env-driven (Spec 04 Behavior Guarantee 2, preserved).
+
+    Registers an async task, schedules `_curation_run` on the SDK's worker
+    event loop, and returns an ACK immediately (<1s). Returns the
+    `already_running` ack instead if a run is already in flight in this
+    process.
+    """
+    global _active_run_id
+
+    if _active_run_id is not None:
+        return {"status": "already_running", "run_id": _active_run_id}
+
+    run_id = uuid.uuid4().hex
+    task_id = None
+
+    try:
+        task_id = app.add_async_task("curation_run", {"run_id": run_id})
+        _active_run_id = run_id
+        task = asyncio.create_task(_curation_run(run_id, task_id))
+    except Exception:
+        # Widened past just `create_task`: if `add_async_task` itself raises,
+        # `task_id` is still None (no task registered, guard never armed), so
+        # only the guard clear runs - no dangling task-registry entry.
+        # `_active_run_id` is armed AFTER `add_async_task` succeeds, so a
+        # failure there can never leave the guard set with nothing scheduled
+        # to clear it (the wedge finding A4 guards against).
+        _active_run_id = None
+        if task_id is not None:
+            app.complete_async_task(task_id)
+        raise
+
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+
+    logger.info(json.dumps({"event": "curation_run_accepted", "run_id": run_id}))
+
+    return {"status": "accepted", "run_id": run_id}
 
 
 if __name__ == "__main__":
