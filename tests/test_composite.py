@@ -1,5 +1,7 @@
 """Tests for `src/curation/composite.py` — `CompositeDiscoverer`, plus the
 seam and portability guarantees this spec adds on top of Spec 01's graph.
+Extended by specs/run-observability/contract.md §7 (`searches()` /
+`credits_used()`) and audit.md T20.
 
 Spec: specs/tavily-discovery/contract.md ("CompositeDiscoverer", Behavior
 Guarantees 4-8); specs/tavily-discovery/tasks.md Phase 4.3-4.5 (T7, T8, T9, T10).
@@ -110,7 +112,7 @@ def test_seam_build_graph_with_composite_discoverer_invokes_end_to_end(
     tavily_item = make_raw_item(
         url="https://example.com/tavily", title="Tavily Item", source="Tavily: general"
     )
-    monkeypatch.setattr(nodes_module, "summarize", summarize_stub_factory())
+    monkeypatch.setattr(nodes_module, "summarize_with_usage", summarize_stub_factory())
 
     composite = CompositeDiscoverer(
         [FakeDiscoverer([rss_item]), FakeDiscoverer([tavily_item])]
@@ -162,3 +164,61 @@ def test_tavily_sdk_imported_only_in_tavily_module_no_boto3_anywhere():
     # Guards against a vacuous pass above: tavily.py must actually be the one
     # place that imports the SDK.
     assert "tavily" in tavily_roots, "tavily.py is expected to import the tavily SDK"
+
+
+# =============================================================================
+# specs/run-observability additions (contract.md §7, audit.md T20) —
+# `searches()`/`credits_used()` are duck-typed sums over sources that expose
+# them, defaulting to 0 for sources that don't (e.g. RssDiscoverer).
+# =============================================================================
+
+
+class _SourceWithStats:
+    """In-memory Discoverer double that also exposes `searches()`/
+    `credits_used()` (mirrors TavilyDiscoverer's shape); a plain
+    `FakeDiscoverer` (no such methods) stands in for an RSS-like source."""
+
+    def __init__(self, items, searches: int, credits_used: int):
+        self._items = list(items)
+        self._searches = searches
+        self._credits = credits_used
+
+    def discover(self):
+        return list(self._items)
+
+    def searches(self) -> int:
+        return self._searches
+
+    def credits_used(self) -> int:
+        return self._credits
+
+
+# T20: sources that expose `searches()`/`credits_used()` are summed; sources
+# that don't (duck-typed, e.g. an RSS-shaped source) contribute 0, not a crash.
+def test_composite_searches_and_credits_used_sum_sources_defaulting_to_zero(make_raw_item):
+    item = make_raw_item(url="https://example.com/a")
+    tavily_like = _SourceWithStats([item], searches=3, credits_used=3)
+    rss_like = FakeDiscoverer([])  # no searches()/credits_used()
+
+    composite = CompositeDiscoverer([rss_like, tavily_like])
+    composite.discover()
+
+    assert composite.searches() == 3
+    assert composite.credits_used() == 3
+
+
+# T20 (mirrors the existing `failures()` "reset per discover() call" pattern,
+# contract.md §7 "Mirrors the existing failures() pattern exactly").
+def test_composite_searches_and_credits_used_reset_on_each_discover_call():
+    stats_source = _SourceWithStats([], searches=2, credits_used=2)
+    composite = CompositeDiscoverer([stats_source])
+
+    composite.discover()
+    assert composite.searches() == 2
+    assert composite.credits_used() == 2
+
+    stats_source._searches = 5
+    stats_source._credits = 5
+    composite.discover()
+    assert composite.searches() == 5
+    assert composite.credits_used() == 5

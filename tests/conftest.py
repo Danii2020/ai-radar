@@ -9,9 +9,10 @@ Spec: specs/curation-graph/{contract.md,intent.md,audit.md}
   deterministic, network-free `summarize()` stub factory, reused by
   `tests/test_local_store.py` and `tests/test_graph.py`.
 
-No test in this suite makes a live Bedrock/AWS/network call: `spike.bedrock.summarize`
-is always monkeypatched at the point tests import it (`curation.nodes.summarize`),
-never invoked for real.
+No test in this suite makes a live Bedrock/AWS/network call: `spike.bedrock`'s
+summarize seam is always monkeypatched at the point tests import it
+(`curation.nodes.summarize_with_usage`, per specs/run-observability), never
+invoked for real.
 """
 from __future__ import annotations
 
@@ -69,30 +70,49 @@ def make_model_out():
 
 @pytest.fixture
 def summarize_stub_factory(make_model_out):
-    """Factory to build deterministic, network-free `summarize(item)` stubs.
+    """Factory to build deterministic, network-free `summarize_with_usage(item)`
+    stubs (Spec 06: run-observability repoints the patch target from
+    `nodes.summarize` to `nodes.summarize_with_usage` — see
+    specs/run-observability/contract.md §1/§6).
 
     `relevance_by_url` controls the relevance score returned per item (default 5).
     `raise_for_urls` makes the stub raise for those URLs, simulating a per-item
     Bedrock/summarize failure (contract Error Handling Contract row 1).
+    `tokens_by_url` controls the `(input_tokens, output_tokens)` pair returned
+    per item (default `(0, 0)`), letting a test assert token accumulation
+    without a real Bedrock call.
+
+    The returned callable's shape is `(item) -> tuple[dict, TokenUsage]`,
+    mirroring `spike.bedrock.summarize_with_usage`. `TokenUsage` is imported
+    lazily (inside `_build`, not at module scope) so a suite that never calls
+    this factory does not fail collection while `spike.bedrock.TokenUsage`
+    does not exist yet (RED phase).
     """
 
     def _build(
         relevance_by_url: dict[str, int] | None = None,
         raise_for_urls: set[str] | None = None,
+        tokens_by_url: dict[str, tuple[int, int]] | None = None,
     ):
+        from spike.bedrock import TokenUsage
+
         relevance_by_url = relevance_by_url or {}
         raise_for_urls = raise_for_urls or set()
+        tokens_by_url = tokens_by_url or {}
 
-        def _summarize(item: RawItem) -> dict:
+        def _summarize_with_usage(item: RawItem) -> tuple[dict, "TokenUsage"]:
             if item.url in raise_for_urls:
                 raise RuntimeError(f"stub summarize failure for {item.url}")
-            return make_model_out(
+            model_out = make_model_out(
                 title=item.title,
                 summary=f"Summary of {item.title}",
                 relevance=relevance_by_url.get(item.url, 5),
             )
+            input_tokens, output_tokens = tokens_by_url.get(item.url, (0, 0))
+            usage = TokenUsage(input_tokens=input_tokens, output_tokens=output_tokens)
+            return model_out, usage
 
-        return _summarize
+        return _summarize_with_usage
 
     return _build
 

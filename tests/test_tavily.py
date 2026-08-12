@@ -3,6 +3,9 @@
 Spec: specs/tavily-discovery/contract.md ("TavilyDiscoverer", Behavior
 Guarantees 1-3 & 10, Error Handling Contract rows 1-2 & 5-6);
 specs/tavily-discovery/tasks.md Phase 4.1-4.2 (T1, T2, T3, T4, T5, T6).
+Extended by specs/run-observability/contract.md §7 (`searches()` /
+`credits_used()`, the shared `TAVILY_SOURCE_PREFIX` constant) and audit.md
+T19/T21.
 
 Every test stubs `tavily.TavilyClient` via monkeypatch on `curation.tavily`'s
 module namespace (`install_fake_tavily_client`) — zero live Tavily calls in
@@ -225,3 +228,69 @@ def test_discover_dedups_within_source_by_url_hash_first_occurrence_wins(monkeyp
         "https://example.com/unique",
     ]
     assert items[0].title == "First mention"  # first occurrence wins, not overwritten
+
+
+# =============================================================================
+# specs/run-observability additions (contract.md §7, audit.md T19/T21)
+# =============================================================================
+
+
+# T19: `searches()` counts seed queries ATTEMPTED during the last discover()
+# call, including ones that raised, and resets on each new discover() call —
+# mirrors the existing `failures()` pattern exactly.
+def test_searches_counts_attempted_seeds_including_failures_and_resets_per_discover(monkeypatch):
+    responses = {
+        "bad seed": RuntimeError("timeout"),
+        "good seed": {"results": []},
+    }
+    install_fake_tavily_client(monkeypatch, responses)
+    discoverer = TavilyDiscoverer(seeds=["bad seed", "good seed"], api_key="fake-key", max_results=20)
+
+    discoverer.discover()
+    assert discoverer.searches() == 2  # both attempted, including the failing one
+
+    install_fake_tavily_client(monkeypatch, {"good seed": {"results": []}})
+    discoverer.seeds = ["good seed"]
+    discoverer.discover()
+    assert discoverer.searches() == 1  # reset, not additive across calls
+
+
+# T19: `credits_used()` = searches() * credits-per-depth, using the depth map
+# (basic=1, advanced=2) with a 1-credit fallback for unmapped depths.
+@pytest.mark.parametrize(
+    "search_depth, expected_credits_per_search",
+    [("basic", 1), ("advanced", 2), ("fast", 1), ("ultra-fast", 1)],
+)
+def test_credits_used_maps_search_depth_to_credits_with_fallback(
+    monkeypatch, search_depth, expected_credits_per_search
+):
+    install_fake_tavily_client(
+        monkeypatch, {"seed one": {"results": []}, "seed two": {"results": []}}
+    )
+    discoverer = TavilyDiscoverer(
+        seeds=["seed one", "seed two"],
+        api_key="fake-key",
+        max_results=20,
+        search_depth=search_depth,
+    )
+
+    discoverer.discover()
+
+    assert discoverer.credits_used() == 2 * expected_credits_per_search
+
+
+# T21 (contract.md §7 "byte-identical output" after the prefix-constant
+# refactor): the source label is BUILT from `config.TAVILY_SOURCE_PREFIX`, not
+# a re-hardcoded literal — proven by changing the constant and observing the
+# label change (a regression test that would fail if the literal crept back).
+def test_source_label_is_built_from_the_shared_tavily_source_prefix_constant(monkeypatch):
+    monkeypatch.setattr(config_module, "TAVILY_SOURCE_PREFIX", "Custom: ")
+    install_fake_tavily_client(
+        monkeypatch,
+        {"seed one": {"results": [{"title": "Item", "url": "https://example.com/x", "content": "c"}]}},
+    )
+    discoverer = TavilyDiscoverer(seeds=["seed one"], api_key="fake-key", max_results=20, topic="general")
+
+    items = discoverer.discover()
+
+    assert items[0].source == "Custom: general"

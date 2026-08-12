@@ -2,7 +2,7 @@
 
 AI-news curation feed + RAG chatbot. See [`docs/app-design-on-agentcore.md`](docs/app-design-on-agentcore.md) for the full design.
 
-## Phase 1 — Curation MVP (in progress)
+## Phase 1 — Curation MVP (all 6 specs shipped)
 
 Refactors the Phase 0 loop into a **LangGraph `StateGraph`** with infra injected
 behind Protocols, so discovery and persistence can be swapped without touching
@@ -21,7 +21,16 @@ discover (RSS + Tavily, composite, deduped)  →  dedup  →  summarize + tag  �
 | [`runtime-packaging`](specs/runtime-packaging/) | ✅ Shipped & deploy-verified | Wraps the unchanged graph in a `BedrockAgentCoreApp` entrypoint (`runtime_app.py`), a least-privilege execution-role + Tavily-secret CDK stack (`infra/lib/agent_runtime.py`), and a `uv`-based Dockerfile. Deployed for real on 2026-07-28 (real Tavily key, cards landed in `ai-radar-cards`, teardown verified clean) — see the runbook below. Redeployed 2026-08-10 to support the `eventbridge-schedule` live fire and **currently still up** (not torn down) — see "Current live AWS state" below. |
 | [`eventbridge-schedule`](specs/eventbridge-schedule/) | ✅ Shipped & live-fire verified | Daily `EventBridge Scheduler` schedule (`infra/lib/curation_schedule.py` → `AiRadarSchedule` stack) invoking the deployed Runtime agent via the `Universal` target — SQS dead-letter queue, 15-min flexible window, 3 retries, 2h max event age. Deploys `DISABLED` by default. Real-deployed and live-fired for real on 2026-08-10. **That first live fire hit a real bug** (Scheduler's ~30s synchronous target timeout caused a double-run, finding F5) — fixed and re-verified by `async-invocation-ack` below. |
 | [`async-invocation-ack`](specs/async-invocation-ack/) | ✅ Shipped & live-fire verified | Fixes `eventbridge-schedule` finding F5. `runtime_app.py`'s entrypoint is now `async def handler`, acking immediately (`{"status": "accepted", "run_id": …}`) and running the **unchanged** curation graph as a background task via the SDK's `add_async_task`/`complete_async_task`; a single-flight guard rejects a second invocation mid-run with `already_running`. No `infra/`, `src/`, or Dockerfile change. Redeployed and live-fire re-tested 2026-08-10: one Scheduler fire → exactly one run (`InvocationAttemptCount=1`, **zero** `TargetErrorCount` datapoints, one `curation_run_complete` record), card count rose cleanly 48→56, DLQ stayed 0. See the runbook below. |
-| `run-observability` | ⏳ Not started | Structured run-summary logging. |
+| [`run-observability`](specs/run-observability/) | ✅ Shipped & live-fire verified | A `RunSummary` (`src/curation/summary.py`) per run — discovered rss/tavily split, tokens, Tavily searches/credits, estimated Bedrock+Tavily cost — logged as a strict superset of the existing `curation_run_complete` record and persisted as 4 CloudWatch EMF custom metrics (`src/curation/metrics.py`, namespace `AIRadar/Curation`), plus a new, separate CDK-managed AWS Budget (`AiRadarBudget` stack) at $50/$100/$250 via SNS email. `uv run pytest tests/` is green (145 tests). Real-deployed and live-fire verified 2026-08-12: `AiRadarBudget` stack created (`cdk diff` on the three pre-existing stacks stayed empty — no new IAM permission), the SNS email subscription was confirmed and a real test message delivered, the agent was rebuilt to image `20260812-162922-638`, and a real invoke produced all 4 metrics with datapoints plus an enriched `curation_run_complete` record whose token counts matched Bedrock's own CloudWatch meter exactly (10593 in / 2553 out, delta $0.00) — see "Run observability" below. |
+
+All six planned specs are shipped and deploy/live-fire-verified. Two
+operational verification gaps remain open — inherited from `dynamodb-card-store`
+/ `eventbridge-schedule`, not new-code gaps — and are unaffected by
+`run-observability`: the prescribed double-fire dedup drill has never been run
+as its own test, and the daily schedule has never run **unattended** (it stays
+`DISABLED`; every fire to date has been a manual one-shot). See
+[`specs/run-observability/audit.md`](specs/run-observability/audit.md)'s
+Phase 1 close-out table for the full per-box evidence.
 
 ### Run it
 
@@ -403,21 +412,135 @@ still applies**: null `aws.execution_role` in `.bedrock_agentcore.yaml` before
 `agentcore destroy`, or it deletes the CDK-owned execution role out from under
 `AiRadarRuntimeRole`.
 
-**Current live AWS state (as of 2026-08-10):** both `AiRadarSchedule` and the
-`runtime-packaging` agent (`ai_radar_curation`) are deployed and **not** torn
-down — they were left up after the `eventbridge-schedule` and
-`async-invocation-ack` live-fire sessions. The agent is running the
-`async-invocation-ack` image (ECR tag `20260810-221147-104`, the immediate-ack
-entrypoint). The schedule itself is back to its safe default (`DISABLED`,
-`cron(0 6 * * ? *)` @ `Etc/UTC`), so it will not fire on its own, but both
-stacks/resources are live infrastructure incurring some ongoing
-(non-recurring-run) cost exposure until someone runs the teardown steps above
-and in the `runtime-packaging` section.
+**Current live AWS state (as of 2026-08-12):** four CDK stacks are deployed
+and **not** torn down — `AiRadarCardStore`, `AiRadarRuntimeRole`,
+`AiRadarSchedule`, and (new from `run-observability`) `AiRadarBudget`. The
+`runtime-packaging` agent (`ai_radar_curation`) is running image tag
+`20260812-162922-638` (rebuilt during `run-observability`'s live fire; it
+supersedes the `async-invocation-ack` image `20260810-221147-104` and carries
+the same immediate-ack entrypoint plus the new token/metrics instrumentation).
+The schedule itself is back to its safe default (`DISABLED`,
+`cron(0 6 * * ? *)` @ `Etc/UTC`) — it has not fired since the one 2026-08-10
+one-shot test; the only run since then is the single manual
+`agentcore invoke '{}'` used to verify `run-observability` (below), **not** an
+unattended scheduled run. `ai-radar-cards` holds 80 items. The `AiRadarBudget`
+stack's SNS topic (`ai-radar-budget-alerts`) has one confirmed email
+subscriber. All four stacks/resources are live infrastructure incurring some
+ongoing (non-recurring-run) cost exposure until someone runs the teardown
+steps above, in the `runtime-packaging` section, and below (`AiRadarBudget`).
+
+#### Run observability (`run-observability`)
+
+Every curation run now produces a `RunSummary` (`src/curation/summary.py`) —
+discovered (total, plus RSS-vs-Tavily split and per-source counts), dedup/
+summarize/persist counts, Bedrock input/output tokens, Tavily searches/
+credits, and three cost figures (`estimated_bedrock_cost_usd` +
+`estimated_tavily_cost_usd` = `estimated_cost_usd`). It shows up in three
+places:
+
+1. **`curation_run_complete`** (CloudWatch, via the existing
+   `bedrock_agentcore.app.curation` logger) — a strict superset of the eight
+   fields shipped by `async-invocation-ack`; nothing renamed or removed.
+2. **`curation_run_metrics`** — one raw JSON line written directly to
+   `stderr` (bypassing `logging` on purpose — the SDK's formatter would nest
+   it under a `message` string and break the CloudWatch *embedded metric
+   format* spec's "no additional data" rule). CloudWatch Logs parses it into
+   4 custom metrics in namespace `AIRadar/Curation`: `RunsCompleted`,
+   `CardsWritten`, `ItemsFailed`, `EstimatedCostUsd` — no dimensions, so
+   cardinality is fixed at 4 regardless of run count (~$1.20/month). Set
+   `CURATION_EMIT_METRICS=false` to stop emitting it entirely (logs stay the
+   full record either way).
+3. **Locally** — `uv run run_curation.py` builds the identical `RunSummary`
+   and prints it (no EMF line locally; there is no CloudWatch to parse it).
+
+**Two Logs Insights queries** answer "failed counts for the last 7 runs" —
+prefer the first (top-level fields) when metrics are enabled; the second
+works even with the kill switch on, since it reads the logger record instead
+(payload nested one level under `message` — see the contract's Data Models
+section for why):
+
+```sql
+-- preferred: the EMF line, top-level fields
+fields @timestamp, run_id, discovered, failed, cards_written, estimated_cost_usd
+| filter event = "curation_run_metrics"
+| sort @timestamp desc
+| limit 7
+
+-- fallback: the logger record (works even with CURATION_EMIT_METRICS=false)
+fields @timestamp, @message
+| filter @message like /curation_run_complete/
+| sort @timestamp desc
+| limit 7
+```
+
+**AWS Budget (`AiRadarBudget` stack, `infra/lib/cost_budget.py` +
+`infra/stacks/cost_budget_stack.py`)** — a new, CDK-managed monthly `COST`
+budget `ai-radar-monthly-cost` with `ACTUAL`/`GREATER_THAN`/`ABSOLUTE_VALUE`
+notifications at $50/$100/$250 via SNS email, `IncludeCredit: false` (so the
+credit-covered account doesn't report ~$0 forever). It is entirely separate
+from — and never touches — the pre-existing, hand-made "My Monthly Cost
+Budget" ($1/mo).
+
+```bash
+# Deploy (independent of the agent/schedule stacks; cheap — first two AWS
+# Budgets are free, SNS is within free tier):
+uv run --group infra cdk deploy --app "python infra/app.py" AiRadarBudget
+
+# Confirm the SNS email subscription (required — AWS Budgets notifications
+# are silently dropped otherwise), then prove delivery:
+aws sns list-subscriptions-by-topic --topic-arn <AlertTopicArn>   # not "PendingConfirmation"
+aws sns publish --topic-arn <AlertTopicArn> --subject "AI Radar budget test" --message "live-fire check"
+
+# Teardown — removes the budget, its topic, and the subscription; the
+# hand-made "My Monthly Cost Budget" is untouched (distinct name, never
+# CloudFormation-managed):
+uv run --group infra cdk destroy --app "python infra/app.py" AiRadarBudget
+```
+
+**Verified live, 2026-08-12** (full evidence in
+[`specs/run-observability/audit.md`](specs/run-observability/audit.md)'s
+Phase-6 re-audit, independently re-derived by the auditor from live AWS, not
+accepted from the executor's report): `cdk deploy AiRadarBudget` created the
+budget cleanly in ~15s, and `cdk diff` on the three pre-existing stacks stayed
+empty; `aws budgets describe-budgets` shows `ai-radar-monthly-cost`
+(COST/MONTHLY/$250, `IncludeCredit: false`) with all three 50/100/250
+notifications `OK`, alongside the pre-existing, hand-made "My Monthly Cost
+Budget" — untouched; the SNS email subscription was confirmed (real ARN, not
+`PendingConfirmation`) and a real `aws sns publish` test message arrived in
+the inbox; `agentcore deploy` pushed image `20260812-162922-638`; a real
+`agentcore invoke '{}'` (`run_id d577c1c0c1a240edabb5b6d461a15c07`) produced
+all six expected CloudWatch records including the raw `curation_run_metrics`
+EMF line — confirmed to land as its **own** top-level-JSON log event, not
+nested under a logger `message` wrapper, settling the spec's single biggest
+design risk — and `aws cloudwatch list-metrics --namespace AIRadar/Curation`
+returned exactly the 4 designed metrics with datapoints; `ai-radar-cards`
+grew 72 → 80 (+8, one bounded slice). One post-audit hardening (`O1`) also
+landed: `summarize_with_usage`'s degradation guard now also catches
+`AttributeError` (a non-mapping `usage` value), taking the suite to 145
+tests.
+
+**Cost-figure caveat, worth knowing when reading `estimated_cost_usd`:** on
+this run, $0.04 of the $0.063358 total was the *Tavily estimate* (Tavily's
+API doesn't report actual credits consumed, so it's attempted-searches ×
+credits-per-depth × a configured unit price) — only $0.023358 was measured
+Bedrock spend (and that figure matched AWS's own `AWS/Bedrock` CloudWatch
+token metrics **exactly**, delta $0.00). Treat `EstimatedCostUsd` as a
+budgeting signal, not an invoice, until `CURATION_TAVILY_CREDIT_PRICE_USD` is
+set to a real negotiated rate. Separately, the two AWS Budgets in this
+account reported slightly different actual spend for the same month
+(`My Monthly Cost Budget`: $5.322 vs. `ai-radar-monthly-cost`'s
+`IncludeCredit: false`: $5.382) — live proof that the credit-exclusion design
+choice does something real on a credit-covered account, not just in theory.
+
+**Not verified / deliberately not claimed:** the schedule remains `DISABLED`,
+so no unattended/scheduled run has ever produced these records — only the one
+manual invoke above. `CURATION_EMIT_METRICS=false` (the metrics kill switch)
+was never actually exercised live; it's covered by an offline test only.
 
 ### Tests
 
 ```bash
-uv run pytest tests/ -v   # 92 tests, all offline (Bedrock/Tavily stubbed, DynamoDB via moto, CDK via synth-only assertions, AgentCore handler mocked)
+uv run pytest tests/ -v   # 145 tests, all offline (Bedrock/Tavily stubbed, DynamoDB via moto, CDK via synth-only assertions, AgentCore handler mocked)
 ```
 
 Live API/AWS calls (Bedrock, Tavily, real DynamoDB, the real `cdk deploy` +

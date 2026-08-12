@@ -10,7 +10,10 @@ Usage:
     python run_curation.py            # skips items already seen
     python run_curation.py --force    # re-summarize everything (ignore dedup cache)
 """
+import logging
 import sys
+import time
+import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent / "src"))
@@ -23,6 +26,7 @@ from curation.dynamo import DynamoCardStore  # noqa: E402
 from curation.graph import build_graph  # noqa: E402
 from curation.interfaces import CardStore, Discoverer  # noqa: E402
 from curation.local import JsonFileCardStore, RssDiscoverer  # noqa: E402
+from curation.summary import build_run_summary  # noqa: E402
 from curation.tavily import TavilyDiscoverer  # noqa: E402
 from spike import config  # noqa: E402
 from spike.cards import render  # noqa: E402
@@ -44,6 +48,11 @@ def _build_discoverer() -> CompositeDiscoverer:
 
 
 if __name__ == "__main__":
+    # So the three node records (discover_complete/summarize_complete/
+    # persist_complete) print locally, matching the JSON-line shape
+    # runtime_app.py's CloudWatch records use.
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+
     console = Console()
     console.rule("[bold]AI Radar — curation")
 
@@ -52,7 +61,10 @@ if __name__ == "__main__":
     discoverer = _build_discoverer()
     graph = build_graph(store, discoverer)
 
-    final = graph.invoke({"max_items": config.MAX_ITEMS})
+    run_id = uuid.uuid4().hex
+    started = time.monotonic()
+    final = graph.invoke({"max_items": config.MAX_ITEMS, "run_id": run_id})
+    duration_s = time.monotonic() - started
 
     cards = final.get("cards", [])
     console.print()
@@ -60,13 +72,36 @@ if __name__ == "__main__":
     console.print()
     render(cards, console)
 
-    store_failures = f" store_failures={store.failures()}" if hasattr(store, "failures") else ""
+    store_failures = store.failures() if hasattr(store, "failures") else 0
+    summary = build_run_summary(
+        run_id=run_id,
+        duration_s=duration_s,
+        state=final,
+        tavily_searches=discoverer.searches(),
+        tavily_credits=discoverer.credits_used(),
+        discoverer_failures=discoverer.failures(),
+        store_failures=store_failures,
+        tavily_enabled=bool(curation_config.TAVILY_API_KEY),
+    )
+    # emit_run_metrics is NOT called here — there is no CloudWatch to parse
+    # the EMF line locally; the printed summary below is local/cloud parity
+    # (contract.md §9 / Behavior Guarantee 11).
     console.print(
-        f"[dim]discovered={final.get('discovered', 0)} "
-        f"deduped={final.get('deduped', 0)} "
-        f"summarized={final.get('summarized', 0)} "
-        f"failed={final.get('failed', 0)} "
-        f"discoverer_failures={discoverer.failures()}{store_failures}[/dim]"
+        f"[dim]discovered={summary.discovered} "
+        f"(rss={summary.discovered_rss} tavily={summary.discovered_tavily}) "
+        f"deduped={summary.deduped} "
+        f"summarized={summary.summarized} "
+        f"failed={summary.failed} "
+        f"cards_written={summary.cards_written} "
+        f"discoverer_failures={summary.discoverer_failures} "
+        f"store_failures={summary.store_failures}[/dim]"
+    )
+    console.print(
+        f"[dim]tokens in/out={summary.input_tokens}/{summary.output_tokens} "
+        f"tavily searches/credits={summary.tavily_searches}/{summary.tavily_credits} "
+        f"est. ${summary.estimated_cost_usd:.6f} "
+        f"(bedrock=${summary.estimated_bedrock_cost_usd:.6f} "
+        f"tavily=${summary.estimated_tavily_cost_usd:.6f})[/dim]"
     )
     if curation_config.CARD_STORE_BACKEND == "dynamo":
         console.print(

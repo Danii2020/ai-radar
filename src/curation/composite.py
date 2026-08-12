@@ -49,3 +49,13 @@ class CompositeDiscoverer:
     def failures(self) -> int:
         """Number of sources whose discover() raised during the last run."""
         return self._failures
+
+    def searches(self) -> int:
+        """Sum of `source.searches()` over sources that expose it, else 0."""
+        return sum(source.searches() for source in self.sources if hasattr(source, "searches"))
+
+    def credits_used(self) -> int:
+        """Sum of `source.credits_used()` over sources that expose it, else 0."""
+        return sum(
+            source.credits_used() for source in self.sources if hasattr(source, "credits_used")
+        )

@@ -114,11 +114,26 @@ For each subtask, in order:
 
 ## Definition of done for Phase 1
 
-- [ ] The curation loop is a LangGraph graph, logic still portable (no infra coupling in node functions).
-- [ ] Discovery pulls from both RSS feeds and Tavily web search, deduped across sources.
+**Status (2026-08-12): 6 of 8 PASS.** Closed out by `run-observability`'s
+second `sdd-auditor` pass — see
+[`specs/run-observability/audit.md`](../../specs/run-observability/audit.md#phase-1-close-out-auditors-second-pass)
+for the full evidence table (P1–P8) this checklist mirrors.
+
+- [x] The curation loop is a LangGraph graph, logic still portable (no infra coupling in node functions).
+- [x] Discovery pulls from both RSS feeds and Tavily web search, deduped across sources.
 - [ ] Running the graph writes deduped, ranked cards to a DynamoDB table; re-runs are idempotent.
-- [ ] The graph is deployed to AgentCore Runtime and invocable.
+      **PARTIAL** — strong incidental evidence (the 2026-08-10 double-delivery
+      bug produced 16 distinct URLs with the first run's rows untouched), but
+      the prescribed double-fire dedup drill (`eventbridge-schedule` Task 4.7)
+      has still never been run as its own test.
+- [x] The graph is deployed to AgentCore Runtime and invocable.
 - [ ] An EventBridge Scheduler rule invokes it daily with no human in the loop.
-- [ ] Each run emits structured logs + a run-summary (counts, tokens/cost) to CloudWatch.
-- [ ] All infra is reproducible from code (CDK + starter toolkit), tear-down documented.
-- [ ] Cost stays within the lean-MVP envelope (design §7); no OpenSearch Serverless.
+      **PARTIAL** — the schedule exists and has proven a real Scheduler →
+      Runtime fire, but it's still deployed `DISABLED`. `run-observability`'s
+      2026-08-12 live fire was a manual `agentcore invoke`, not a
+      scheduler-triggered run, so it doesn't advance this box. No full
+      unattended day has ever elapsed; enabling the schedule is a human
+      cost/ops go/no-go, not an engineering gap.
+- [x] Each run emits structured logs + a run-summary (counts, tokens/cost) to CloudWatch.
+- [x] All infra is reproducible from code (CDK + starter toolkit), tear-down documented.
+- [x] Cost stays within the lean-MVP envelope (design §7); no OpenSearch Serverless.

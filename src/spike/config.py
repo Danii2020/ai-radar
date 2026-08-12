@@ -1,4 +1,10 @@
-"""Spike configuration — env-overridable, sensible local defaults."""
+"""Spike configuration — env-overridable, sensible local defaults.
+
+Despite the name, this module also holds shared cross-plane AWS/Bedrock
+config consumed by `curation.*` and `runtime_app.py` (`AWS_REGION`, the model
+IDs, `MAX_ITEMS`) — not just the Phase 0 spike (see
+specs/run-observability/tasks.md FU1 for the tracked rename follow-up).
+"""
 from __future__ import annotations
 
 import os
@@ -15,6 +21,15 @@ AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 HAIKU_MODEL_ID = os.getenv(
     "HAIKU_MODEL_ID", "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 )
+
+# Bedrock unit prices (design §7), USD per 1M tokens, for HAIKU_MODEL_ID above.
+# They live HERE, with the model ID they price, so a model swap and its price
+# change are one edit in one file. Consumed by curation.summary.
+# estimate_bedrock_cost_usd (Spec 06); Sonnet/Titan prices are deliberately
+# absent — Plane A summarizes with Haiku only (chat/embeddings are Plane B /
+# Phase 3 concerns and adding their prices now would be speculative config).
+HAIKU_INPUT_USD_PER_1M = float(os.getenv("HAIKU_INPUT_USD_PER_1M", "1.0"))
+HAIKU_OUTPUT_USD_PER_1M = float(os.getenv("HAIKU_OUTPUT_USD_PER_1M", "5.0"))
 # Chat model. Default is Sonnet 4.5 (enabled in this account). The design targets
 # Sonnet 4.6 — enable its model access in the Bedrock console, then set
 # SONNET_MODEL_ID=us.anthropic.claude-sonnet-4-6 to upgrade.
