@@ -8,6 +8,14 @@ Behavior Guarantees 1-9, 11, the Error Handling Contract, and
 intent.md's Success Criteria; audit.md Test Coverage T1-T12 plus the
 inherited Spec 04 coverage I1-I6.
 
+Extended by specs/run-observability/contract.md §8 (`_configure_curation_
+logging`, `_run_curation_pipeline(run_id) -> RunSummary`, the
+`curation_run_complete` superset, the guarded `emit_run_metrics` call) and
+audit.md Test Coverage T22-T27. The pre-existing T8/T12 tests are UPDATED
+in place (per tasks.md Task 4.7 / the "old record is a strict subset of the
+new one" guarantee) rather than duplicated; every other Spec 04/
+async-invocation-ack test below is otherwise unchanged in behavior.
+
 100% offline: `DynamoCardStore`, `RssDiscoverer`, `TavilyDiscoverer`, and
 `build_graph(...).invoke` are monkeypatched at the `runtime_app` module's own
 seam (the composition root) - no real boto3/DynamoDB/Secrets Manager/Bedrock
@@ -32,6 +40,18 @@ that handler to completion on a test-owned loop, drain the background task,
 and assert on the ack shape, the `curation_run_complete`/`curation_run_failed`
 log records, and the SDK's async-task bookkeeping (`add_async_task` /
 `complete_async_task` / `get_current_ping_status()`).
+
+RED phase (specs/run-observability additions only): the async-orchestration
+tests (T1-T11, I1-I5) stub `_run_curation_pipeline` wholesale via
+`_blocking_pipeline_stub`/`_raising_pipeline_stub`, which now call the stub
+with a `run_id` positional argument (per contract.md §8) — until
+`runtime_app._curation_run` is updated to call
+`asyncio.to_thread(_run_curation_pipeline, run_id)`, those stubs are invoked
+with the OLD zero-arg call convention and fail with a `TypeError` (missing
+required positional argument), a legitimate RED signal. The tests exercising
+the REAL pipeline (T22/T23 and the new metrics tests) additionally require
+`curation.summary`/`curation.metrics` to exist and fail earlier (import
+error) until specs/run-observability Phase 1 lands.
 """
 from __future__ import annotations
 
@@ -41,6 +61,7 @@ import json
 import logging
 import sys
 import threading
+from dataclasses import dataclass
 from pathlib import Path
 
 # runtime_app.py lives at the REPO ROOT (sibling to run_curation.py), not under
@@ -58,19 +79,51 @@ from bedrock_agentcore import PingStatus
 
 CURATION_LOGGER_NAME = "bedrock_agentcore.app.curation"
 
-#: The eight Spec 04 summary fields a stubbed `_run_curation_pipeline()` (or a
-#: stubbed compiled-graph final state) produces, reused across the
-#: async-orchestration tests that don't care about the exact numbers.
-_DEFAULT_SUMMARY = {
-    "discovered": 5,
-    "deduped": 4,
-    "summarized": 3,
-    "failed": 0,
-    "persisted": 3,
-    "discoverer_failures": 0,
-    "store_failures": 0,
-    "tavily_enabled": False,
-}
+
+@dataclass
+class _FakeRunSummary:
+    """Minimal `RunSummary`-shaped test double (`.to_dict()`), used to stub
+    `_run_curation_pipeline(run_id)` for tests that only care about async
+    orchestration (T1-T11, I1-I5) — kept LOCAL (not importing
+    `curation.summary.RunSummary`) so this file's collection does not depend
+    on that module's existence for those tests. Tests that exercise the REAL
+    pipeline (T22/T23, the metrics tests) import the real `RunSummary`."""
+
+    payload: dict
+
+    def to_dict(self) -> dict:
+        return dict(self.payload)
+
+
+def _make_summary_payload(run_id: str, **overrides) -> dict:
+    """The full Spec 06 `RunSummary.to_dict()` shape (21 fields, contract.md
+    §2) with representative defaults; `overrides` lets a test change specific
+    fields without repeating the whole shape."""
+    payload = {
+        "run_id": run_id,
+        "duration_s": 31.7,
+        "discovered": 5,
+        "discovered_rss": 5,
+        "discovered_tavily": 0,
+        "discovered_by_source": {"Test Feed": 5},
+        "deduped": 4,
+        "summarized": 3,
+        "failed": 0,
+        "persisted": 3,
+        "cards_written": 3,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "tavily_searches": 0,
+        "tavily_credits": 0,
+        "discoverer_failures": 0,
+        "store_failures": 0,
+        "tavily_enabled": False,
+        "estimated_bedrock_cost_usd": 0.0,
+        "estimated_tavily_cost_usd": 0.0,
+        "estimated_cost_usd": 0.0,
+    }
+    payload.update(overrides)
+    return payload
 
 
 # --- Fakes (in-memory doubles for the injected seams) -----------------------
@@ -79,7 +132,7 @@ _DEFAULT_SUMMARY = {
 class FakeCardStore:
     """In-memory CardStore double: implements the Spec 01 CardStore Protocol
     (dedup_filter/upsert) plus DynamoCardStore's `.failures()` (Spec 03) that
-    the pipeline's summary dict reads."""
+    the pipeline's summary reads."""
 
     def __init__(self, failure_count: int = 0):
         self._failure_count = failure_count
@@ -96,17 +149,28 @@ class FakeCardStore:
 
 class FakeDiscoverer:
     """In-memory Discoverer double matching CompositeDiscoverer's shape
-    (discover/failures/sources) that the pipeline's summary dict reads."""
+    (discover/failures/searches/credits_used/sources) that the pipeline's
+    summary reads. `searches`/`credits_used` are Spec 06 additions
+    (contract.md §7), defaulting to 0 like the real CompositeDiscoverer does
+    for sources that don't expose them."""
 
-    def __init__(self, failure_count: int = 0, sources=None):
+    def __init__(self, failure_count: int = 0, sources=None, searches: int = 0, credits_used: int = 0):
         self._failure_count = failure_count
         self.sources = sources if sources is not None else []
+        self._searches = searches
+        self._credits_used = credits_used
 
     def discover(self):
         return []
 
     def failures(self):
         return self._failure_count
+
+    def searches(self):
+        return self._searches
+
+    def credits_used(self):
+        return self._credits_used
 
 
 class FakeRssDiscoverer:
@@ -197,7 +261,7 @@ class _RaisingSecretsClient:
 def _patch_pipeline_seams(monkeypatch, final_state: dict, invoke_calls: list, max_items: int = 7):
     """Patch the store/discoverer/graph seams `_run_curation_pipeline` calls,
     the way Spec 04's tests did, for tests that care about the REAL
-    `_run_curation_pipeline`/graph-wiring path (T3, T11, T12, and the
+    `_run_curation_pipeline`/graph-wiring path (T3, T22, T23, and the
     Tavily-flag-via-log-record tests) rather than stubbing the pipeline
     function wholesale."""
     monkeypatch.setattr(runtime_app, "_build_store", lambda: FakeCardStore())
@@ -206,30 +270,45 @@ def _patch_pipeline_seams(monkeypatch, final_state: dict, invoke_calls: list, ma
     monkeypatch.setattr(runtime_app.config, "MAX_ITEMS", max_items)
 
 
-def _blocking_pipeline_stub(release_event: threading.Event, calls: list, summary: dict | None = None):
-    """A `_run_curation_pipeline` stand-in that blocks (on a real thread, via
-    `asyncio.to_thread`) until the test releases `release_event` - lets a
-    test observe state (ping status, `_active_run_id`, `_background_tasks`)
-    WHILE a run is still in flight, deterministically, with no sleep-based
-    synchronization."""
-    payload = dict(summary) if summary is not None else dict(_DEFAULT_SUMMARY)
+def _blocking_pipeline_stub(release_event: threading.Event, calls: list, payload_overrides: dict | None = None):
+    """A `_run_curation_pipeline(run_id)` stand-in that blocks (on a real
+    thread, via `asyncio.to_thread`) until the test releases `release_event` -
+    lets a test observe state (ping status, `_active_run_id`,
+    `_background_tasks`) WHILE a run is still in flight, deterministically,
+    with no sleep-based synchronization. Returns a `_FakeRunSummary` carrying
+    the `run_id` it was called with (contract.md §8:
+    `_run_curation_pipeline(run_id) -> RunSummary`)."""
 
-    def _pipeline():
-        calls.append(True)
+    def _pipeline(run_id):
+        calls.append(run_id)
         released = release_event.wait(timeout=5)
         assert released, "test-controlled release_event was never set (deadlock guard)"
-        return dict(payload)
+        return _FakeRunSummary(_make_summary_payload(run_id, **(payload_overrides or {})))
 
     return _pipeline
 
 
 def _raising_pipeline_stub(exc: Exception, calls: list | None = None):
-    def _pipeline():
+    def _pipeline(run_id):
         if calls is not None:
-            calls.append(True)
+            calls.append(run_id)
         raise exc
 
     return _pipeline
+
+
+def _parse_json_lines(text: str) -> list[dict]:
+    """Parse every non-blank line of `text` as JSON, skipping ones that
+    aren't (defensive against stray non-JSON stderr output)."""
+    parsed = []
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        try:
+            parsed.append(json.loads(line))
+        except (TypeError, ValueError):
+            continue
+    return parsed
 
 
 @pytest.fixture(autouse=True)
@@ -371,11 +450,12 @@ def test_handler_returns_before_pipeline_completes_even_when_pipeline_blocks(loo
 
 # =============================================================================
 # T3 - the background task invokes the (unchanged) compiled graph exactly
-# once, with {"max_items": config.MAX_ITEMS}
+# once, with {"max_items": config.MAX_ITEMS, "run_id": <the ack's run_id>}
+# (run_id addition: specs/run-observability contract.md §8)
 # =============================================================================
 
 
-def test_background_task_invokes_graph_exactly_once_with_configured_max_items(loop, monkeypatch):
+def test_background_task_invokes_graph_exactly_once_with_configured_max_items_and_run_id(loop, monkeypatch):
     final_state = {
         "discovered": 12,
         "deduped": 9,
@@ -387,10 +467,10 @@ def test_background_task_invokes_graph_exactly_once_with_configured_max_items(lo
     curation_config.TAVILY_API_KEY = ""
     _patch_pipeline_seams(monkeypatch, final_state, invoke_calls, max_items=42)
 
-    _call_handler(loop, {})
+    result = _call_handler(loop, {})
     _drain(loop)
 
-    assert invoke_calls == [{"max_items": 42}]
+    assert invoke_calls == [{"max_items": 42, "run_id": result["run_id"]}]
 
 
 # =============================================================================
@@ -533,24 +613,34 @@ def test_curation_run_failed_logged_with_exception_info_on_pipeline_failure(loop
 
 
 # =============================================================================
-# T8 - curation_run_complete carries all eight Spec 04 counts + run_id
+# T22 (was T8) - curation_run_complete is a STRICT SUPERSET of the eight
+# async-invocation-ack fields: same names, same values, plus the new Spec 06
+# fields (Behavior Guarantee 2 / Success Criteria).
 # =============================================================================
 
 
-def test_curation_run_complete_log_record_contains_all_eight_counts_and_run_id(loop, monkeypatch, caplog):
+def test_curation_run_complete_log_record_is_a_superset_of_the_eight_original_fields_plus_new_fields(
+    loop, monkeypatch, caplog
+):
     final_state = {
         "discovered": 50,
+        "discovered_by_source": {"arXiv cs.AI": 30, "Tavily: general": 20},
         "deduped": 42,
         "summarized": 8,
         "failed": 0,
         "cards": [object()] * 8,
+        "persisted": 8,
+        "input_tokens": 24135,
+        "output_tokens": 3120,
     }
     invoke_calls: list = []
     curation_config.TAVILY_API_KEY = "tvly-key"
     _patch_pipeline_seams(monkeypatch, final_state, invoke_calls)
     monkeypatch.setattr(runtime_app, "_build_store", lambda: FakeCardStore(failure_count=0))
     monkeypatch.setattr(
-        runtime_app, "_build_discoverer", lambda: FakeDiscoverer(failure_count=0, sources=[object()])
+        runtime_app,
+        "_build_discoverer",
+        lambda: FakeDiscoverer(failure_count=0, sources=[object()], searches=5, credits_used=5),
     )
 
     with caplog.at_level(logging.INFO, logger=CURATION_LOGGER_NAME):
@@ -559,6 +649,8 @@ def test_curation_run_complete_log_record_contains_all_eight_counts_and_run_id(l
 
     payload, _ = _find_json_log_record(caplog, "curation_run_complete")
     assert payload is not None, "expected a curation_run_complete log record"
+
+    # The eight async-invocation-ack fields, unchanged names and values.
     assert payload["run_id"] == result["run_id"]
     assert isinstance(payload["duration_s"], (int, float))
     assert payload["discovered"] == 50
@@ -569,6 +661,19 @@ def test_curation_run_complete_log_record_contains_all_eight_counts_and_run_id(l
     assert payload["discoverer_failures"] == 0
     assert payload["store_failures"] == 0
     assert payload["tavily_enabled"] is True
+
+    # New fields — ADDED, not substituted.
+    assert payload["discovered_rss"] == 30
+    assert payload["discovered_tavily"] == 20
+    assert payload["discovered_by_source"] == {"arXiv cs.AI": 30, "Tavily: general": 20}
+    assert payload["cards_written"] == 8
+    assert payload["input_tokens"] == 24135
+    assert payload["output_tokens"] == 3120
+    assert payload["tavily_searches"] == 5
+    assert payload["tavily_credits"] == 5
+    assert payload["estimated_cost_usd"] == pytest.approx(
+        payload["estimated_bedrock_cost_usd"] + payload["estimated_tavily_cost_usd"]
+    )
 
 
 # =============================================================================
@@ -616,46 +721,220 @@ def test_handler_ignores_payload_argument_producing_identical_ack_shape_and_grap
 
     assert result_empty_payload.keys() == result_arbitrary_payload.keys()
     assert result_empty_payload["status"] == result_arbitrary_payload["status"] == "accepted"
-    # build_graph().invoke() was called identically both times - payload never
-    # reached the graph input.
-    assert invoke_calls[0] == invoke_calls[1]
+    # build_graph().invoke() was called identically both times MODULO run_id -
+    # payload never reached max_items, and each call's run_id matches its own
+    # ack (run_id necessarily differs per call - it's a fresh uuid per run).
+    assert invoke_calls[0]["max_items"] == invoke_calls[1]["max_items"] == 7
+    assert invoke_calls[0]["run_id"] == result_empty_payload["run_id"]
+    assert invoke_calls[1]["run_id"] == result_arbitrary_payload["run_id"]
 
 
 # =============================================================================
-# T12 - `_run_curation_pipeline()` alone returns the eight-field summary
+# T23 (was T12) - `_run_curation_pipeline(run_id)` returns a REAL `RunSummary`
+# derived from the graph's final state, the discoverer's searches()/
+# credits_used()/failures(), and the store's failures().
 # =============================================================================
 
 
-def test_run_curation_pipeline_returns_eight_field_summary_from_mocked_graph_final_state(monkeypatch):
+def test_run_curation_pipeline_returns_run_summary_with_run_id_and_correct_derived_fields(monkeypatch):
+    from curation.summary import RunSummary
+
     final_state = {
         "discovered": 12,
+        "discovered_by_source": {"arXiv cs.AI": 9, "Tavily: general": 3},
         "deduped": 9,
         "summarized": 8,
         "failed": 1,
         "cards": [object(), object(), object()],
+        "persisted": 3,
+        "input_tokens": 1000,
+        "output_tokens": 200,
     }
     invoke_calls: list = []
     curation_config.TAVILY_API_KEY = ""
     monkeypatch.setattr(runtime_app, "_build_store", lambda: FakeCardStore(failure_count=2))
     monkeypatch.setattr(
-        runtime_app, "_build_discoverer", lambda: FakeDiscoverer(failure_count=1, sources=[object()])
+        runtime_app,
+        "_build_discoverer",
+        lambda: FakeDiscoverer(failure_count=1, sources=[object()], searches=4, credits_used=4),
     )
     monkeypatch.setattr(runtime_app, "build_graph", _fake_build_graph(final_state, invoke_calls))
     monkeypatch.setattr(runtime_app.config, "MAX_ITEMS", 42)
 
-    result = runtime_app._run_curation_pipeline()
+    result = runtime_app._run_curation_pipeline("test-run-id")
 
-    assert result == {
-        "discovered": 12,
-        "deduped": 9,
-        "summarized": 8,
-        "failed": 1,
+    assert isinstance(result, RunSummary)
+    assert result.run_id == "test-run-id"
+    assert result.discovered == 12
+    assert result.discovered_rss == 9
+    assert result.discovered_tavily == 3
+    assert result.deduped == 9
+    assert result.summarized == 8
+    assert result.failed == 1
+    assert result.persisted == 3
+    assert result.cards_written == 1  # max(persisted - store_failures, 0) == max(3-2, 0)
+    assert result.input_tokens == 1000
+    assert result.output_tokens == 200
+    assert result.tavily_searches == 4
+    assert result.tavily_credits == 4
+    assert result.discoverer_failures == 1
+    assert result.store_failures == 2
+    assert result.tavily_enabled is False
+    assert invoke_calls == [{"max_items": 42, "run_id": "test-run-id"}]
+
+
+# =============================================================================
+# T24 - EMF emission: exactly one line on a successful run; suppressed
+# entirely by the kill switch, without affecting curation_run_complete.
+# =============================================================================
+
+
+def test_successful_run_emits_exactly_one_emf_line_to_stderr(loop, monkeypatch, capsys):
+    final_state = {
+        "discovered": 5,
+        "discovered_by_source": {"Test Feed": 5},
+        "deduped": 4,
+        "summarized": 3,
+        "failed": 0,
+        "cards": [object()] * 3,
         "persisted": 3,
-        "discoverer_failures": 1,
-        "store_failures": 2,
-        "tavily_enabled": False,
+        "input_tokens": 10,
+        "output_tokens": 2,
     }
-    assert invoke_calls == [{"max_items": 42}]
+    invoke_calls: list = []
+    curation_config.TAVILY_API_KEY = ""
+    _patch_pipeline_seams(monkeypatch, final_state, invoke_calls)
+
+    _call_handler(loop, {})
+    _drain(loop)
+
+    stderr_lines = _parse_json_lines(capsys.readouterr().err)
+    emf_lines = [line for line in stderr_lines if line.get("event") == "curation_run_metrics"]
+    assert len(emf_lines) == 1
+    assert emf_lines[0]["RunsCompleted"] == 1
+    assert emf_lines[0]["CardsWritten"] == 3
+
+
+def test_metrics_kill_switch_suppresses_the_emf_line_without_affecting_curation_run_complete(
+    loop, monkeypatch, capsys, caplog
+):
+    import curation.metrics as metrics_module
+
+    final_state = {
+        "discovered": 5,
+        "discovered_by_source": {"Test Feed": 5},
+        "deduped": 4,
+        "summarized": 3,
+        "failed": 0,
+        "cards": [object()] * 3,
+        "persisted": 3,
+        "input_tokens": 10,
+        "output_tokens": 2,
+    }
+    invoke_calls: list = []
+    curation_config.TAVILY_API_KEY = ""
+    _patch_pipeline_seams(monkeypatch, final_state, invoke_calls)
+    monkeypatch.setattr(metrics_module.config, "EMIT_RUN_METRICS", False)
+
+    with caplog.at_level(logging.INFO, logger=CURATION_LOGGER_NAME):
+        _call_handler(loop, {})
+        _drain(loop)
+
+    stderr_lines = _parse_json_lines(capsys.readouterr().err)
+    assert not any(line.get("event") == "curation_run_metrics" for line in stderr_lines)
+
+    payload, _ = _find_json_log_record(caplog, "curation_run_complete")
+    assert payload is not None, "the kill switch must not affect curation_run_complete"
+
+
+# =============================================================================
+# T25 - a raising emit_run_metrics logs curation_metrics_failed (WARNING) and
+# NEVER turns a successful run into curation_run_failed (Behavior Guarantee 6
+# / Error Handling Contract row "emit_run_metrics raises").
+# =============================================================================
+
+
+def test_raising_emit_run_metrics_logs_curation_metrics_failed_and_keeps_curation_run_complete(
+    loop, monkeypatch, caplog
+):
+    final_state = {
+        "discovered": 5,
+        "discovered_by_source": {"Test Feed": 5},
+        "deduped": 4,
+        "summarized": 3,
+        "failed": 0,
+        "cards": [object()] * 3,
+        "persisted": 3,
+        "input_tokens": 10,
+        "output_tokens": 2,
+    }
+    invoke_calls: list = []
+    curation_config.TAVILY_API_KEY = ""
+    _patch_pipeline_seams(monkeypatch, final_state, invoke_calls)
+
+    def _raise(summary):
+        raise RuntimeError("stderr closed")
+
+    monkeypatch.setattr(runtime_app, "emit_run_metrics", _raise)
+
+    with caplog.at_level(logging.INFO, logger=CURATION_LOGGER_NAME):
+        result = _call_handler(loop, {})
+        _drain(loop)
+
+    complete_payload, _ = _find_json_log_record(caplog, "curation_run_complete")
+    assert complete_payload is not None
+    assert complete_payload["run_id"] == result["run_id"]
+
+    failed_payload, _ = _find_json_log_record(caplog, "curation_run_failed")
+    assert failed_payload is None, "a metrics failure must never produce curation_run_failed"
+
+    metrics_failed_payload, metrics_failed_record = _find_json_log_record(caplog, "curation_metrics_failed")
+    assert metrics_failed_payload is not None
+    assert metrics_failed_payload["run_id"] == result["run_id"]
+    assert metrics_failed_record.levelno == logging.WARNING
+
+
+# =============================================================================
+# T26 - a failing pipeline (curation_run_failed path) never calls
+# emit_run_metrics at all (Behavior Guarantee 1: "A failed run produces
+# neither" a summary nor metrics).
+# =============================================================================
+
+
+def test_failing_pipeline_never_calls_emit_run_metrics(loop, monkeypatch):
+    calls: list = []
+    monkeypatch.setattr(runtime_app, "emit_run_metrics", lambda summary: calls.append(summary))
+    monkeypatch.setattr(
+        runtime_app, "_run_curation_pipeline", _raising_pipeline_stub(RuntimeError("boom"))
+    )
+
+    _call_handler(loop, {})
+    _drain(loop)
+
+    assert calls == []
+
+
+# =============================================================================
+# T27 - `_configure_curation_logging()` attaches a handler + INFO level to the
+# `curation` logger tree so node-level records reach CloudWatch.
+# =============================================================================
+
+
+def test_configure_curation_logging_attaches_a_handler_and_info_level_to_the_curation_logger():
+    curation_logger = logging.getLogger("curation")
+    original_handlers = list(curation_logger.handlers)
+    original_level = curation_logger.level
+    try:
+        runtime_app._configure_curation_logging()
+
+        assert curation_logger.level == logging.INFO
+        assert curation_logger.handlers, (
+            "expected _configure_curation_logging() to attach at least one "
+            "handler to the 'curation' logger tree"
+        )
+    finally:
+        curation_logger.handlers = original_handlers
+        curation_logger.setLevel(original_level)
 
 
 # =============================================================================

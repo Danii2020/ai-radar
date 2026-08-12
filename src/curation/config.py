@@ -67,3 +67,30 @@ TAVILY_SECRET_NAME: str = os.getenv("TAVILY_SECRET_NAME", "ai-radar/tavily-api-k
 # returns "" (degrade to RSS-only), so a freshly-deployed-but-unpopulated
 # secret never gets treated as a real, usable Tavily key.
 TAVILY_SECRET_UNSET_SENTINEL: str = "UNSET-populate-via-put-secret-value"
+
+# --- Run observability (Spec 06) -----------------------------------------
+# Source-label prefix TavilyDiscoverer stamps on every RawItem it produces.
+# `summary.split_by_origin` classifies RSS vs Tavily by this prefix, so the
+# two must stay in sync (tavily.py imports it from here).
+TAVILY_SOURCE_PREFIX: str = "Tavily: "
+
+# Tavily cost model. Tavily bills in CREDITS and its API response does NOT
+# report consumption, so this is an ESTIMATE: attempted searches x credits per
+# search x unit price. Basic search = 1 credit, advanced = 2 (Tavily API-credits
+# docs, verified 2026-08); unknown depths ("fast"/"ultra-fast") fall back to 1.
+# $0.008/credit is Tavily's public pay-as-you-go rate — override when the real
+# plan is known.
+TAVILY_CREDIT_PRICE_USD: float = float(
+    os.getenv("CURATION_TAVILY_CREDIT_PRICE_USD", "0.008")
+)
+TAVILY_CREDITS_BY_DEPTH: dict[str, int] = {"basic": 1, "advanced": 2}
+TAVILY_DEFAULT_CREDITS_PER_SEARCH: int = 1
+
+# NOTE: the Bedrock unit prices are NOT here — they live in spike/config.py
+# next to HAIKU_MODEL_ID, the model they price (see spike/config.py).
+
+# CloudWatch EMF metrics. 4 metrics x $0.30/metric-month ~= $1.20/mo; set
+# CURATION_EMIT_METRICS=false to stop emitting entirely (logs still carry the
+# full summary).
+METRIC_NAMESPACE: str = os.getenv("CURATION_METRIC_NAMESPACE", "AIRadar/Curation")
+EMIT_RUN_METRICS: bool = os.getenv("CURATION_EMIT_METRICS", "true").lower() == "true"

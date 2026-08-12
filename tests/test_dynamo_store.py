@@ -2,6 +2,8 @@
 
 Spec: specs/dynamodb-card-store/contract.md Behavior Guarantees 1-8,
 Error Handling Contract rows 1-5; specs/dynamodb-card-store/tasks.md T1-T10.
+Patch target updated for specs/run-observability/tasks.md Task 4.6
+(`nodes.summarize` -> `nodes.summarize_with_usage`); no assertion changed.
 
 All DynamoDB access is mocked in-process via the `dynamo_resource`/`dynamo_table`
 fixtures (`tests/conftest.py`, `moto.mock_aws`) — zero real-AWS calls. The
@@ -302,7 +304,7 @@ def test_build_graph_runs_end_to_end_against_dynamo_card_store(
 
     item = make_raw_item(url="https://example.com/a", title="A")
     monkeypatch.setattr(
-        nodes_module, "summarize", summarize_stub_factory(relevance_by_url={item.url: 7})
+        nodes_module, "summarize_with_usage", summarize_stub_factory(relevance_by_url={item.url: 7})
     )
 
     store = DynamoCardStore(table_name=CARD_TABLE_NAME, client=dynamo_resource)

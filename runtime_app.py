@@ -36,6 +36,8 @@ from curation.dynamo import DynamoCardStore
 from curation.graph import build_graph
 from curation.interfaces import Discoverer
 from curation.local import RssDiscoverer
+from curation.metrics import emit_run_metrics
+from curation.summary import RunSummary, build_run_summary
 from curation.tavily import TavilyDiscoverer
 from spike import config
 
@@ -55,6 +57,24 @@ _background_tasks: set[asyncio.Task] = set()
 #: Single-flight guard. Read/written ONLY on the SDK's worker event loop
 #: (handler + background coroutine), so no lock is needed.
 _active_run_id: str | None = None
+
+
+def _configure_curation_logging() -> None:
+    """Attach the SDK logger's handlers to the `curation` logger tree so
+    node-level records (logger "curation.nodes") reach CloudWatch at INFO.
+
+    Called once at import. Without it, `curation.*` INFO records are dropped
+    (no handler anywhere on their chain; logging's lastResort only passes
+    WARNING+). Infra knowledge stays HERE, in the composition root — node code
+    just calls `logging.getLogger(__name__)`.
+    """
+    curation_logger = logging.getLogger("curation")
+    curation_logger.setLevel(logging.INFO)
+    for handler in app.logger.handlers:
+        curation_logger.addHandler(handler)
+
+
+_configure_curation_logging()
 
 
 def _resolve_tavily_key(secret_name: str) -> str:
@@ -101,37 +121,40 @@ def _build_discoverer() -> CompositeDiscoverer:
     return CompositeDiscoverer(sources)
 
 
-def _run_curation_pipeline() -> dict:
-    """Run one full curation pass and return the Spec 04 run-summary dict.
+def _run_curation_pipeline(run_id: str) -> RunSummary:
+    """Run one full curation pass and return its RunSummary.
 
-    BLOCKING (boto3 + feedparser + sync LangGraph nodes) - always called via
-    `asyncio.to_thread`, never on the event loop. This is verbatim the body of
-    Spec 04's synchronous `handler`, extracted unchanged: build store +
-    discoverer, invoke the UNCHANGED compiled graph with
-    `max_items=spike.config.MAX_ITEMS`, return the counts. Never raises for a
-    single bad item/source (inherited per-item try/except from Specs 01-03)."""
+    BLOCKING — always called via `asyncio.to_thread`. Same body as before
+    (build store + discoverer, invoke the UNCHANGED compiled graph) with three
+    changes: it takes `run_id`, passes it into the graph
+    (`{"max_items": config.MAX_ITEMS, "run_id": run_id}`), times itself with
+    `time.monotonic()`, and returns `build_run_summary(...)` instead of the
+    eight-field dict. Tavily stats come from the composite discoverer's
+    `searches()` / `credits_used()`."""
     store = _build_store()
     discoverer = _build_discoverer()
     graph = build_graph(store, discoverer)
 
-    final = graph.invoke({"max_items": config.MAX_ITEMS})
+    started = time.monotonic()
+    final = graph.invoke({"max_items": config.MAX_ITEMS, "run_id": run_id})
+    duration_s = time.monotonic() - started
 
-    return {
-        "discovered": final.get("discovered", 0),
-        "deduped": final.get("deduped", 0),
-        "summarized": final.get("summarized", 0),
-        "failed": final.get("failed", 0),
-        "persisted": len(final.get("cards", [])),
-        "discoverer_failures": discoverer.failures(),
-        "store_failures": store.failures(),
-        "tavily_enabled": bool(curation_config.TAVILY_API_KEY),
-    }
+    return build_run_summary(
+        run_id=run_id,
+        duration_s=duration_s,
+        state=final,
+        tavily_searches=discoverer.searches(),
+        tavily_credits=discoverer.credits_used(),
+        discoverer_failures=discoverer.failures(),
+        store_failures=store.failures(),
+        tavily_enabled=bool(curation_config.TAVILY_API_KEY),
+    )
 
 
 async def _curation_run(run_id: str, task_id: int) -> None:
-    """Background task body: run the pipeline off-loop, log the summary, and
-    always release both the async-task registration and the single-flight
-    guard.
+    """Background task body: run the pipeline off-loop, log the summary, emit
+    metrics, and always release both the async-task registration and the
+    single-flight guard.
 
     Never re-raises: the HTTP response was already sent, so a raise here would
     only surface as an unretrievable task exception. Failures are logged with
@@ -144,25 +167,35 @@ async def _curation_run(run_id: str, task_id: int) -> None:
 
     started = time.monotonic()
     try:
-        summary = await asyncio.to_thread(_run_curation_pipeline)
+        summary = await asyncio.to_thread(_run_curation_pipeline, run_id)
         # Success-path log emission lives INSIDE this try (not an `else:`
         # outside it), so a bug in the log call itself - e.g. a
         # non-serializable value in `summary` breaking `json.dumps` - is
         # caught by the same `except Exception` below and reported as
         # `curation_run_failed` instead of escaping as an unretrieved task
         # exception (finding A5). `finally` still releases the task/guard
-        # either way.
-        duration_s = time.monotonic() - started
+        # either way. `summary.to_dict()` is a strict SUPERSET of the eight
+        # async-invocation-ack fields (Spec 06 Behavior Guarantee 2).
         logger.info(
-            json.dumps(
-                {
-                    "event": "curation_run_complete",
-                    "run_id": run_id,
-                    "duration_s": round(duration_s, 1),
-                    **summary,
-                }
-            )
+            json.dumps({"event": "curation_run_complete", **summary.to_dict()})
         )
+        # Metrics emission gets its OWN try/except, separate from the outer
+        # one: a metrics failure must never turn a successful run into
+        # `curation_run_failed` (cf. async-invocation-ack finding A5, which
+        # put the success log INSIDE the try on purpose - the same reasoning
+        # applies here one level deeper).
+        try:
+            emit_run_metrics(summary)
+        except Exception as exc:
+            logger.warning(
+                json.dumps(
+                    {
+                        "event": "curation_metrics_failed",
+                        "run_id": run_id,
+                        "error": str(exc),
+                    }
+                )
+            )
     except Exception:
         duration_s = time.monotonic() - started
         logger.exception(

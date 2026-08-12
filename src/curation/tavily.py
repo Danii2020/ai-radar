@@ -49,6 +49,7 @@ class TavilyDiscoverer:
         self.exclude_domains = exclude_domains if exclude_domains is not None else []
         self._client = None
         self._failures = 0
+        self._searches = 0
 
     @classmethod
     def from_config(cls) -> "TavilyDiscoverer":
@@ -81,13 +82,15 @@ class TavilyDiscoverer:
         a failing query is logged + skipped, others still run. Total failure
         (or unset key handled upstream) yields [] — never raises."""
         self._failures = 0
+        self._searches = 0
         client = self._get_client()
-        source = f"Tavily: {self.topic}"
+        source = f"{config.TAVILY_SOURCE_PREFIX}{self.topic}"
 
         items: list[RawItem] = []
         seen_hashes: set[str] = set()
 
         for seed in self.seeds:
+            self._searches += 1
             try:
                 response = client.search(
                     query=seed,
@@ -133,3 +136,17 @@ class TavilyDiscoverer:
         """Count of seed queries that raised during the last discover() (0 if
         clean). Lets a caller/observer surface degraded runs (Spec 06)."""
         return self._failures
+
+    def searches(self) -> int:
+        """Seed queries ATTEMPTED during the last discover() - including ones
+        that raised (assume a failed search may still be charged)."""
+        return self._searches
+
+    def credits_used(self) -> int:
+        """`searches() * config.TAVILY_CREDITS_BY_DEPTH.get(self.search_depth,
+        config.TAVILY_DEFAULT_CREDITS_PER_SEARCH)`. The depth→credits mapping
+        lives with the Tavily adapter; the unit PRICE lives in summary.py."""
+        credits_per_search = config.TAVILY_CREDITS_BY_DEPTH.get(
+            self.search_depth, config.TAVILY_DEFAULT_CREDITS_PER_SEARCH
+        )
+        return self.searches() * credits_per_search

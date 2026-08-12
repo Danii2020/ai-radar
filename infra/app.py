@@ -20,10 +20,12 @@ import aws_cdk as cdk  # noqa: E402
 
 from stacks.agent_runtime_stack import AgentRuntimeStack  # noqa: E402
 from stacks.card_store_stack import CardStoreStack  # noqa: E402
+from stacks.cost_budget_stack import CostBudgetStack  # noqa: E402
 from stacks.curation_schedule_stack import CurationScheduleStack  # noqa: E402
 
 app = cdk.App()
 CardStoreStack(app, "AiRadarCardStore")  # env resolved from CDK context / profile
 AgentRuntimeStack(app, "AiRadarRuntimeRole")
 CurationScheduleStack(app, "AiRadarSchedule")
+CostBudgetStack(app, "AiRadarBudget")  # NEW (Spec 06)
 app.synth()

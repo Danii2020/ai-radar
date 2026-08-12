@@ -24,17 +24,23 @@ default vector backing (~$700/mo); it would burn the budget in under a month.
 
 Both write to `.spike_cache/` (gitignored): `cards.json`, `seen.json`, `embeddings.json`.
 
-**Phase 1 (curation MVP)** has since shipped `curation-graph`, `tavily-discovery`,
-`dynamodb-card-store`, `runtime-packaging` (LangGraph pipeline on AgentCore
-Runtime), `eventbridge-schedule` (daily `EventBridge Scheduler` trigger,
-deploys `DISABLED`), and `async-invocation-ack` (entrypoint now acks
-immediately and runs curation in the background — fixes a real
-Scheduler-caused duplicate-run bug found during `eventbridge-schedule`'s live
-fire). All are deploy-verified and live-fire-verified for real, and as of
-2026-08-10 the agent + schedule stacks are **still deployed** (not torn down),
-running the `async-invocation-ack` image. See the spec table and runbook in
-[`README.md`](README.md) for current status, exact commands, and how to
-redeploy/tear down — that table is the source of truth, not this file.
+**Phase 1 (curation MVP) is complete** — all 6 planned specs shipped:
+`curation-graph`, `tavily-discovery`, `dynamodb-card-store`,
+`runtime-packaging` (LangGraph pipeline on AgentCore Runtime),
+`eventbridge-schedule` (daily `EventBridge Scheduler` trigger, deploys
+`DISABLED`), `async-invocation-ack` (entrypoint acks immediately and runs
+curation in the background — fixes a real Scheduler-caused duplicate-run
+bug), and `run-observability` (per-run `RunSummary` + CloudWatch EMF custom
+metrics + a CDK-managed AWS Budget with SNS alerts). All are deploy-verified
+and live-fire-verified for real, and as of 2026-08-12 **four** stacks
+(`AiRadarCardStore`, `AiRadarRuntimeRole`, `AiRadarSchedule`,
+`AiRadarBudget`) are **still deployed** (not torn down), with the agent
+running the `run-observability` image. Two operational gaps remain open from
+Phase 1 (an unattended daily cadence has never actually run, since the
+schedule stays `DISABLED`, and the double-fire dedup drill was never run as
+its own test) — see the spec table and runbook in [`README.md`](README.md)
+for current status, exact commands, and how to redeploy/tear down — that
+table is the source of truth, not this file.
 
 ## Package management: uv (not pip)
 
@@ -107,6 +113,13 @@ docs/                   # design + research + architecture principles
   undocumented ~30s synchronous timeout, and the old blocking 25–35s handler
   caused it to double-fire. See the `eventbridge-schedule` runbook's live-fire
   section in `README.md` for the two-step verify flow and the gotcha.
+- CloudWatch EMF (custom metrics from log data) requires writing the raw JSON
+  document **directly to `sys.stderr`**, bypassing `logging` entirely — the
+  AgentCore SDK's logger wraps every record in `{"message": "<json-as-string>"}`,
+  which breaks EMF parsing. Live-fire-verified 2026-08-12 (`run-observability`):
+  CloudWatch really does extract metrics from a raw stderr line in the
+  AgentCore runtime log group. See `src/curation/metrics.py` and the "Run
+  observability" section in `README.md`.
 
 ## Conventions
 
@@ -125,4 +138,8 @@ docs/                   # design + research + architecture principles
 ## Deferred (later phases)
 
 Real vector store for RAG (DynamoDB reserves an `embedding` attribute for it) ·
-AgentCore Memory (STM/LTM) · Next.js feed.
+AgentCore Memory (STM/LTM) · Next.js feed · renaming/retiring `src/spike/`
+(despite the name, it's live production code for **both** planes, not a
+throwaway spike — see `specs/run-observability/tasks.md` FU1) · migrating
+config loading to `pydantic-settings` (currently only a transitive dependency;
+see FU2 in the same file).

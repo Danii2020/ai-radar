@@ -5,10 +5,27 @@ well-formed structured output (no brittle JSON-from-prose parsing).
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import boto3
 
 from .config import AWS_REGION, HAIKU_MODEL_ID
 from .feeds import RawItem
+
+
+@dataclass(frozen=True)
+class TokenUsage:
+    """Bedrock Converse token accounting for ONE model call.
+
+    Mirrors the `usage` block of a Converse response (botocore shape
+    `TokenUsage`: `inputTokens` / `outputTokens` / `totalTokens` are required;
+    the cache fields are optional and unused here — `summarize` sets no cache
+    point). Plain data: carried out of the infra edge so `curation.nodes` can
+    accumulate token counts without ever importing boto3.
+    """
+
+    input_tokens: int = 0
+    output_tokens: int = 0
 
 _client = None
 
@@ -72,8 +89,14 @@ CARD_TOOL = {
 }
 
 
-def summarize(item: RawItem) -> dict:
-    """Return a dict card (title, summary, takeaways, tags, type, relevance)."""
+def summarize_with_usage(item: RawItem) -> tuple[dict, TokenUsage]:
+    """Same Converse call as `summarize`, returning the card dict AND the
+    call's token usage.
+
+    Missing/malformed `usage` degrades to `TokenUsage(0, 0)` — a cost figure
+    is never worth failing a run over. Raises `RuntimeError` when the model
+    returns no `toolUse` block (unchanged behavior).
+    """
     user_text = (
         f"Source: {item.source}\n"
         f"Original title: {item.title}\n"
@@ -93,7 +116,29 @@ def summarize(item: RawItem) -> dict:
         inferenceConfig={"maxTokens": 700, "temperature": 0.2},
     )
 
+    usage_block = resp.get("usage", {}) or {}
+    try:
+        input_tokens = int(usage_block.get("inputTokens", 0))
+        output_tokens = int(usage_block.get("outputTokens", 0))
+    except (TypeError, ValueError, AttributeError):
+        # TypeError/ValueError: inputTokens/outputTokens present but not
+        # int-coercible. AttributeError: `usage` itself is some non-mapping
+        # truthy value (e.g. a list) that has no `.get` at all - `or {}`
+        # above only catches the falsy case. Any shape of bad `usage` data
+        # degrades to zero usage (see docstring), never fails the item.
+        input_tokens = 0
+        output_tokens = 0
+    usage = TokenUsage(input_tokens=input_tokens, output_tokens=output_tokens)
+
     for block in resp["output"]["message"]["content"]:
         if "toolUse" in block:
-            return block["toolUse"]["input"]
+            return block["toolUse"]["input"], usage
     raise RuntimeError("Model did not return a card (no toolUse block).")
+
+
+def summarize(item: RawItem) -> dict:
+    """UNCHANGED public signature and return value (Phase 0 + Plane B
+    callers depend on it). Now a one-line wrapper:
+    `return summarize_with_usage(item)[0]`.
+    """
+    return summarize_with_usage(item)[0]

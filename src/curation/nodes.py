@@ -2,17 +2,34 @@
 `CardStore` dependencies.
 
 Portability constraint: no `boto3` import here — the only Bedrock touchpoint
-is the existing `spike.bedrock.summarize` helper, imported as-is.
+is the existing `spike.bedrock.summarize_with_usage` helper, imported as-is.
 """
 from __future__ import annotations
 
+import json
+import logging
+from collections import Counter
 from typing import Protocol
 
-from spike.bedrock import summarize
+from spike.bedrock import summarize_with_usage
 from spike.cards import Card
 
 from .interfaces import CardStore, Discoverer
 from .state import CurationState
+
+logger = logging.getLogger(__name__)     # "curation.nodes" — handlers are the
+                                         # composition root's job (runtime_app
+                                         # attaches the SDK's; run_curation.py
+                                         # uses basicConfig)
+
+
+def _log(event: str, state: CurationState, **fields) -> None:
+    """One structured JSON record: `{"event": ..., "run_id": ..., **fields}`.
+    `run_id` comes from the state (empty string when the caller did not set
+    one). Node-level only — never per item."""
+    logger.info(
+        json.dumps({"event": event, "run_id": state.get("run_id", ""), **fields})
+    )
 
 
 class NodeFn(Protocol):
@@ -30,7 +47,18 @@ class NodeFn(Protocol):
 def discover_node(discoverer: Discoverer) -> NodeFn:
     def _discover(state: CurationState) -> CurationState:
         raw = discoverer.discover()
-        return {"raw": raw, "discovered": len(raw)}
+        discovered_by_source: dict[str, int] = dict(Counter(item.source for item in raw))
+        _log(
+            "discover_complete",
+            state,
+            discovered=len(raw),
+            discovered_by_source=discovered_by_source,
+        )
+        return {
+            "raw": raw,
+            "discovered": len(raw),
+            "discovered_by_source": discovered_by_source,
+        }
 
     return _discover
 
@@ -50,14 +78,41 @@ def summarize_node(state: CurationState) -> CurationState:
     fresh = state.get("fresh", [])
     cards: list[Card] = []
     failed = 0
+    input_tokens = 0
+    output_tokens = 0
     for item in fresh:
         try:
-            model_out = summarize(item)
+            model_out, usage = summarize_with_usage(item)
+            input_tokens += usage.input_tokens
+            output_tokens += usage.output_tokens
             cards.append(Card.from_model(item, model_out))
         except Exception as exc:  # per-item failure: skip, count, continue
-            print(f"  ! failed to summarize {item.url}: {exc}")
+            logger.warning(
+                json.dumps(
+                    {
+                        "event": "summarize_item_failed",
+                        "run_id": state.get("run_id", ""),
+                        "url": item.url,
+                        "error": str(exc),
+                    }
+                )
+            )
             failed += 1
-    return {"cards": cards, "summarized": len(cards), "failed": failed}
+    _log(
+        "summarize_complete",
+        state,
+        summarized=len(cards),
+        failed=failed,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+    )
+    return {
+        "cards": cards,
+        "summarized": len(cards),
+        "failed": failed,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+    }
 
 
 def rank_node(state: CurationState) -> CurationState:
@@ -70,6 +125,7 @@ def persist_node(store: CardStore) -> NodeFn:
     def _persist(state: CurationState) -> CurationState:
         cards = state.get("cards", [])
         store.upsert(cards)
-        return {}
+        _log("persist_complete", state, persisted=len(cards))
+        return {"persisted": len(cards)}
 
     return _persist
