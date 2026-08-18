@@ -32,6 +32,18 @@ as its own test, and the daily schedule has never run **unattended** (it stays
 [`specs/run-observability/audit.md`](specs/run-observability/audit.md)'s
 Phase 1 close-out table for the full per-box evidence.
 
+### Cross-cutting specs (post-Phase-1)
+
+| Spec | Status | What it added |
+|---|---|---|
+| [`pydantic-settings-config`](specs/pydantic-settings-config/) | ✅ Shipped | Both config modules (`src/shared/config.py`, `src/curation/config.py`) now load through `pydantic-settings` instead of hand-rolled `os.getenv`/`_csv()` parsing. Zero env-var renames, zero default changes, zero consumer-file edits — a loading-mechanism swap only. `uv run pytest tests/` is green (261 tests, incl. 116 new in `tests/test_config.py`, the first-ever coverage of either config module). Local-only; no redeploy, no infra change, $0 AWS spend. |
+
+> Also see [`specs/rename-spike-to-shared/`](specs/rename-spike-to-shared/)
+> (`src/spike` → `src/shared`, `SPIKE_*` → `AI_RADAR_*`), the other
+> zero-behavior-change cross-cutting spec shipped after Phase 1. The deployed
+> agent image still predates **both** of these — see "Re-target without a
+> rebuild" and "Teardown" below for what that means in practice.
+
 ### Run it
 
 ```bash
@@ -549,7 +561,7 @@ was never actually exercised live; it's covered by an offline test only.
 ### Tests
 
 ```bash
-uv run pytest tests/ -v   # 145 tests, all offline (Bedrock/Tavily stubbed, DynamoDB via moto, CDK via synth-only assertions, AgentCore handler mocked)
+uv run pytest tests/ -v   # 261 tests, all offline (Bedrock/Tavily stubbed, DynamoDB via moto, CDK via synth-only assertions, AgentCore handler mocked)
 ```
 
 Live API/AWS calls (Bedrock, Tavily, real DynamoDB, the real `cdk deploy` +
@@ -618,3 +630,10 @@ lacks the answer. The stable system prompt uses a Bedrock prompt-cache point.
 ### Config knobs (`.env` or env vars)
 
 `AWS_REGION`, `HAIKU_MODEL_ID`, `AI_RADAR_MAX_ITEMS`, `AI_RADAR_PER_FEED` — see `.env.example`.
+
+Both config modules (`src/shared/config.py`, `src/curation/config.py`) load via
+`pydantic-settings` (see `pydantic-settings-config` above), so every override
+is validated at startup, not silently accepted: an unparseable value (e.g.
+`HAIKU_INPUT_USD_PER_1M=abc`) raises a `pydantic.ValidationError` at import,
+naming the exact env var, instead of a bare `ValueError` or a wrong value that
+only shows up later.

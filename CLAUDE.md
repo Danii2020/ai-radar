@@ -42,6 +42,16 @@ its own test) — see the spec table and runbook in [`README.md`](README.md)
 for current status, exact commands, and how to redeploy/tear down — that
 table is the source of truth, not this file.
 
+Two cross-cutting specs have since shipped on top of Phase 1, both zero-behavior-change
+(local only, no redeploy): `rename-spike-to-shared` (`src/spike` → `src/shared`,
+`SPIKE_*` → `AI_RADAR_*` env keys) and `pydantic-settings-config` (both config
+modules — `shared/config.py` and `curation/config.py` — now load through
+`pydantic-settings`, so a bad env-var override fails fast at import with a typed
+error naming the variable, instead of a bare `ValueError` or a silently-wrong
+value). The deployed agent image still predates both — see the "Cross-cutting
+specs (post-Phase-1)" table and the "Current live AWS state" note in
+[`README.md`](README.md) for what actually needs a rebuild.
+
 ## Package management: uv (not pip)
 
 This project uses [**uv**](https://docs.astral.sh/uv/). Do **not** use `pip`, `venv`,
@@ -136,6 +146,4 @@ docs/                   # design + research + architecture principles
 ## Deferred (later phases)
 
 Real vector store for RAG (DynamoDB reserves an `embedding` attribute for it) ·
-AgentCore Memory (STM/LTM) · Next.js feed · migrating config loading to
-`pydantic-settings` (currently only a transitive dependency; see
-`specs/run-observability/tasks.md` FU2).
+AgentCore Memory (STM/LTM) · Next.js feed.

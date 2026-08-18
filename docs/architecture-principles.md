@@ -30,6 +30,15 @@ later if it's ever warranted.
    the API contract (`packages/contracts` in a future monorepo:
    `apps/curation`, `apps/api`, `apps/web`). Schema changes to `Card` are
    breaking changes — treat them like API changes.
+
+   > **2026-08-18 amendment** (`specs/pydantic-settings-config/`): this
+   > deferral is about the **`Card` domain contract** — a published,
+   > versioned schema between two bounded contexts. It still stands; `Card`
+   > remains a plain dataclass until the frontend/API trigger above fires.
+   > Adopting `pydantic-settings` for **environment-variable loading at the
+   > process edge** (`shared/config.py`, `curation/config.py`) is a
+   > different concern — an infrastructure adapter, not a domain type — so
+   > it does not trigger, weaken, or pre-empt this decision.
 3. **Ubiquitous language.** Code speaks the design doc's vocabulary —
    `discover`, `dedup`, `summarize`, `Card`, `relevance`, plane A/B. Don't
    invent synonyms.
