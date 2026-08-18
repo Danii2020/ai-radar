@@ -39,7 +39,7 @@ from curation.local import RssDiscoverer
 from curation.metrics import emit_run_metrics
 from curation.summary import RunSummary, build_run_summary
 from curation.tavily import TavilyDiscoverer
-from spike import config
+from shared import config
 
 app = BedrockAgentCoreApp()
 

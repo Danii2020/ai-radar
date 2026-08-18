@@ -23,7 +23,7 @@ from pathlib import Path
 
 from boto3.dynamodb.conditions import Key
 
-from spike.cards import Card
+from shared.cards import Card
 
 from curation.dynamo import DynamoCardStore
 from curation.graph import build_graph

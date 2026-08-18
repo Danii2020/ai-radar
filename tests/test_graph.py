@@ -29,7 +29,7 @@ import logging
 
 from langgraph.graph import END, START
 
-from spike.cards import Card
+from shared.cards import Card
 
 import curation.nodes as nodes_module
 from curation.graph import build_graph
@@ -140,7 +140,7 @@ def test_dedup_runs_before_cap_never_summarizes_seen_items(
     fresh_item_1 = make_raw_item(url="https://example.com/fresh1", title="Fresh1")
     fresh_item_2 = make_raw_item(url="https://example.com/fresh2", title="Fresh2")
 
-    from spike.bedrock import TokenUsage
+    from shared.bedrock import TokenUsage
 
     calls: list[str] = []
 
@@ -196,8 +196,9 @@ def test_rerun_with_populated_seen_store_yields_no_new_cards(
 
 
 # T2 (Guarantee 2): the compiled graph with JsonFileCardStore + RssDiscoverer
-# defaults reproduces spike.pipeline.run()'s pure logic (dedup -> cap ->
-# Card.from_model -> sort by relevance desc) for the same stubbed inputs.
+# defaults reproduces the Phase 0 `pipeline.run()` logic (retired; see git
+# history) — dedup -> cap -> Card.from_model -> sort by relevance desc — for
+# the same stubbed inputs.
 def test_graph_matches_spike_pipeline_logic_for_same_inputs(
     tmp_path, monkeypatch, make_raw_item, summarize_stub_factory
 ):
@@ -225,7 +226,8 @@ def test_graph_matches_spike_pipeline_logic_for_same_inputs(
     compiled = build_graph(store, RssDiscoverer())
     result = compiled.invoke({"max_items": 3})
 
-    # Replicate spike.pipeline.run()'s pure logic inline (no network/console):
+    # Replicate the Phase 0 `pipeline.run()` logic inline (retired; see git
+    # history) with no network/console:
     # fresh = dedup (nothing seen yet); batch = fresh[:max_items];
     # cards = [Card.from_model(item, summarize(item)) for item in batch];
     # cards.sort(key=relevance, reverse=True).
@@ -297,7 +299,7 @@ def test_discover_node_groups_raw_items_by_source_into_discovered_by_source(
 def test_summarize_node_accumulates_tokens_and_bills_tokens_for_items_that_fail_after_the_call(
     monkeypatch, make_raw_item
 ):
-    from spike.bedrock import TokenUsage
+    from shared.bedrock import TokenUsage
 
     good = make_raw_item(url="https://example.com/good", title="Good")
     bad = make_raw_item(url="https://example.com/bad", title="Bad")

@@ -1,13 +1,14 @@
 [project]
 name = "ai-radar"
 version = "0.0.0"
-description = "AI Radar — AI-news curation feed + RAG chatbot (Phase 0 spike)"
+description = "AI Radar — AI-news curation feed + RAG chatbot"
 requires-python = ">=3.11"
 dependencies = [
     "bedrock-agentcore>=1.18.1",
     "boto3>=1.35",
     "feedparser>=6.0",
     "langgraph>=1.2.9",
+    "pydantic-settings>=2.14.2",
     "python-dotenv>=1.0",
     "rich>=13.7",
     "tavily-python>=0.7.26",

@@ -2,7 +2,7 @@
 `CardStore` dependencies.
 
 Portability constraint: no `boto3` import here — the only Bedrock touchpoint
-is the existing `spike.bedrock.summarize_with_usage` helper, imported as-is.
+is the existing `shared.bedrock.summarize_with_usage` helper, imported as-is.
 """
 from __future__ import annotations
 
@@ -11,8 +11,8 @@ import logging
 from collections import Counter
 from typing import Protocol
 
-from spike.bedrock import summarize_with_usage
-from spike.cards import Card
+from shared.bedrock import summarize_with_usage
+from shared.cards import Card
 
 from .interfaces import CardStore, Discoverer
 from .state import CurationState

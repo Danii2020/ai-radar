@@ -3,7 +3,7 @@ venv/
 __pycache__/
 *.pyc
 .env
-.spike_cache/
+.ai_radar_cache/
 *.egg-info/
 
 # CDK (infra/)

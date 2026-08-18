@@ -2,7 +2,7 @@
 
 Implements the Spec 01 `CardStore` Protocol (`dedup_filter` + `upsert`). This
 is the only place in `src/curation/` that imports `boto3` — an infra adapter
-at the seam, mirroring `spike.bedrock.bedrock_client()`'s lazy-singleton
+at the seam, mirroring `shared.bedrock.bedrock_client()`'s lazy-singleton
 pattern — so the compiled LangGraph graph stays portable onto AgentCore
 Runtime unchanged (nodes/graph/state/interfaces never see boto3).
 """
@@ -13,9 +13,9 @@ from datetime import datetime, timezone
 
 import boto3
 
-from spike import config as spike_config
-from spike.cards import Card
-from spike.feeds import RawItem
+from shared import config as shared_config
+from shared.cards import Card
+from shared.feeds import RawItem
 
 from . import config
 
@@ -28,7 +28,7 @@ _resource = None  # lazy singleton boto3 DynamoDB ServiceResource
 def _dynamo_resource():
     global _resource
     if _resource is None:
-        _resource = boto3.resource("dynamodb", region_name=spike_config.AWS_REGION)
+        _resource = boto3.resource("dynamodb", region_name=shared_config.AWS_REGION)
     return _resource
 
 

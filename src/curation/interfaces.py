@@ -6,8 +6,8 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from spike.cards import Card
-from spike.feeds import RawItem
+from shared.cards import Card
+from shared.feeds import RawItem
 
 
 @runtime_checkable

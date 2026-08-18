@@ -282,7 +282,7 @@ implements; do not invent surface that contract.md does not pin.
 Tracked here so they are not lost, and explicitly **not actioned** by this
 spec's executor.
 
-- [ ] **FU1 — Rename/retire the `src/spike/` package (housekeeping, future
+- [x] **FU1 — Rename/retire the `src/spike/` package (housekeeping, future
       spec).** The directory name is a Phase-0 holdover and now actively
       misleads: despite the name, almost everything in it is **live production
       code**, not a spike.
