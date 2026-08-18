@@ -1,18 +1,18 @@
-"""Tests for the Bedrock usage seam — `src/spike/bedrock.py`'s new
+"""Tests for the Bedrock usage seam — `src/shared/bedrock.py`'s new
 `TokenUsage` + `summarize_with_usage`, and `summarize()`'s back-compat wrapper.
 
 Spec: specs/run-observability/contract.md §1 ("Bedrock seam —
-src/spike/bedrock.py"); Behavior Guarantee 6 (missing/malformed `usage`
+src/shared/bedrock.py"); Behavior Guarantee 6 (missing/malformed `usage`
 degrades to `TokenUsage(0, 0)`, never raises); Error Handling Contract row 1;
 specs/run-observability/audit.md Test Coverage T1-T3.
 
 `bedrock_client()` is monkeypatched at the module seam
-(`spike.bedrock.bedrock_client`) with an in-memory fake `.converse(...)` — no
+(`shared.bedrock.bedrock_client`) with an in-memory fake `.converse(...)` — no
 real boto3/Bedrock call is ever made.
 
 RED phase: `TokenUsage` and `summarize_with_usage` do not exist yet in
-`src/spike/bedrock.py`. Every test in this file is expected to fail with
-`ImportError: cannot import name 'TokenUsage' from 'spike.bedrock'` (or an
+`src/shared/bedrock.py`. Every test in this file is expected to fail with
+`ImportError: cannot import name 'TokenUsage' from 'shared.bedrock'` (or an
 `AttributeError` once that import is fixed but the function is still
 missing), until specs/run-observability Phase 2 lands.
 """
@@ -20,13 +20,13 @@ from __future__ import annotations
 
 import pytest
 
-import spike.bedrock as bedrock_module
-from spike.bedrock import TokenUsage
+import shared.bedrock as bedrock_module
+from shared.bedrock import TokenUsage
 
 
 class _FakeBedrockClient:
     """Stub for the `bedrock-runtime` client's `.converse(...)` — installed
-    via monkeypatching `spike.bedrock.bedrock_client`, never hits the network.
+    via monkeypatching `shared.bedrock.bedrock_client`, never hits the network.
     """
 
     def __init__(self, response: dict) -> None:

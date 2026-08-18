@@ -8,7 +8,7 @@
 !.env.example
 
 .venv/
-.spike_cache/
+.ai_radar_cache/
 .git/
 .gitignore
 cdk.out/

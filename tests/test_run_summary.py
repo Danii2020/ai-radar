@@ -84,8 +84,8 @@ def test_estimate_bedrock_cost_usd_matches_design_prices_and_zero_case():
 
 
 def test_estimate_bedrock_cost_usd_reads_prices_from_spike_config_at_call_time(monkeypatch):
-    monkeypatch.setattr(summary_module.spike_config, "HAIKU_INPUT_USD_PER_1M", 2.0)
-    monkeypatch.setattr(summary_module.spike_config, "HAIKU_OUTPUT_USD_PER_1M", 10.0)
+    monkeypatch.setattr(summary_module.shared_config, "HAIKU_INPUT_USD_PER_1M", 2.0)
+    monkeypatch.setattr(summary_module.shared_config, "HAIKU_OUTPUT_USD_PER_1M", 10.0)
 
     assert estimate_bedrock_cost_usd(1_000_000, 1_000_000) == pytest.approx(12.0)
 

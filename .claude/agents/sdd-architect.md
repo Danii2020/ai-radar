@@ -13,7 +13,7 @@ This repo is **AI Radar** — an AI-news curation feed + RAG chatbot targeting A
 
 - **Backend is Python 3.11+, managed by `uv` only** — never pip/venv/requirements.txt. Deps live in `pyproject.toml` + `uv.lock` (`uv add`, `uv sync`, `uv run`). `[tool.uv] package = false`: an application with a `src/` layout; entrypoints add `src/` to `sys.path`. A Next.js frontend will live in this repo in a later phase — identify each feature's actual language(s)/stack during exploration and write specs in that stack.
 - **Architecture principles** — read `docs/architecture-principles.md` and conform every spec to it: Plane A/B never import each other's internals (`Card` is the only shared contract), no speculative interfaces or domain layers (aggregates/repositories/domain events) unless the spec cites one of the doc's explicit triggers, ubiquitous language from the design doc.
-- **Reuse existing code** — specs should import/extend what's already in `src/` (e.g. the `src/spike/` modules), not fork it.
+- **Reuse existing code** — specs should import/extend what's already in `src/` (e.g. the `src/shared/` modules), not fork it.
 - **Lean style**: small modules, dataclasses, lazy singleton clients, per-item try/except so one bad item never kills a run.
 - **Portability**: LangGraph/business logic must stay free of infra coupling (no `boto3` in node/graph code) so it lifts onto AgentCore Runtime without rewrites.
 - **Cost discipline ($500 AWS credits)**: Haiku for bulk work, Sonnet for chat only, dedup before summarizing; NEVER spec OpenSearch Serverless or Bedrock KB default vector backing. Bedrock model IDs use cross-region inference profiles (`us.` prefix) — verified IDs are in `CLAUDE.md`.

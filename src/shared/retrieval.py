@@ -1,6 +1,6 @@
 """RAG retrieval — embed cards with Titan v2 and rank by cosine similarity.
 
-In-memory and file-cached: fine for the spike's small corpus. In later phases
+In-memory and file-cached: fine for the current small corpus. In later phases
 this becomes a real vector store (pgvector / Pinecone / DynamoDB brute-force).
 """
 from __future__ import annotations

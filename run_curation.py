@@ -28,8 +28,8 @@ from curation.interfaces import CardStore, Discoverer  # noqa: E402
 from curation.local import JsonFileCardStore, RssDiscoverer  # noqa: E402
 from curation.summary import build_run_summary  # noqa: E402
 from curation.tavily import TavilyDiscoverer  # noqa: E402
-from spike import config  # noqa: E402
-from spike.cards import render  # noqa: E402
+from shared import config  # noqa: E402
+from shared.cards import render  # noqa: E402
 
 
 def _build_store(force: bool) -> CardStore:

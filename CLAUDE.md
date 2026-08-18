@@ -19,10 +19,10 @@ default vector backing (~$700/mo); it would burn the budget in under a month.
 
 **Phase 0 spike** (local, no infra) proves both planes end-to-end against **real Bedrock**:
 
-- `uv run run_spike.py` — Plane A loop: RSS discover → dedup → Haiku summarize/tag → ranked console cards.
+- `uv run run_curation.py` — Plane A loop: RSS discover → dedup → Haiku summarize/tag → ranked console cards.
 - `uv run run_chat.py` — Plane B: Titan embeddings + in-memory cosine RAG → Sonnet grounded chat with citations.
 
-Both write to `.spike_cache/` (gitignored): `cards.json`, `seen.json`, `embeddings.json`.
+Both write to `.ai_radar_cache/` (gitignored): `cards.json`, `seen.json`, `embeddings.json`.
 
 **Phase 1 (curation MVP) is complete** — all 6 planned specs shipped:
 `curation-graph`, `tavily-discovery`, `dynamodb-card-store`,
@@ -60,17 +60,15 @@ uv run python -c "..."     # ad-hoc python in the env
 ## Layout
 
 ```
-run_spike.py            # Plane A entrypoint
 run_chat.py             # Plane B entrypoint (RAG REPL)
 pyproject.toml          # deps (uv); uv.lock is the source of truth
-src/spike/
+src/shared/
   config.py             # region, model IDs, feeds, tuning, cache paths (env-overridable)
   feeds.py              # RSS/Atom discovery → RawItem
   bedrock.py            # shared bedrock-runtime client + Haiku summarize (forced tool call)
   retrieval.py          # Titan embeddings + CardIndex (cosine search, disk-cached)
   chat.py               # RagChat: retrieve + Sonnet grounded answer + multi-turn history
   cards.py              # Card model + rich console rendering
-  pipeline.py           # Plane A orchestration
 docs/                   # design + research + architecture principles
 ```
 
@@ -138,8 +136,6 @@ docs/                   # design + research + architecture principles
 ## Deferred (later phases)
 
 Real vector store for RAG (DynamoDB reserves an `embedding` attribute for it) ·
-AgentCore Memory (STM/LTM) · Next.js feed · renaming/retiring `src/spike/`
-(despite the name, it's live production code for **both** planes, not a
-throwaway spike — see `specs/run-observability/tasks.md` FU1) · migrating
-config loading to `pydantic-settings` (currently only a transitive dependency;
-see FU2 in the same file).
+AgentCore Memory (STM/LTM) · Next.js feed · migrating config loading to
+`pydantic-settings` (currently only a transitive dependency; see
+`specs/run-observability/tasks.md` FU2).

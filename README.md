@@ -48,7 +48,7 @@ env-overridable — see `.env.example` and `src/curation/config.py`.
 The Tavily key is **local-only** for now (`.env` / env var); Secrets Manager
 resolution is deferred to `runtime-packaging`, once real cloud infra exists.
 
-Output still lands in `.spike_cache/cards.json` / `seen.json` by default (unchanged
+Output still lands in `.ai_radar_cache/cards.json` / `seen.json` by default (unchanged
 from Phase 0 — the `JsonFileCardStore` default reproduces that behavior exactly).
 
 #### Persistence backend
@@ -189,7 +189,7 @@ carried the counts directly): first invoke returned
 `{"discovered": 50, "summarized": 8, "persisted": 8, "tavily_enabled": true}`
 and the table went 0 → 8. Re-invoking is **not** a no-op: `deduped` dropped
 50 → 42 (the 8 already-stored cards were correctly excluded — dedup works),
-but the table still grew to 16, because `SPIKE_MAX_ITEMS=8` caps how many
+but the table still grew to 16, because `AI_RADAR_MAX_ITEMS=8` caps how many
 *new* items get summarized per run — a re-invoke picks up the next batch of
 previously-undiscovered items rather than repeating the first one. That's the
 intended incremental-curation shape (each scheduled run adds a bounded
@@ -211,10 +211,19 @@ genuine back-to-back double-invoke against the deployed agent (to observe
 test suite so far.
 
 **Re-target without a rebuild**: the same image reads `CARD_TABLE_NAME`,
-`AWS_REGION`, `SPIKE_MAX_ITEMS`, `SPIKE_PER_FEED`, `CURATION_TAVILY_*`, and
-`TAVILY_SECRET_NAME` from env — set them via `agentcore configure --env
+`AWS_REGION`, `AI_RADAR_MAX_ITEMS`, `AI_RADAR_PER_FEED`, `CURATION_TAVILY_*`,
+and `TAVILY_SECRET_NAME` from env — set them via `agentcore configure --env
 KEY=VALUE` (or a redeploy of just the config) to point at a dev table with no
 image rebuild.
+
+> **Live image lags this rename (`rename-spike-to-shared`):** the deployed
+> agent image still runs the pre-rename code, so it reads the pre-rename env
+> key names, not the `AI_RADAR_*` ones above, until `agentcore deploy` is
+> re-run — see `specs/rename-spike-to-shared/audit.md` for the exact old→new
+> key mapping. Neither key is currently set on the runtime (it runs on code
+> defaults), so this has no live effect today — but any `agentcore configure
+> --env` re-targeting done before the redeploy must use the *old* names, not
+> the ones documented above.
 
 **Teardown**
 
@@ -388,7 +397,7 @@ uv run --group infra cdk deploy --app "python infra/app.py" AiRadarSchedule
 
 **Going live for real** — enables the actual daily 06:00 UTC cadence, which
 starts real recurring cost (one AgentCore Runtime curation run per day, Haiku-
-only, capped by `SPIKE_MAX_ITEMS`):
+only, capped by `AI_RADAR_MAX_ITEMS`):
 
 ```bash
 uv run --group infra cdk deploy --app "python infra/app.py" AiRadarSchedule \
@@ -563,8 +572,8 @@ Uses [uv](https://docs.astral.sh/uv/) as the package manager.
 
 ```bash
 uv sync                       # create .venv + install from the lockfile
-uv run run_spike.py           # curation loop (skips already-seen items)
-uv run run_spike.py --force   # re-summarize everything
+uv run run_curation.py           # curation loop (skips already-seen items)
+uv run run_curation.py --force   # re-summarize everything
 uv run run_chat.py            # ask questions about the curated cards (RAG)
 ```
 
@@ -576,12 +585,12 @@ chat model, and Titan Embeddings v2 in your region.
 
 | Step | Where | Notes |
 |---|---|---|
-| Discover | `src/spike/feeds.py` | Pulls recent entries from curated AI/ML RSS feeds (no API key). |
-| Dedup | `src/spike/pipeline.py` | URL-hash cache in `.spike_cache/seen.json` → idempotent re-runs. |
-| Summarize + tag | `src/spike/bedrock.py` | Bedrock Converse with a **forced tool call** → guaranteed structured cards. |
-| Rank + render | `src/spike/cards.py` | Sort by model relevance score; pretty console panels. |
+| Discover | `src/shared/feeds.py` | Pulls recent entries from curated AI/ML RSS feeds (no API key). |
+| Dedup | `src/curation/local.py` (`JsonFileCardStore`) | URL-hash cache in `.ai_radar_cache/seen.json` → idempotent re-runs; reproduces the retired Phase 0 `pipeline.py`'s behavior exactly (see git history). |
+| Summarize + tag | `src/shared/bedrock.py` | Bedrock Converse with a **forced tool call** → guaranteed structured cards. |
+| Rank + render | `src/shared/cards.py` | Sort by model relevance score; pretty console panels. |
 
-Output is also written to `.spike_cache/cards.json` for inspection.
+Output is also written to `.ai_radar_cache/cards.json` for inspection.
 
 ### Mini RAG chat (Plane B preview)
 
@@ -589,9 +598,9 @@ Output is also written to `.spike_cache/cards.json` for inspection.
 
 | Step | Where | Notes |
 |---|---|---|
-| Embed cards | `src/spike/retrieval.py` | Titan v2 embeddings, cached in `.spike_cache/embeddings.json`. |
-| Retrieve | `src/spike/retrieval.py` | In-memory cosine top-k (normalized → dot product). |
-| Answer | `src/spike/chat.py` | Sonnet, grounded in retrieved cards, inline `[n]` citations, multi-turn memory. |
+| Embed cards | `src/shared/retrieval.py` | Titan v2 embeddings, cached in `.ai_radar_cache/embeddings.json`. |
+| Retrieve | `src/shared/retrieval.py` | In-memory cosine top-k (normalized → dot product). |
+| Answer | `src/shared/chat.py` | Sonnet, grounded in retrieved cards, inline `[n]` citations, multi-turn memory. |
 
 It answers only from retrieved cards (no hallucination) and says so when the corpus
 lacks the answer. The stable system prompt uses a Bedrock prompt-cache point.
@@ -608,4 +617,4 @@ lacks the answer. The stable system prompt uses a Bedrock prompt-cache point.
 
 ### Config knobs (`.env` or env vars)
 
-`AWS_REGION`, `HAIKU_MODEL_ID`, `SPIKE_MAX_ITEMS`, `SPIKE_PER_FEED` — see `.env.example`.
+`AWS_REGION`, `HAIKU_MODEL_ID`, `AI_RADAR_MAX_ITEMS`, `AI_RADAR_PER_FEED` — see `.env.example`.

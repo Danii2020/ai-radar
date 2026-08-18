@@ -59,7 +59,7 @@ def install_fake_tavily_client(monkeypatch, responses: dict) -> list:
 
 # T1 (Guarantee 1, Error Handling row "missing published_date"): a Tavily
 # result dict maps to a RawItem — snippet from `content`, title/snippet HTML
-# is cleaned (spike.feeds._clean), and `published` degrades to "" when
+# is cleaned (shared.feeds._clean), and `published` degrades to "" when
 # `published_date` is absent (default topic="general").
 def test_discover_maps_tavily_result_fields_to_raw_item(monkeypatch):
     responses = {

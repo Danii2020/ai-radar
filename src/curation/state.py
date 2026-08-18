@@ -3,12 +3,12 @@ from __future__ import annotations
 
 from typing import TypedDict
 
-from spike.cards import Card
-from spike.feeds import RawItem
+from shared.cards import Card
+from shared.feeds import RawItem
 
 
 class CurationState(TypedDict, total=False):
-    # config knobs (set at invoke time; defaults from spike.config)
+    # config knobs (set at invoke time; defaults from shared.config)
     max_items: int          # cap on items summarized this run (config.MAX_ITEMS)
     run_id: str              # NEW: correlation id, echoed into every node log
 

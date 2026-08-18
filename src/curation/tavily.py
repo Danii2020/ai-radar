@@ -1,7 +1,7 @@
 """Tavily web-search Discoverer — the only module that imports the `tavily` SDK.
 
 Topic-seeded search with content extraction, returning `RawItem`s shaped
-exactly like `spike.feeds.discover`'s output. Infra-edge adapter: portable
+exactly like `shared.feeds.discover`'s output. Infra-edge adapter: portable
 curation logic (nodes/graph/state/composite) never imports `tavily` directly.
 """
 from __future__ import annotations
@@ -10,7 +10,7 @@ from typing import Literal, cast
 
 from tavily import TavilyClient
 
-from spike.feeds import RawItem, _clean
+from shared.feeds import RawItem, _clean
 
 from . import config
 

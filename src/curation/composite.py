@@ -5,7 +5,7 @@ Source-agnostic: knows nothing about Tavily or RSS specifically, only the
 """
 from __future__ import annotations
 
-from spike.feeds import RawItem
+from shared.feeds import RawItem
 
 from .interfaces import Discoverer
 

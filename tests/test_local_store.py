@@ -12,7 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 
-from spike.cards import Card
+from shared.cards import Card
 
 from curation.local import JsonFileCardStore, RssDiscoverer
 
@@ -100,7 +100,7 @@ def test_upsert_accumulates_seen_across_multiple_calls(
 
 
 # T9 — upsert writes seen.json (sorted) + cards.json (full batch, indent=2),
-# creating parent dirs, matching spike.pipeline._save's shape exactly.
+# creating parent dirs, matching the Phase 0 `_save`'s shape exactly.
 def test_upsert_writes_seen_sorted_and_cards_batch_matching_spike_save_shape(
     tmp_path, make_raw_item, make_model_out
 ):
@@ -122,7 +122,7 @@ def test_upsert_writes_seen_sorted_and_cards_batch_matching_spike_save_shape(
 
 
 # T9 — cards.json reflects only the batch passed to THIS upsert call (not an
-# accumulation like seen.json), matching the spike's "save the run's ranked cards".
+# accumulation like seen.json), matching Phase 0's "save the run's ranked cards".
 def test_upsert_cards_json_reflects_latest_batch_only(
     tmp_path, make_raw_item, make_model_out
 ):
@@ -141,7 +141,7 @@ def test_upsert_cards_json_reflects_latest_batch_only(
     assert cards_on_disk == [card2.to_dict()]
 
 
-# T10 — RssDiscoverer.discover delegates to spike.feeds.discover with the
+# T10 — RssDiscoverer.discover delegates to shared.feeds.discover with the
 # configured feeds/per_feed (monkeypatched — asserts the call shape, no network).
 def test_rss_discoverer_delegates_to_feeds_discover_with_configured_args(
     monkeypatch, make_raw_item
@@ -167,10 +167,10 @@ def test_rss_discoverer_delegates_to_feeds_discover_with_configured_args(
 
 
 # T10 — with no explicit feeds/per_feed, RssDiscoverer falls back to
-# spike.config.FEEDS / spike.config.PER_FEED (contract's stated default).
+# shared.config.FEEDS / shared.config.PER_FEED (contract's stated default).
 def test_rss_discoverer_defaults_to_config_feeds_and_per_feed(monkeypatch):
     import curation.local as local_module
-    from spike import config
+    from shared import config
 
     captured = {}
 

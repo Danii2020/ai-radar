@@ -1,9 +1,13 @@
-"""Spike configuration — env-overridable, sensible local defaults.
+"""Shared cross-plane configuration — env-overridable, sensible local defaults.
 
-Despite the name, this module also holds shared cross-plane AWS/Bedrock
-config consumed by `curation.*` and `runtime_app.py` (`AWS_REGION`, the model
-IDs, `MAX_ITEMS`) — not just the Phase 0 spike (see
-specs/run-observability/tasks.md FU1 for the tracked rename follow-up).
+Consumed by both planes: `curation.*` / `runtime_app.py` / `run_curation.py`
+(Plane A) and `chat` / `retrieval` / `run_chat.py` (Plane B). Holds the AWS
+region, the Bedrock model IDs and the unit prices that go with them, the
+per-run work caps, and the local cache paths.
+
+Plane-A-only knobs live in `curation/config.py` (`CURATION_*`, `CARD_*`).
+Env keys here are prefixed `AI_RADAR_*` — the app name, never a package name,
+so a future package move cannot invalidate them again.
 """
 from __future__ import annotations
 
@@ -42,11 +46,11 @@ EMBED_MODEL_ID = os.getenv("EMBED_MODEL_ID", "amazon.titan-embed-text-v2:0")
 EMBED_DIM = int(os.getenv("EMBED_DIM", "256"))
 
 # How many cards to retrieve as grounding context per chat turn.
-TOP_K = int(os.getenv("SPIKE_TOP_K", "4"))
+TOP_K = int(os.getenv("AI_RADAR_TOP_K", "4"))
 
-# How much work to do per run (keeps the spike cheap and fast).
-MAX_ITEMS = int(os.getenv("SPIKE_MAX_ITEMS", "8"))
-PER_FEED = int(os.getenv("SPIKE_PER_FEED", "5"))
+# How much work to do per run (keeps each run cheap and fast).
+MAX_ITEMS = int(os.getenv("AI_RADAR_MAX_ITEMS", "8"))
+PER_FEED = int(os.getenv("AI_RADAR_PER_FEED", "5"))
 
 # Curated, zero-key AI/ML feeds for discovery. Mix of papers, labs, and practitioners.
 FEEDS: dict[str, str] = {
@@ -59,7 +63,7 @@ FEEDS: dict[str, str] = {
 }
 
 # Local dedup store so re-runs skip items already curated (idempotency, like the real pipeline).
-CACHE_DIR = Path(os.getenv("SPIKE_CACHE_DIR", ".spike_cache"))
+CACHE_DIR = Path(os.getenv("AI_RADAR_CACHE_DIR", ".ai_radar_cache"))
 SEEN_PATH = CACHE_DIR / "seen.json"
 CARDS_PATH = CACHE_DIR / "cards.json"
 EMBED_PATH = CACHE_DIR / "embeddings.json"

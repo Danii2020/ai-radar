@@ -1,7 +1,7 @@
 [project]
 name = "ai-radar"
 version = "0.0.0"
-description = "AI Radar — AI-news curation feed + RAG chatbot (Phase 0 spike)"
+description = "AI Radar — AI-news curation feed + RAG chatbot"
 requires-python = ">=3.11"
 dependencies = [
     "bedrock-agentcore>=1.18.1",

@@ -5,7 +5,7 @@ from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from spike import config as spike_config   # Bedrock unit prices (see contract §4)
+from shared import config as shared_config   # Bedrock unit prices (see contract §4)
 
 from . import config                       # Tavily prices, namespace, toggles
 
@@ -65,14 +65,14 @@ def split_by_origin(discovered_by_source: Mapping[str, int]) -> tuple[int, int]:
 
 
 def estimate_bedrock_cost_usd(input_tokens: int, output_tokens: int) -> float:
-    """Design §7 Haiku pricing, from `spike_config.HAIKU_INPUT_USD_PER_1M` /
-    `spike_config.HAIKU_OUTPUT_USD_PER_1M` — the SAME module as
+    """Design §7 Haiku pricing, from `shared_config.HAIKU_INPUT_USD_PER_1M` /
+    `shared_config.HAIKU_OUTPUT_USD_PER_1M` — the SAME module as
     `HAIKU_MODEL_ID`, the model those prices price (see §4). Read at CALL time
     (module attribute, never `from ... import X`) so tests can monkeypatch the
     constants. Rounded to 6 decimals; `(0, 0) -> 0.0`."""
     cost = (
-        input_tokens / 1_000_000 * spike_config.HAIKU_INPUT_USD_PER_1M
-        + output_tokens / 1_000_000 * spike_config.HAIKU_OUTPUT_USD_PER_1M
+        input_tokens / 1_000_000 * shared_config.HAIKU_INPUT_USD_PER_1M
+        + output_tokens / 1_000_000 * shared_config.HAIKU_OUTPUT_USD_PER_1M
     )
     return round(cost, 6)
 

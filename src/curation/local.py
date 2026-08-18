@@ -1,7 +1,7 @@
 """Local default implementations of the `Discoverer` / `CardStore` Protocols.
 
-Reproduce Phase 0 (`src/spike/pipeline.py`) behavior exactly, just wrapped
-behind the seam Specs 02-04 will swap out.
+Reproduce the retired Phase 0 pipeline's behavior exactly (see git history),
+just wrapped behind the seam Specs 02-04 will swap out.
 """
 from __future__ import annotations
 
@@ -9,9 +9,9 @@ import hashlib
 import json
 from pathlib import Path
 
-from spike import config
-from spike.cards import Card
-from spike.feeds import RawItem, discover
+from shared import config
+from shared.cards import Card
+from shared.feeds import RawItem, discover
 
 
 def _url_hash(url: str) -> str:
@@ -21,7 +21,7 @@ def _url_hash(url: str) -> str:
 
 
 class RssDiscoverer:
-    """Default Discoverer: wraps spike.feeds.discover over config.FEEDS."""
+    """Default Discoverer: wraps shared.feeds.discover over config.FEEDS."""
 
     def __init__(
         self,
@@ -36,7 +36,7 @@ class RssDiscoverer:
 
 
 class JsonFileCardStore:
-    """Default CardStore: the spike's .spike_cache/ JSON-file behavior.
+    """Default CardStore: the Phase 0 `.ai_radar_cache/` JSON-file behavior.
 
     seen.json  -> set[str] of url_hash (idempotency)
     cards.json -> list[Card.to_dict()] (the rendered/ranked output)

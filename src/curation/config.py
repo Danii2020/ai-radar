@@ -86,8 +86,8 @@ TAVILY_CREDIT_PRICE_USD: float = float(
 TAVILY_CREDITS_BY_DEPTH: dict[str, int] = {"basic": 1, "advanced": 2}
 TAVILY_DEFAULT_CREDITS_PER_SEARCH: int = 1
 
-# NOTE: the Bedrock unit prices are NOT here — they live in spike/config.py
-# next to HAIKU_MODEL_ID, the model they price (see spike/config.py).
+# NOTE: the Bedrock unit prices are NOT here — they live in shared/config.py
+# next to HAIKU_MODEL_ID, the model they price (see shared/config.py).
 
 # CloudWatch EMF metrics. 4 metrics x $0.30/metric-month ~= $1.20/mo; set
 # CURATION_EMIT_METRICS=false to stop emitting entirely (logs still carry the

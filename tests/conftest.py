@@ -2,14 +2,14 @@
 
 Spec: specs/curation-graph/{contract.md,intent.md,audit.md}
 
-- Adds `src/` to `sys.path` (mirrors the pattern in `run_spike.py`) so both
-  `spike.*` (existing) and `curation.*` (not yet implemented — this is the
+- Adds `src/` to `sys.path` (mirrors the pattern in `run_curation.py`) so both
+  `shared.*` (existing) and `curation.*` (not yet implemented — this is the
   RED phase) are importable from `tests/`.
 - Provides small factories for `RawItem` / summarize()-shaped dicts, and a
   deterministic, network-free `summarize()` stub factory, reused by
   `tests/test_local_store.py` and `tests/test_graph.py`.
 
-No test in this suite makes a live Bedrock/AWS/network call: `spike.bedrock`'s
+No test in this suite makes a live Bedrock/AWS/network call: `shared.bedrock`'s
 summarize seam is always monkeypatched at the point tests import it
 (`curation.nodes.summarize_with_usage`, per specs/run-observability), never
 invoked for real.
@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 import pytest
 
-from spike.feeds import RawItem
+from shared.feeds import RawItem
 
 
 @pytest.fixture
@@ -83,9 +83,9 @@ def summarize_stub_factory(make_model_out):
     without a real Bedrock call.
 
     The returned callable's shape is `(item) -> tuple[dict, TokenUsage]`,
-    mirroring `spike.bedrock.summarize_with_usage`. `TokenUsage` is imported
+    mirroring `shared.bedrock.summarize_with_usage`. `TokenUsage` is imported
     lazily (inside `_build`, not at module scope) so a suite that never calls
-    this factory does not fail collection while `spike.bedrock.TokenUsage`
+    this factory does not fail collection while `shared.bedrock.TokenUsage`
     does not exist yet (RED phase).
     """
 
@@ -94,7 +94,7 @@ def summarize_stub_factory(make_model_out):
         raise_for_urls: set[str] | None = None,
         tokens_by_url: dict[str, tuple[int, int]] | None = None,
     ):
-        from spike.bedrock import TokenUsage
+        from shared.bedrock import TokenUsage
 
         relevance_by_url = relevance_by_url or {}
         raise_for_urls = raise_for_urls or set()
