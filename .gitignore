@@ -10,4 +10,7 @@ __pycache__/
 cdk.out/
 **/cdk.out/
 cdk.context.json
+.pytest_cache/
 **/cdk.context.json
+.bedrock_agentcore/
+.bedrock_agentcore.yaml

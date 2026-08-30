@@ -40,9 +40,11 @@ Phase 1 close-out table for the full per-box evidence.
 
 > Also see [`specs/rename-spike-to-shared/`](specs/rename-spike-to-shared/)
 > (`src/spike` → `src/shared`, `SPIKE_*` → `AI_RADAR_*`), the other
-> zero-behavior-change cross-cutting spec shipped after Phase 1. The deployed
-> agent image still predates **both** of these — see "Re-target without a
-> rebuild" and "Teardown" below for what that means in practice.
+> zero-behavior-change cross-cutting spec shipped after Phase 1. **Redeployed
+> 2026-08-30** — the live agent image now includes both of these; see
+> "Current live AWS state" below for the redeploy evidence. The
+> `AI_RADAR_*` env key names in "Re-target without a rebuild" below are now
+> the live ones.
 
 ### Run it
 
@@ -228,14 +230,11 @@ and `TAVILY_SECRET_NAME` from env — set them via `agentcore configure --env
 KEY=VALUE` (or a redeploy of just the config) to point at a dev table with no
 image rebuild.
 
-> **Live image lags this rename (`rename-spike-to-shared`):** the deployed
-> agent image still runs the pre-rename code, so it reads the pre-rename env
-> key names, not the `AI_RADAR_*` ones above, until `agentcore deploy` is
-> re-run — see `specs/rename-spike-to-shared/audit.md` for the exact old→new
-> key mapping. Neither key is currently set on the runtime (it runs on code
-> defaults), so this has no live effect today — but any `agentcore configure
-> --env` re-targeting done before the redeploy must use the *old* names, not
-> the ones documented above.
+> **Resolved 2026-08-30:** the deployed agent image was redeployed and now
+> runs post-rename code, so it reads the `AI_RADAR_*` env key names above
+> (see "Current live AWS state" below for the redeploy evidence) — the old
+> pre-rename key names no longer apply to `agentcore configure --env`
+> re-targeting.
 
 **Teardown**
 
@@ -433,22 +432,36 @@ still applies**: null `aws.execution_role` in `.bedrock_agentcore.yaml` before
 `agentcore destroy`, or it deletes the CDK-owned execution role out from under
 `AiRadarRuntimeRole`.
 
-**Current live AWS state (as of 2026-08-12):** four CDK stacks are deployed
+**Current live AWS state (as of 2026-08-30):** four CDK stacks are deployed
 and **not** torn down — `AiRadarCardStore`, `AiRadarRuntimeRole`,
-`AiRadarSchedule`, and (new from `run-observability`) `AiRadarBudget`. The
-`runtime-packaging` agent (`ai_radar_curation`) is running image tag
-`20260812-162922-638` (rebuilt during `run-observability`'s live fire; it
-supersedes the `async-invocation-ack` image `20260810-221147-104` and carries
-the same immediate-ack entrypoint plus the new token/metrics instrumentation).
-The schedule itself is back to its safe default (`DISABLED`,
-`cron(0 6 * * ? *)` @ `Etc/UTC`) — it has not fired since the one 2026-08-10
-one-shot test; the only run since then is the single manual
-`agentcore invoke '{}'` used to verify `run-observability` (below), **not** an
-unattended scheduled run. `ai-radar-cards` holds 80 items. The `AiRadarBudget`
-stack's SNS topic (`ai-radar-budget-alerts`) has one confirmed email
-subscriber. All four stacks/resources are live infrastructure incurring some
-ongoing (non-recurring-run) cost exposure until someone runs the teardown
-steps above, in the `runtime-packaging` section, and below (`AiRadarBudget`).
+`AiRadarSchedule`, and `AiRadarBudget`. The `runtime-packaging` agent
+(`ai_radar_curation`, runtime ID `ai_radar_curation-sIf5Dw979w`) is running
+image tag `20260830-213649-798`, redeployed 2026-08-30 via `agentcore
+configure --create` + `agentcore deploy --auto-update-on-conflict` (the local
+`.bedrock_agentcore.yaml` toolkit state file had gone missing on this
+machine — regenerating it via `--create` and updating in place, rather than
+`agentcore import`, is what the installed toolkit version supports; the
+existing ECR repo and runtime ID were reused, not duplicated). This closes
+the drift called out in the "Cross-cutting specs" section below: the live
+agent now runs the **same code as `main`**, including both
+`rename-spike-to-shared` (`AI_RADAR_*` env keys) and
+`pydantic-settings-config`, superseding the `run-observability` image
+`20260812-162922-638`. Verified via the standard two-step smoke test:
+`agentcore invoke '{}'` → immediate ack (`run_id 36711e4e...`), then a
+`curation_run_complete` record ~2.5 min later (longer than the usual 25–35s
+because the `BAIR Blog` RSS feed hit a connection timeout that run — handled
+gracefully, `failed: 0`, `discoverer_failures: 0` — not a regression) with
+`persisted: 8`, all 4 `AIRadar/Curation` EMF metrics present, and
+`ai-radar-cards` moving 80 → 88. The schedule itself is unchanged and still
+at its safe default (`DISABLED`, `cron(0 6 * * ? *)` @ `Etc/UTC`) — it has
+not fired since the one 2026-08-10 one-shot test; every run since then
+(including this redeploy's smoke test) has been a manual
+`agentcore invoke '{}'`, **not** an unattended scheduled run — so Task 4.7
+(the double-fire dedup drill) is still open. The `AiRadarBudget` stack's SNS
+topic (`ai-radar-budget-alerts`) has one confirmed email subscriber. All four
+stacks/resources are live infrastructure incurring some ongoing
+(non-recurring-run) cost exposure until someone runs the teardown steps
+above, in the `runtime-packaging` section, and below (`AiRadarBudget`).
 
 #### Run observability (`run-observability`)
 
