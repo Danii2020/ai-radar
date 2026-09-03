@@ -574,12 +574,117 @@ was never actually exercised live; it's covered by an offline test only.
 ### Tests
 
 ```bash
-uv run pytest tests/ -v   # 261 tests, all offline (Bedrock/Tavily stubbed, DynamoDB via moto, CDK via synth-only assertions, AgentCore handler mocked)
+uv run pytest tests/ -v   # 349 tests, all offline (Bedrock/Tavily stubbed, DynamoDB via moto, CDK via synth-only assertions, AgentCore handler mocked, feed-api Lambda handler tested against moto)
 ```
 
 Live API/AWS calls (Bedrock, Tavily, real DynamoDB, the real `cdk deploy` +
 `agentcore deploy` + smoke invoke above) only happen via the manual runbook
-steps — never in the automated suite.
+steps — never in the automated suite. (This count now includes `feed-api`'s
+tests too — see "Phase 2 — Web Feed" below; there is no separate `pytest`
+invocation per phase.)
+
+## Phase 2 — Web Feed (1 of 2 specs implemented — not yet deployed)
+
+Design §8's Phase 2 deliverable is *"I can open a URL and see the cards."*
+Two specs make that true: `feed-api` (a real, versioned HTTP contract in
+front of DynamoDB) and `web-feed-ui` (the Next.js frontend that consumes it).
+See [`tasks/phase-2-web-feed/`](tasks/phase-2-web-feed/) for the plan and
+[`specs/`](specs/) for each spec's contract.
+
+| Spec | Status | What it added |
+|---|---|---|
+| [`feed-api`](specs/feed-api/) | 🧪 Implemented & tested — **NOT deployed** | `GET /v1/cards` (API Gateway HTTP API → Lambda → `dynamodb:Query` on `feed-by-score`, cursor pagination, `?tag=`/`?limit=` filtering) plus the versioned `CardOut`/`FeedResponse` Pydantic contract (`src/contracts/card.py`) and its committed JSON Schema artifact. Details below. |
+| `web-feed-ui` | Not started | Blocked on `feed-api` having a real deployed URL and response shapes (`tasks/phase-2-web-feed/02-web-feed-ui.md`). |
+
+### `feed-api` — read-only feed HTTP API
+
+**What's actually verified, offline, 2026-09-01/02** (audited **APPROVED WITH
+RESERVATIONS** by `sdd-auditor` — every one of contract.md's 15 Behavior
+Guarantees checked against the implementation text and holds; 14/16
+requirements PASS, the other 2 are the deferred live-deploy rows below):
+
+- `uv run pytest tests/` → **349 passed, 0 failed**, fully offline
+  (moto-backed DynamoDB, `Template.from_stack` CDK synth, re-verified by the
+  auditor under scrubbed AWS credentials).
+- New code: `src/contracts/card.py` (`CardOut`/`FeedResponse`,
+  `CARD_SCHEMA_VERSION = "v1"`), `src/api/{config,cursor,dynamo,feed,handler}.py`,
+  `Dockerfile.feed_api`, `infra/lib/feed_api.py` (`FeedApi` construct) +
+  `infra/stacks/feed_api_stack.py` (`FeedApiStack`, wired into `infra/app.py`
+  as a new, not-yet-deployed stack `AiRadarFeedApi`), `export_api_schema.py`
+  + the committed `docs/api/feed-api.v1.schema.json`.
+- IAM is genuinely least-privilege (dumped and inspected by the auditor):
+  the synthesized role has exactly two statements — `dynamodb:Query` on the
+  single `feed-by-score` index ARN only (no base-table ARN, no wildcard) and
+  a `logs:CreateLogStream`/`PutLogEvents` grant scoped to the function's own
+  log group — no managed policy anywhere, no write action anywhere.
+- **The Lambda image was actually built and smoke-tested locally**
+  (2026-09-02): `docker build -f Dockerfile.feed_api --platform linux/arm64
+  -t ai-radar-feed-api-local-check .` from the repo root succeeded, and
+  `import api.handler, contracts.card` plus a full `handler()` call against a
+  fake table returned a correct 200 empty-feed response **inside the built
+  image**. Image size ≈ 843 MB total (≈ 590 MB is the AWS base Lambda Python
+  3.12 image; this spec's own layers are ≈ 44 MB: 36 MB `uv` binary + 7.65 MB
+  `pydantic`/`pydantic-settings` + ~70 KB app code). The local test image was
+  removed afterward (`docker rmi`) — **nothing was pushed to any registry,
+  and no `cdk deploy` was run.**
+
+> **Packaging gotcha (a real bug found this way, not a hypothetical) —
+> verify a Docker-image-Lambda's `uv --only-group` closure by actually
+> building the image, not by `pytest` passing.** `src/api/config.py` is a
+> `pydantic-settings` `BaseSettings` module, but `pyproject.toml`'s `api`
+> dependency group initially listed only `pydantic`. Every offline `pytest`
+> run stayed green anyway, because `pydantic-settings` was already present in
+> the dev `.venv` as a *main*-group dependency — the gap was invisible until
+> the image was actually built with `--only-group api` and
+> `import api.handler` inside it raised `ModuleNotFoundError: No module named
+> 'pydantic_settings'`. Fixed with `uv add --group api pydantic-settings`
+> (now `api = ["pydantic>=2.13.4", "pydantic-settings>=2.14.2"]`); rebuilt,
+> re-verified. **Lesson for the next Docker-image-Lambda spec** (this repo's
+> established AD-1 packaging pattern, likely reused by Phase 3's chat
+> endpoint): a dev-group dependency can mask a missing prod dependency
+> indefinitely if you only ever run tests inside the repo's own `.venv` — the
+> only real check is building the image and importing inside it.
+
+**What is explicitly NOT done — genuinely open, not rounded up:**
+
+- **No AWS resources for this spec exist.** `cdk deploy AiRadarFeedApi` has
+  never been run — no API Gateway, no Lambda, no new IAM role exist in AWS.
+  Nothing above should be read as "deployed."
+- No live curl has ever hit this code, and no real `ai-radar-cards` item has
+  ever been validated by `CardOut`.
+- **AD-6 is still an open technical question**: whether `dynamodb:Query`
+  scoped to the index ARN alone suffices, or whether it also needs the
+  base-table ARN, is unknown until a real deploy + curl. The fallback
+  (`grant_base_table_query=True` on the `FeedApi` construct) is implemented
+  and offline-tested, ready to flip if `AccessDeniedException` shows up.
+- `web-feed-ui` (the Next.js frontend, Spec 02) hasn't started — it depends
+  on this spec having a real deployed URL and response shapes.
+
+**Deploy runbook — planned, not yet run.** Phase 6 (deploy, live curl,
+document) is a separate, human-supervised step per the spec's own roadmap;
+when it happens, the plan is:
+
+```bash
+uv run cdk diff --app "python infra/app.py"    # confirm the 4 existing stacks are unaffected (expect empty)
+uv run cdk deploy --app "python infra/app.py" AiRadarFeedApi
+# capture FeedApiUrl / FeedApiFunctionName / FeedApiLogGroupName / FeedApiAllowedOrigins outputs
+
+curl "$FEED_API_URL/v1/cards?limit=2"                          # expect real cards
+curl "$FEED_API_URL/v1/cards?cursor=<next_cursor from above>"  # expect a disjoint page
+curl "$FEED_API_URL/v1/cards?tag=<a real tag>"                 # expect a narrowed set
+curl "$FEED_API_URL/v1/cards?limit=0"                          # expect 400 invalid_limit
+curl -H "Origin: http://localhost:3000" -i "$FEED_API_URL/v1/cards"   # expect access-control-allow-origin
+```
+
+Teardown, once deployed: `uv run cdk destroy --app "python infra/app.py"
+AiRadarFeedApi` — the RETAINed `ai-radar-cards` table survives (this stack
+only ever references it by name, never creates it); the image's ECR asset
+does not auto-delete and needs its own cleanup.
+
+This section will be updated with real curl output, real counts, and the
+AD-6 resolution once Phase 6 actually runs — see
+[`specs/feed-api/audit.md`](specs/feed-api/audit.md)'s Final Verdict and
+Manual/live-verification table for the full list of what remains pending.
 
 ## Phase 0 spike (reference baseline)
 

@@ -19,6 +19,10 @@ dependencies = [
 package = false
 
 [dependency-groups]
+api = [
+    "pydantic>=2.13.4",
+    "pydantic-settings>=2.14.2",
+]
 dev = [
     "bedrock-agentcore-starter-toolkit>=0.3.10",
     "moto>=5.2.2",

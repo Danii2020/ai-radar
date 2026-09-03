@@ -126,6 +126,8 @@ def summarize_stub_factory(make_model_out):
 # breaking collection of the Spec 01/02 suite the way importing the
 # not-yet-implemented `curation.dynamo` module would.
 
+from decimal import Decimal
+
 import boto3
 from moto import mock_aws
 
@@ -183,3 +185,85 @@ def dynamo_table(dynamo_resource):
     expose (e.g. reading raw items, seeding a pre-existing `embedding`,
     querying the `feed-by-score` GSI)."""
     return dynamo_resource.Table(CARD_TABLE_NAME)
+
+
+# --- Spec 01 (feed-api) additions ---------------------------------------------
+# Additive only: every fixture above (Specs 01-06) is untouched. `seed_cards`
+# writes items directly (bypassing DynamoCardStore, which Plane B must not
+# import) into the same `dynamo_table` fixture's `feed-by-score` GSI, for
+# tests/test_feed_query.py's ordering/pagination/round-trip tests.
+
+
+def _feed_card_item(card_id: str, *, relevance: int = 5, published: str = "2026-08-01", tags=None, **overrides) -> dict:
+    """One DynamoDB item shaped exactly like `DynamoCardStore.upsert` writes
+    (specs/dynamodb-card-store/contract.md "Item schema"), including the
+    `gsi_pk`/`gsi_sk` a real `feed-by-score` query keys off. `overrides` can
+    inject an extra/malformed shape (e.g. a missing required field, or a
+    pre-seeded `embedding`) for resilience/projection tests."""
+    item = {
+        "card_id": card_id,
+        "title": f"Title {card_id}",
+        "url": f"https://example.com/{card_id}",
+        "source": "Test Source",
+        "summary": f"Summary for {card_id}",
+        "tags": tags if tags is not None else [],
+        "type": "news",
+        "relevance": Decimal(str(relevance)),
+        "published": published,
+        "takeaways": [],
+        "created_at": "2026-08-01T00:00:00+00:00",
+        "updated_at": "2026-08-01T00:00:00+00:00",
+        "gsi_pk": "CARD",
+        "gsi_sk": f"{relevance:03d}#{published}",
+    }
+    item.update(overrides)
+    return item
+
+
+@pytest.fixture
+def seed_cards(dynamo_table):
+    """Factory: seed `count` deterministic cards into the `feed-by-score` GSI
+    and return them as plain dicts **in the exact descending-`gsi_sk` order**
+    `ScanIndexForward=False` is expected to return them (item 0 is the
+    highest-scored/most-recent) — so a test can assert directly against
+    `[c["card_id"] for c in seeded]`.
+
+    All seeded cards share `relevance`; `published` dates count down from
+    `2026-08-30`, which sorts lexically (== chronologically) descending, so
+    ordering is driven by a single, easy-to-reason-about axis. When `tag` is
+    given, every `tag_every`-th card (0-indexed) carries it (plus a filler
+    tag on the rest), giving a tag filter a known, non-trivial subset —
+    `[c for c in seeded if tag in c["tags"]]` is the filtered-order oracle.
+    """
+
+    def _seed(count: int = 6, *, tag: str | None = None, tag_every: int = 2, relevance: int = 5):
+        seeded = []
+        for i in range(count):
+            published = f"2026-08-{30 - i:02d}"
+            card_id = f"card{i:02d}"
+            if tag is not None:
+                item_tags = [tag] if i % tag_every == 0 else ["other"]
+            else:
+                item_tags = []
+            item = _feed_card_item(card_id, relevance=relevance, published=published, tags=item_tags)
+            dynamo_table.put_item(Item=item)
+            seeded.append(item)
+        return seeded
+
+    return _seed
+
+
+@pytest.fixture
+def put_card_item(dynamo_table):
+    """Factory: put one arbitrary DynamoDB item (via `_feed_card_item`'s
+    defaults + `overrides`) directly into the seeded table, for tests that
+    need explicit control over a single card's shape (e.g. a malformed item
+    missing a required `CardOut` field, or a specific relevance/date pair)
+    rather than `seed_cards`'s deterministic bulk sequence."""
+
+    def _put(card_id: str, **overrides):
+        item = _feed_card_item(card_id, **overrides)
+        dynamo_table.put_item(Item=item)
+        return item
+
+    return _put

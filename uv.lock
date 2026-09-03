@@ -18,6 +18,10 @@ dependencies = [
 ]
 
 [package.dev-dependencies]
+api = [
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+]
 dev = [
     { name = "bedrock-agentcore-starter-toolkit" },
     { name = "moto" },
@@ -41,6 +45,10 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
+api = [
+    { name = "pydantic", specifier = ">=2.13.4" },
+    { name = "pydantic-settings", specifier = ">=2.14.2" },
+]
 dev = [
     { name = "bedrock-agentcore-starter-toolkit", specifier = ">=0.3.10" },
     { name = "moto", specifier = ">=5.2.2" },

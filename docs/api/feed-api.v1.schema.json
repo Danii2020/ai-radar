@@ -1,0 +1,104 @@
+{
+  "$defs": {
+    "CardOut": {
+      "description": "One curated card, as returned by `GET /v1/cards`.\n\nField-for-field parity with the DynamoDB item written by\n`curation.dynamo.DynamoCardStore.upsert` (see\nspecs/dynamodb-card-store/contract.md \"Item schema\"), minus the internal\nindex keys `gsi_pk`/`gsi_sk` and the Phase-3-reserved `embedding`.",
+      "properties": {
+        "card_id": {
+          "title": "Card Id",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "summary": {
+          "title": "Summary",
+          "type": "string"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        },
+        "relevance": {
+          "title": "Relevance",
+          "type": "integer"
+        },
+        "published": {
+          "title": "Published",
+          "type": "string"
+        },
+        "takeaways": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Takeaways",
+          "type": "array"
+        },
+        "created_at": {
+          "title": "Created At",
+          "type": "string"
+        },
+        "updated_at": {
+          "title": "Updated At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "card_id",
+        "title",
+        "url",
+        "source",
+        "summary",
+        "type",
+        "relevance",
+        "published",
+        "created_at",
+        "updated_at"
+      ],
+      "title": "CardOut",
+      "type": "object"
+    }
+  },
+  "description": "One page of the feed. `next_cursor` is opaque: pass it back verbatim as\n`?cursor=`. It is `None` \u2014 and ONLY None \u2014 when the feed is exhausted.",
+  "properties": {
+    "cards": {
+      "items": {
+        "$ref": "#/$defs/CardOut"
+      },
+      "title": "Cards",
+      "type": "array"
+    },
+    "next_cursor": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Next Cursor"
+    }
+  },
+  "required": [
+    "cards"
+  ],
+  "title": "FeedResponse",
+  "type": "object"
+}

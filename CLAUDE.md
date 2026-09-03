@@ -52,6 +52,18 @@ value). The deployed agent image still predates both — see the "Cross-cutting
 specs (post-Phase-1)" table and the "Current live AWS state" note in
 [`README.md`](README.md) for what actually needs a rebuild.
 
+**Phase 2 ("web feed") has begun.** Its first spec, `feed-api` (`GET
+/v1/cards` via API Gateway HTTP API → Lambda → `dynamodb:Query` on
+`feed-by-score`, plus a versioned `CardOut`/`FeedResponse` Pydantic contract
+under `src/contracts/`), is implemented and test-verified
+(`uv run pytest tests/` → 349 passed) and its Lambda image builds and
+smoke-tests cleanly locally — but it has **not been deployed**: no
+`AiRadarFeedApi` stack, no API Gateway, no new Lambda/IAM role exist in AWS
+yet, and Spec 02 (`web-feed-ui`, the Next.js frontend) hasn't started. See
+the "Phase 2 — Web Feed" section in [`README.md`](README.md) for the full
+status table, the Docker-packaging gotcha it surfaced, and what a real
+deploy still needs to verify (AD-6's open IAM question).
+
 ## Package management: uv (not pip)
 
 This project uses [**uv**](https://docs.astral.sh/uv/). Do **not** use `pip`, `venv`,
@@ -142,6 +154,14 @@ docs/                   # design + research + architecture principles
   so it can move onto AgentCore Runtime later without rewrites.
 - Cost discipline: Haiku for bulk, Sonnet only for chat; dedup before summarizing.
 - Library/SDK/cloud docs: use the Context7 MCP (see global rules) before relying on memory.
+- **Docker-image-Lambda packaging (`uv --only-group <name>`, this repo's AD-1
+  pattern, first used by `feed-api`):** a dependency-group membership bug
+  (a module only imported inside the container, missing from that group) is
+  invisible to `pytest` if the package also happens to be present as a
+  main/dev dependency in `.venv` — it only surfaces by actually building the
+  image and importing inside it. See the `feed-api` gotcha in README.md's
+  "Phase 2 — Web Feed" section before trusting an `--only-group` closure from
+  a green test suite alone.
 
 ## Deferred (later phases)
 
