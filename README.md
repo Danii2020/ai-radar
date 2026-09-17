@@ -583,7 +583,7 @@ steps — never in the automated suite. (This count now includes `feed-api`'s
 tests too — see "Phase 2 — Web Feed" below; there is no separate `pytest`
 invocation per phase.)
 
-## Phase 2 — Web Feed (1 of 2 specs implemented — not yet deployed)
+## Phase 2 — Web Feed (1 of 2 specs implemented and deployed)
 
 Design §8's Phase 2 deliverable is *"I can open a URL and see the cards."*
 Two specs make that true: `feed-api` (a real, versioned HTTP contract in
@@ -593,15 +593,16 @@ See [`tasks/phase-2-web-feed/`](tasks/phase-2-web-feed/) for the plan and
 
 | Spec | Status | What it added |
 |---|---|---|
-| [`feed-api`](specs/feed-api/) | 🧪 Implemented & tested — **NOT deployed** | `GET /v1/cards` (API Gateway HTTP API → Lambda → `dynamodb:Query` on `feed-by-score`, cursor pagination, `?tag=`/`?limit=` filtering) plus the versioned `CardOut`/`FeedResponse` Pydantic contract (`src/contracts/card.py`) and its committed JSON Schema artifact. Details below. |
-| `web-feed-ui` | Not started | Blocked on `feed-api` having a real deployed URL and response shapes (`tasks/phase-2-web-feed/02-web-feed-ui.md`). |
+| [`feed-api`](specs/feed-api/) | ✅ Deployed & live-curl-verified | `GET /v1/cards` (API Gateway HTTP API → Lambda → `dynamodb:Query` on `feed-by-score`, cursor pagination, `?tag=`/`?limit=` filtering) plus the versioned `CardOut`/`FeedResponse` Pydantic contract (`src/contracts/card.py`) and its committed JSON Schema artifact. Details below. |
+| `web-feed-ui` | Not started | `feed-api` now has a real deployed URL and response shapes — no longer blocked (`tasks/phase-2-web-feed/02-web-feed-ui.md`). |
 
 ### `feed-api` — read-only feed HTTP API
 
 **What's actually verified, offline, 2026-09-01/02** (audited **APPROVED WITH
 RESERVATIONS** by `sdd-auditor` — every one of contract.md's 15 Behavior
 Guarantees checked against the implementation text and holds; 14/16
-requirements PASS, the other 2 are the deferred live-deploy rows below):
+requirements PASS at that time, the other 2 needed a live deploy — since
+closed by the 2026-09-03 deploy + 2026-09-04 live-curl verification below):
 
 - `uv run pytest tests/` → **349 passed, 0 failed**, fully offline
   (moto-backed DynamoDB, `Template.from_stack` CDK synth, re-verified by the
@@ -645,38 +646,40 @@ requirements PASS, the other 2 are the deferred live-deploy rows below):
 > indefinitely if you only ever run tests inside the repo's own `.venv` — the
 > only real check is building the image and importing inside it.
 
-**What is explicitly NOT done — genuinely open, not rounded up:**
+**Live deploy + curl verification (2026-09-03, `AiRadarFeedApi` stack,
+`CREATE_COMPLETE`).** Deployed outside this conversation (no commit records
+the `cdk deploy` itself — confirmed against real AWS on 2026-09-04 via
+`aws cloudformation describe-stacks` and re-verified live with fresh curls
+before starting `web-feed-ui`):
 
-- **No AWS resources for this spec exist.** `cdk deploy AiRadarFeedApi` has
-  never been run — no API Gateway, no Lambda, no new IAM role exist in AWS.
-  Nothing above should be read as "deployed."
-- No live curl has ever hit this code, and no real `ai-radar-cards` item has
-  ever been validated by `CardOut`.
-- **AD-6 is still an open technical question**: whether `dynamodb:Query`
-  scoped to the index ARN alone suffices, or whether it also needs the
-  base-table ARN, is unknown until a real deploy + curl. The fallback
-  (`grant_base_table_query=True` on the `FeedApi` construct) is implemented
-  and offline-tested, ready to flip if `AccessDeniedException` shows up.
-- `web-feed-ui` (the Next.js frontend, Spec 02) hasn't started — it depends
-  on this spec having a real deployed URL and response shapes.
+- **Stack outputs**: `FeedApiUrl = https://fdcksuokyh.execute-api.us-east-1.amazonaws.com`,
+  `FeedApiFunctionName = ai-radar-feed-api`,
+  `FeedApiLogGroupName = /aws/lambda/ai-radar-feed-api`,
+  `FeedApiAllowedOrigins = http://localhost:3000` (still the pre-Vercel
+  default — `web-feed-ui` updates this to the real deployed Vercel origin).
+- **`GET /v1/cards?limit=2`** → real `ai-radar-cards` items, 200.
+- **Cursor pagination**: `?limit=2&cursor=<next_cursor>` → a disjoint next
+  page (verified card IDs don't repeat).
+- **Tag filter**: `?tag=security&limit=3` → all 3 returned cards carry
+  `security`.
+- **Validation**: `?limit=0` → `400 {"error": "invalid_limit", ...}`.
+- **CORS**: `Origin: http://localhost:3000` → `access-control-allow-origin`
+  echoed back; an unlisted origin (`https://evil.example.com`) gets no
+  CORS header at all (correctly rejected).
+- **AD-6 resolved**: the index-only `dynamodb:Query` IAM grant (no base-table
+  ARN) is sufficient — no `AccessDeniedException`, so the
+  `grant_base_table_query=True` fallback was never needed.
+- **AD-7 deviation, live-observed**: the deployed function's
+  `ReservedConcurrentExecutions` is `null` (unreserved), not AD-7's intended
+  `5` — consistent with `infra/lib/feed_api.py`'s documented
+  `-c feed_api_reserved_concurrency=none` account-quota bridge (this
+  account's Lambda concurrent-executions quota is still 10, the same
+  constraint `runtime-packaging` hit). Endpoint throttling
+  (`ThrottlingRateLimit=20`/`ThrottlingBurstLimit=40`) still applies at the
+  API Gateway edge regardless. Worth flipping back to reserved `5` if/when
+  the account quota increase lands.
 
-**Deploy runbook — planned, not yet run.** Phase 6 (deploy, live curl,
-document) is a separate, human-supervised step per the spec's own roadmap;
-when it happens, the plan is:
-
-```bash
-uv run cdk diff --app "python infra/app.py"    # confirm the 4 existing stacks are unaffected (expect empty)
-uv run cdk deploy --app "python infra/app.py" AiRadarFeedApi
-# capture FeedApiUrl / FeedApiFunctionName / FeedApiLogGroupName / FeedApiAllowedOrigins outputs
-
-curl "$FEED_API_URL/v1/cards?limit=2"                          # expect real cards
-curl "$FEED_API_URL/v1/cards?cursor=<next_cursor from above>"  # expect a disjoint page
-curl "$FEED_API_URL/v1/cards?tag=<a real tag>"                 # expect a narrowed set
-curl "$FEED_API_URL/v1/cards?limit=0"                          # expect 400 invalid_limit
-curl -H "Origin: http://localhost:3000" -i "$FEED_API_URL/v1/cards"   # expect access-control-allow-origin
-```
-
-Teardown, once deployed: `uv run cdk destroy --app "python infra/app.py"
+Teardown, if ever needed: `uv run cdk destroy --app "python infra/app.py"
 AiRadarFeedApi` — the RETAINed `ai-radar-cards` table survives (this stack
 only ever references it by name, never creates it); the image's ECR asset
 does not auto-delete and needs its own cleanup.

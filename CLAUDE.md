@@ -55,14 +55,15 @@ specs (post-Phase-1)" table and the "Current live AWS state" note in
 **Phase 2 ("web feed") has begun.** Its first spec, `feed-api` (`GET
 /v1/cards` via API Gateway HTTP API → Lambda → `dynamodb:Query` on
 `feed-by-score`, plus a versioned `CardOut`/`FeedResponse` Pydantic contract
-under `src/contracts/`), is implemented and test-verified
-(`uv run pytest tests/` → 349 passed) and its Lambda image builds and
-smoke-tests cleanly locally — but it has **not been deployed**: no
-`AiRadarFeedApi` stack, no API Gateway, no new Lambda/IAM role exist in AWS
-yet, and Spec 02 (`web-feed-ui`, the Next.js frontend) hasn't started. See
-the "Phase 2 — Web Feed" section in [`README.md`](README.md) for the full
-status table, the Docker-packaging gotcha it surfaced, and what a real
-deploy still needs to verify (AD-6's open IAM question).
+under `src/contracts/`), is implemented, test-verified
+(`uv run pytest tests/` → 349 passed), and **deployed** — the
+`AiRadarFeedApi` stack was `cdk deploy`'d 2026-09-03 and is live-curl-verified
+(pagination, tag filter, validation, and CORS all confirmed against the real
+API Gateway URL; AD-6's index-only IAM grant is sufficient, no
+`AccessDeniedException`). Spec 02 (`web-feed-ui`, the Next.js frontend) is
+no longer blocked and is now underway. See the "Phase 2 — Web Feed" section
+in [`README.md`](README.md) for the full status table, the Docker-packaging
+gotcha `feed-api` surfaced, and the live-deploy verification detail.
 
 ## Package management: uv (not pip)
 

@@ -1,0 +1,4 @@
+{
+  "//": "Editor-only import resolution, mirroring this repo's runtime sys.path.insert convention (src/, infra/, and the repo root — see run_curation.py, run_chat.py, infra/app.py, tests/conftest.py). No behavior/runtime change: nothing in this repo invokes pyright.",
+  "extraPaths": ["src", "infra", "."]
+}
