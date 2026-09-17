@@ -1,0 +1,276 @@
+{
+  "version": 1,
+  "specs": {
+    "dir": "specs",
+    "reservedDirs": [
+      "current",
+      "archived"
+    ],
+    "schemaFiles": [
+      "intent",
+      "contract",
+      "roadmap",
+      "tasks",
+      "audit"
+    ],
+    "shippedMarker": "Shipped:",
+    "approvedVerdicts": [
+      "APPROVED WITH RESERVATIONS",
+      "APPROVED"
+    ]
+  },
+  "require": [
+    {
+      "id": "conventions-doc",
+      "description": "a conventions document (AGENTS.md or CLAUDE.md) exists",
+      "anyOf": [
+        "AGENTS.md",
+        "CLAUDE.md"
+      ],
+      "remediation": "add an AGENTS.md (or CLAUDE.md) documenting this repo's conventions"
+    },
+    {
+      "id": "harness-manifest",
+      "description": ".sdd/harness.json exists",
+      "anyOf": [
+        ".sdd/harness.json"
+      ],
+      "remediation": "run npx harny init to scaffold .sdd/harness.json"
+    },
+    {
+      "id": "spec-schema:intent",
+      "description": ".sdd/spec-schema/intent.md exists",
+      "anyOf": [
+        ".sdd/spec-schema/intent.md"
+      ],
+      "remediation": "run npx harny init to scaffold .sdd/spec-schema/intent.md",
+      "requires": {
+        "anyFile": [
+          ".sdd/harness.json"
+        ]
+      }
+    },
+    {
+      "id": "spec-schema:contract",
+      "description": ".sdd/spec-schema/contract.md exists",
+      "anyOf": [
+        ".sdd/spec-schema/contract.md"
+      ],
+      "remediation": "run npx harny init to scaffold .sdd/spec-schema/contract.md",
+      "requires": {
+        "anyFile": [
+          ".sdd/harness.json"
+        ]
+      }
+    },
+    {
+      "id": "spec-schema:roadmap",
+      "description": ".sdd/spec-schema/roadmap.md exists",
+      "anyOf": [
+        ".sdd/spec-schema/roadmap.md"
+      ],
+      "remediation": "run npx harny init to scaffold .sdd/spec-schema/roadmap.md",
+      "requires": {
+        "anyFile": [
+          ".sdd/harness.json"
+        ]
+      }
+    },
+    {
+      "id": "spec-schema:tasks",
+      "description": ".sdd/spec-schema/tasks.md exists",
+      "anyOf": [
+        ".sdd/spec-schema/tasks.md"
+      ],
+      "remediation": "run npx harny init to scaffold .sdd/spec-schema/tasks.md",
+      "requires": {
+        "anyFile": [
+          ".sdd/harness.json"
+        ]
+      }
+    },
+    {
+      "id": "spec-schema:audit",
+      "description": ".sdd/spec-schema/audit.md exists",
+      "anyOf": [
+        ".sdd/spec-schema/audit.md"
+      ],
+      "remediation": "run npx harny init to scaffold .sdd/spec-schema/audit.md",
+      "requires": {
+        "anyFile": [
+          ".sdd/harness.json"
+        ]
+      }
+    },
+    {
+      "id": "feedback-runner",
+      "description": ".sdd/feedback/run-feedback.mjs is scaffolded",
+      "anyOf": [
+        ".sdd/feedback/run-feedback.mjs"
+      ],
+      "remediation": "run npx harny init and commit .sdd/feedback/run-feedback.mjs",
+      "requires": {
+        "anyFile": [
+          ".sdd/harness.json"
+        ]
+      }
+    },
+    {
+      "id": "ci-workflow",
+      "description": ".github/workflows/harny-feedback.yml is scaffolded",
+      "anyOf": [
+        ".github/workflows/harny-feedback.yml"
+      ],
+      "remediation": "run npx harny init and commit .github/workflows/harny-feedback.yml",
+      "requires": {
+        "anyFile": [
+          ".sdd/harness.json"
+        ]
+      }
+    },
+    {
+      "id": "conductor:.claude/skills/sdd-conductor/SKILL.md",
+      "description": ".claude/skills/sdd-conductor/SKILL.md exists",
+      "anyOf": [
+        ".claude/skills/sdd-conductor/SKILL.md"
+      ],
+      "remediation": "run npx harny init and commit .claude/skills/sdd-conductor/SKILL.md",
+      "requires": {
+        "anyFile": [
+          ".sdd/harness.json"
+        ]
+      }
+    },
+    {
+      "id": "core-skills:.claude/skills/harny-propose",
+      "description": ".claude/skills/harny-propose/SKILL.md exists",
+      "anyOf": [
+        ".claude/skills/harny-propose/SKILL.md"
+      ],
+      "remediation": "run npx harny init and commit .claude/skills/harny-propose/SKILL.md"
+    },
+    {
+      "id": "core-skills:.claude/skills/harny-test",
+      "description": ".claude/skills/harny-test/SKILL.md exists",
+      "anyOf": [
+        ".claude/skills/harny-test/SKILL.md"
+      ],
+      "remediation": "run npx harny init and commit .claude/skills/harny-test/SKILL.md"
+    },
+    {
+      "id": "core-skills:.claude/skills/harny-implement",
+      "description": ".claude/skills/harny-implement/SKILL.md exists",
+      "anyOf": [
+        ".claude/skills/harny-implement/SKILL.md"
+      ],
+      "remediation": "run npx harny init and commit .claude/skills/harny-implement/SKILL.md"
+    },
+    {
+      "id": "core-skills:.claude/skills/harny-audit",
+      "description": ".claude/skills/harny-audit/SKILL.md exists",
+      "anyOf": [
+        ".claude/skills/harny-audit/SKILL.md"
+      ],
+      "remediation": "run npx harny init and commit .claude/skills/harny-audit/SKILL.md"
+    },
+    {
+      "id": "core-skills:.claude/skills/harny-document",
+      "description": ".claude/skills/harny-document/SKILL.md exists",
+      "anyOf": [
+        ".claude/skills/harny-document/SKILL.md"
+      ],
+      "remediation": "run npx harny init and commit .claude/skills/harny-document/SKILL.md"
+    },
+    {
+      "id": "core-skills:.claude/skills/harny-sync",
+      "description": ".claude/skills/harny-sync/SKILL.md exists",
+      "anyOf": [
+        ".claude/skills/harny-sync/SKILL.md"
+      ],
+      "remediation": "run npx harny init and commit .claude/skills/harny-sync/SKILL.md"
+    },
+    {
+      "id": "core-skills:.claude/skills/harny-feedback",
+      "description": ".claude/skills/harny-feedback/SKILL.md exists",
+      "anyOf": [
+        ".claude/skills/harny-feedback/SKILL.md"
+      ],
+      "remediation": "run npx harny init and commit .claude/skills/harny-feedback/SKILL.md"
+    },
+    {
+      "id": "core-skills:.claude/skills/harny-doctor",
+      "description": ".claude/skills/harny-doctor/SKILL.md exists",
+      "anyOf": [
+        ".claude/skills/harny-doctor/SKILL.md"
+      ],
+      "remediation": "run npx harny init and commit .claude/skills/harny-doctor/SKILL.md"
+    },
+    {
+      "id": "knowledge-base",
+      "description": "specs/current/_index.md exists",
+      "anyOf": [
+        "specs/current/_index.md"
+      ],
+      "remediation": "create specs/current/_index.md (see harny-sync)",
+      "requires": {
+        "anyFile": [
+          "specs/current"
+        ]
+      }
+    }
+  ],
+  "repoReadiness": [
+    {
+      "id": "repo-readiness:readme",
+      "description": "a README exists",
+      "anyOf": [
+        "README.md"
+      ],
+      "remediation": "add a README.md describing what this project is and how to run it",
+      "tier": "must-have"
+    },
+    {
+      "id": "repo-readiness:architecture",
+      "description": "an architecture or structure document exists",
+      "anyOf": [
+        "ARCHITECTURE.md",
+        "AGENTS.md",
+        "docs/architecture.md"
+      ],
+      "remediation": "add an ARCHITECTURE.md (or an AGENTS.md section) describing this repo's components and how they fit together",
+      "tier": "recommended"
+    },
+    {
+      "id": "repo-readiness:agent-guidance:CLAUDE.md",
+      "description": "CLAUDE.md or AGENTS.md exists",
+      "anyOf": [
+        "CLAUDE.md",
+        "AGENTS.md"
+      ],
+      "remediation": "add CLAUDE.md (or a root AGENTS.md) so this tool reads project guidance",
+      "tier": "recommended",
+      "requires": {
+        "anyFile": [
+          ".sdd/harness.json"
+        ]
+      }
+    }
+  ],
+  "repoReadinessLabel": "repo readiness",
+  "commands": [
+    {
+      "id": "pytest",
+      "kind": "test",
+      "argv": [
+        "uv",
+        "run",
+        "pytest",
+        "-q"
+      ],
+      "pathMode": "whole-project",
+      "requires": {
+        "binary": "uv"
+      }
+    }
+  ]
+}
