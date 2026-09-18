@@ -1,5 +1,7 @@
 # Intent: web-feed-ui
 
+**Shipped: 2026-09-18**
+
 ## Problem Statement
 
 `feed-api` (Phase 2, Spec 01) is deployed and live-verified: `GET

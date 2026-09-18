@@ -61,7 +61,11 @@ under `src/contracts/`), is implemented, test-verified
 (pagination, tag filter, validation, and CORS all confirmed against the real
 API Gateway URL; AD-6's index-only IAM grant is sufficient, no
 `AccessDeniedException`). Spec 02 (`web-feed-ui`, the Next.js frontend) is
-no longer blocked and is now underway. See the "Phase 2 — Web Feed" section
+implemented and **audit-approved** (locally verified: `apps/web/` build/lint/
+typecheck/test all green, 55/55 tests pass, real cards render against the
+deployed API, tag chips and pagination work as designed). Vercel deploy and
+`feed-api` CORS update are human-only steps (Phase 5, not executor tasks).
+See the "Phase 2 — Web Feed" section
 in [`README.md`](README.md) for the full status table, the Docker-packaging
 gotcha `feed-api` surfaced, and the live-deploy verification detail.
 
