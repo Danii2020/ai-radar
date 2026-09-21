@@ -594,7 +594,7 @@ See [`tasks/phase-2-web-feed/`](tasks/phase-2-web-feed/) for the plan and
 | Spec | Status | What it added |
 |---|---|---|
 | [`feed-api`](specs/feed-api/) | ✅ Deployed & live-curl-verified | `GET /v1/cards` (API Gateway HTTP API → Lambda → `dynamodb:Query` on `feed-by-score`, cursor pagination, `?tag=`/`?limit=` filtering) plus the versioned `CardOut`/`FeedResponse` Pydantic contract (`src/contracts/card.py`) and its committed JSON Schema artifact. Details below. |
-| [`web-feed-ui`](specs/web-feed-ui/) | ✅ Locally verified (build/lint/typecheck/test all green); **Vercel deploy + CORS redeploy still pending (human step, AD-10)** | `apps/web/` — the repo's first frontend: Next.js 16 (App Router) + React 19, server-rendered feed at `/`, tag filtering and cursor pagination via plain links, a generated+drift-tested `CardOut`/`FeedResponse` TypeScript mirror of `feed-api`'s schema artifact, and a bounded empty-page drain for `feed-api`'s Guarantee 4. Details below. |
+| [`web-feed-ui`](apps/web/specs/archived/web-feed-ui/) | ✅ Locally verified (build/lint/typecheck/test all green); **Vercel deploy + CORS redeploy still pending (human step, AD-10)** | `apps/web/` — the repo's first frontend: Next.js 16 (App Router) + React 19, server-rendered feed at `/`, tag filtering and cursor pagination via plain links, a generated+drift-tested `CardOut`/`FeedResponse` TypeScript mirror of `feed-api`'s schema artifact, and a bounded empty-page drain for `feed-api`'s Guarantee 4. Details below. |
 
 ### `feed-api` — read-only feed HTTP API
 
@@ -692,7 +692,7 @@ Manual/live-verification table for the full list of what remains pending.
 ### `web-feed-ui` — the Next.js feed frontend
 
 **What's verified, offline, 2026-09-18** (see
-[`specs/web-feed-ui/audit.md`](specs/web-feed-ui/audit.md) for the full
+[`apps/web/specs/archived/web-feed-ui/audit.md`](apps/web/specs/archived/web-feed-ui/audit.md) for the full
 requirement-by-requirement table):
 
 - `apps/web/` is a Next 16.3.5 / React 19.2.8 / TypeScript App Router project,
@@ -731,7 +731,7 @@ requirement-by-requirement table):
   /tmp && rm -rf .next && npm run build` → exit 0).
 - Styling is CSS Modules only, using two hand-authored design deliverables
   copied byte-verbatim (diffed, not hand-edited) from
-  `specs/web-feed-ui/claude-design-outputs/`: `tokens.css` →
+  `apps/web/specs/archived/web-feed-ui/claude-design-outputs/`: `tokens.css` →
   `apps/web/app/globals.css` and `feed.module.css` →
   `apps/web/features/feed/feed.module.css`.
 - Local green gates, all exit 0 in `apps/web/`: `npm test` (8/8 files, 55/55
@@ -766,7 +766,7 @@ interaction between `signal` and `next.revalidate` was found either way.
 letting API Gateway's full 30s hold a render open) pending the live
 dev-server repeat-view check in the Phase 5/Task 4.11 runbook below, which
 can observe directly whether a second view within 300s re-hits the API. See
-`specs/web-feed-ui/audit.md`'s Audit Log (2026-09-18 entry) for the full
+`apps/web/specs/archived/web-feed-ui/audit.md`'s Audit Log (2026-09-18 entry) for the full
 finding.
 
 ### Run the web feed locally
@@ -800,10 +800,10 @@ FEED_API_BASE_URL=http://127.0.0.1:9 npm run dev
 ### Deploying `web-feed-ui` (manual runbook — human-run only, AD-10)
 
 No agent may run any command in this section — `vercel*`, `cdk deploy`, or
-`cdk destroy`. This is a transcription of `specs/web-feed-ui/roadmap.md`
+`cdk destroy`. This is a transcription of `apps/web/specs/archived/web-feed-ui/roadmap.md`
 Phase 5, with `<placeholders>` for the values only an actual deploy can
 produce. Record the real values here (and in
-`specs/web-feed-ui/audit.md`'s `M*` rows) once run.
+`apps/web/specs/archived/web-feed-ui/audit.md`'s `M*` rows) once run.
 
 1. **Create the Vercel project.**
    - Import the repository at <https://vercel.com/new>.
@@ -845,7 +845,7 @@ produce. Record the real values here (and in
    curl -si -H "Origin: https://evil.example.com" "$API/v1/cards?limit=1" \
      | grep -i access-control                   # EXPECT: no output at all
    ```
-5. **Record the real values here and in `specs/web-feed-ui/audit.md`**: the
+5. **Record the real values here and in `apps/web/specs/archived/web-feed-ui/audit.md`**: the
    Vercel URL, the origin now allow-listed, the deploy date, and the teardown
    steps (delete the Vercel project; redeploy `AiRadarFeedApi` with the
    origin list back to `http://localhost:3000`).

@@ -69,6 +69,24 @@ See the "Phase 2 — Web Feed" section
 in [`README.md`](README.md) for the full status table, the Docker-packaging
 gotcha `feed-api` surfaced, and the live-deploy verification detail.
 
+## SDD harness: two roots
+
+[harny](../harny) is installed twice, once per stack, until harny supports
+several stacks in one install:
+
+- **Repo root** (`stack: python`): `.sdd/`, `.claude/`, `specs/`. The Stop hook
+  runs ruff + mypy (gated to `.py`/`.pyi`), and CI runs `harny-feedback.yml`.
+  Use it for backend work.
+- **`apps/web/`** (`stack: typescript`): `apps/web/.sdd/`, `apps/web/.claude/`,
+  `apps/web/specs/`. The Stop hook runs eslint + tsc, and CI runs
+  `harny-feedback-web.yml`. Use it for frontend work, and **launch `claude` from
+  `apps/web/`** so `CLAUDE_PROJECT_DIR` points there and its hooks, agents,
+  and skills load.
+
+ADR numbers are monotonic across both roots (next: 0008). When you change
+`.sdd/feedback/run-feedback.mjs` or a shared role or skill in one root, make
+the same change in the other.
+
 ## Package management: uv (not pip)
 
 This project uses [**uv**](https://docs.astral.sh/uv/). Do **not** use `pip`, `venv`,

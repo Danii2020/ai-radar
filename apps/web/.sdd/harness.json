@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "tools": [
+    "claude-code"
+  ],
+  "roles": [
+    {
+      "id": "sdd-architect",
+      "tier": "most-capable"
+    },
+    {
+      "id": "sdd-test-writer",
+      "tier": "mid"
+    },
+    {
+      "id": "sdd-executor",
+      "tier": "mid"
+    },
+    {
+      "id": "sdd-auditor",
+      "tier": "most-capable"
+    },
+    {
+      "id": "sdd-documentation",
+      "tier": "cheapest"
+    }
+  ],
+  "gates": [
+    "post-specs",
+    "post-red-tests",
+    "post-audit"
+  ],
+  "skills": [
+    "harny-propose",
+    "harny-test",
+    "harny-implement",
+    "harny-audit",
+    "harny-document",
+    "harny-sync",
+    "harny-feedback",
+    "harny-doctor",
+    "harny-adr",
+    "harny-standards"
+  ],
+  "stack": "typescript"
+}

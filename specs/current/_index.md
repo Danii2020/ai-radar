@@ -1,9 +1,14 @@
 # Current-State Specifications
 
 > Current truth for this repo. Maintained by `harny-sync`; do not hand-edit.
-> Last synced: 2026-09-18 by harny-sync (archive mode: 1 feature archived
-> [web-feed-ui], 1 capability doc created [web-feed], index regenerated —
-> see Notes)
+> Last synced: 2026-09-20 (component split: the frontend `web-feed`
+> capability, its `web-feed-ui` archive, ADRs 0001–0007, and WEB-R1..R3 moved
+> to [`apps/web/specs/`](../../apps/web/specs/current/_index.md) — see Notes)
+
+> **Two harness roots.** This index covers the Python backend (repo root
+> harness, `stack: python`). The Next.js frontend has its own harny harness
+> and knowledge base at `apps/web/` (`stack: typescript`):
+> [`apps/web/specs/current/_index.md`](../../apps/web/specs/current/_index.md).
 
 ## Capabilities
 
@@ -16,7 +21,6 @@
 | observability | [observability.md](./observability.md) | [run-observability](../archived/run-observability/) |
 | config-loading | [config-loading.md](./config-loading.md) | [pydantic-settings-config](../archived/pydantic-settings-config/), [rename-spike-to-shared](../archived/rename-spike-to-shared/) |
 | feed-api | [feed-api.md](./feed-api.md) | [feed-api](../archived/feed-api/) |
-| web-feed | [web-feed.md](./web-feed.md) | [web-feed-ui](../archived/web-feed-ui/) |
 
 ## Keyword lookup
 
@@ -63,18 +67,10 @@
 | .env loading | config-loading |
 | shared/ package | config-loading |
 | GET /v1/cards | feed-api |
-| cursor / next_cursor pagination | feed-api, web-feed |
+| cursor / next_cursor pagination | feed-api (see also apps/web: web-feed) |
 | CORS (feed-api) | feed-api |
 | CardOut / FeedResponse | feed-api |
-| tag filter | feed-api, web-feed |
-| Next.js / App Router | web-feed |
-| apps/web | web-feed |
-| types.generated.ts / codegen drift | web-feed |
-| FeedView / feed-list / feed-error | web-feed |
-| cursor drain / MAX_DRAIN_REQUESTS | web-feed |
-| CSS Modules / tokens.css / feed.module.css | web-feed |
-| Vercel deploy | web-feed |
-| server-only fetch / "use client" | web-feed |
+| tag filter | feed-api (see also apps/web: web-feed) |
 
 ## Synchronized Changes
 
@@ -90,28 +86,15 @@
 | rename-spike-to-shared | [specs/archived/rename-spike-to-shared/](../archived/rename-spike-to-shared/) | [config-loading.md](./config-loading.md) |
 | pydantic-settings-config | [specs/archived/pydantic-settings-config/](../archived/pydantic-settings-config/) | [config-loading.md](./config-loading.md) |
 | feed-api | [specs/archived/feed-api/](../archived/feed-api/) | [feed-api.md](./feed-api.md) |
-| web-feed-ui | [specs/archived/web-feed-ui/](../archived/web-feed-ui/) | [web-feed.md](./web-feed.md) |
 
 ## Decisions (ADR registry)
 
-| ADR | Title | Status | Capability | Path |
-|---|---|---|---|---|
-| 0001 | Generate TypeScript types from the schema artifact, never hand-author them | Accepted | web-feed | [specs/archived/web-feed-ui/decisions/0001-generate-types-from-schema-artifact.md](../archived/web-feed-ui/decisions/0001-generate-types-from-schema-artifact.md) |
-| 0002 | All `feed-api` fetching is server-side only | Accepted | web-feed | [specs/archived/web-feed-ui/decisions/0002-server-only-fetching.md](../archived/web-feed-ui/decisions/0002-server-only-fetching.md) |
-| 0003 | Pagination is URL cursor links, not client-side "load more" | Accepted | web-feed | [specs/archived/web-feed-ui/decisions/0003-url-cursor-pagination.md](../archived/web-feed-ui/decisions/0003-url-cursor-pagination.md) |
-| 0004 | Drain empty-but-cursored pages, bounded to 5 requests | Accepted | web-feed | [specs/archived/web-feed-ui/decisions/0004-bounded-empty-page-drain.md](../archived/web-feed-ui/decisions/0004-bounded-empty-page-drain.md) |
-| 0005 | Styling is CSS Modules, copied byte-verbatim from hand-authored design deliverables | Accepted | web-feed | [specs/archived/web-feed-ui/decisions/0005-byte-verbatim-design-tokens.md](../archived/web-feed-ui/decisions/0005-byte-verbatim-design-tokens.md) |
-| 0006 | Explicit 300s revalidate on the feed fetch; keep the AbortSignal timeout | Accepted | web-feed | [specs/archived/web-feed-ui/decisions/0006-explicit-revalidate-and-abort-signal.md](../archived/web-feed-ui/decisions/0006-explicit-revalidate-and-abort-signal.md) |
-| 0007 | Deployment is a human-run step; the automated pipeline stops at local verification | Accepted | web-feed | [specs/archived/web-feed-ui/decisions/0007-deployment-is-a-human-step.md](../archived/web-feed-ui/decisions/0007-deployment-is-a-human-step.md) |
+No backend ADRs yet. ADR numbers are **repo-wide monotonic** across both harness roots: 0001–0007 belong to `web-feed-ui` and are registered in [`apps/web/specs/current/_index.md`](../../apps/web/specs/current/_index.md). The next ADR written in either harness is **0008**.
 
 All 10 features archived in the 2026-09-17 bootstrap pass shipped before
 `harny-adr` existed in this project; per that skill's own no-backfill
-guardrail, none get retroactive ADRs. `web-feed-ui` (archived 2026-09-18) is
-the first feature to register real ADRs here — 7 of its 13 named
-architecture decisions were promoted (AD-3, AD-4, AD-5, AD-6, AD-7, AD-9,
-AD-10 by contract.md's own numbering); AD-1, AD-2, AD-8, AD-11, AD-12, and
-AD-13 were judged lower-impact/narrower-scope and were not promoted (see
-`specs/archived/web-feed-ui/` for their full text in the original contract).
+guardrail, none get retroactive ADRs. `web-feed-ui`'s ADRs (the first real
+ones) now live with the frontend harness, see above.
 
 ## Open reservations
 
@@ -124,9 +107,6 @@ AD-13 were judged lower-impact/narrower-scope and were not promoted (see
 | RO-1 | `CURATION_EMIT_METRICS=false` kill switch never exercised live, offline-tested only. | LOW | `specs/archived/run-observability/audit.md` | observability |
 | RO-2 | No unattended/scheduled run has ever produced observability records — depends on ES-2. | MEDIUM (operational) | `specs/archived/run-observability/audit.md` | observability |
 | FA-R1 | Deployed feed-api Lambda's `ReservedConcurrentExecutions` is unreserved (`null`), not the contract's intended `5`, bridged by an account-quota workaround. | LOW (operational) | `specs/archived/feed-api/audit.md` AD-7 | feed-api |
-| WEB-R1 | Not yet deployed: no Vercel project exists, and `feed-api`'s CORS allow-list has not been updated to a real Vercel origin. Locally verified only, not live. | HIGH (operational, expected — Phase 5 is human-gated by design) | `specs/archived/web-feed-ui/audit.md` | web-feed |
-| WEB-R2 | Whether `AbortSignal.timeout` on the feed fetch disables Next's Data Cache was researched but never empirically confirmed live. Accepted as final, not reopened. | LOW (accepted) | `specs/archived/web-feed-ui/audit.md` AD-9/C25 | web-feed |
-| WEB-R3 | `conventions.test.ts`'s no-`NEXT_PUBLIC_`/no-`execute-api` guard scans only `features/**`/`app/**`, not `scripts/`/`*.mjs`/`*.mts`/configs — narrower than its own description, no violation exists today. | LOW | `specs/archived/web-feed-ui/audit.md` | web-feed |
 
 ## Notes
 
@@ -168,3 +148,11 @@ did not exist in this project when any of them were approved, and that
 skill's own guardrail forbids reconstructing rationale retroactively for
 already-shipped work. ADRs apply only to features archived from here
 forward.
+
+**2026-09-20 component split.** A second harny harness was installed at
+`apps/web/` (`stack: typescript`) so frontend work gets eslint/tsc feedback
+instead of the root's ruff/mypy. The frontend knowledge base moved with it:
+`specs/current/web-feed.md` → `apps/web/specs/current/web-feed.md` and
+`specs/archived/web-feed-ui/` → `apps/web/specs/archived/web-feed-ui/`
+(including ADRs 0001–0007 and reservations WEB-R1..R3). The `feed-api`
+capability stays here — it is backend code, and `web-feed` consumes it.

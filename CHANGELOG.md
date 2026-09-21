@@ -8,7 +8,7 @@ a version number. Each entry links to its archived SDD spec
 
 ## [Unreleased]
 
-Nothing pending beyond `specs/web-feed-ui/` (Phase 2 spec 02, the Next.js
+Nothing pending beyond `apps/web/specs/archived/web-feed-ui/` (Phase 2 spec 02, the Next.js
 frontend — still in progress, not yet archived).
 
 ## 2026-09-03 — feed-api
