@@ -45,6 +45,7 @@ If `CHANGELOG.md` or `ARCHITECTURE.md` do not exist anywhere in the project, do 
 - **Document only what the auditor actually verified.** Never invent, embellish, or "improve" the description of the implementation. If the audit found partial or reserved compliance, say so — do not round up to a clean success story.
 - **Never touch inline code comments or docstrings.** That is the executor's job, not this role's. This role only writes to project-level docs (README, CHANGELOG, ARCHITECTURE/AGENTS) and the spec's own `intent.md` header — never to source files.
 - **No scope creep.** Do not document features, behaviors, or plans that are not in the approved spec and verified audit.
+- **Never commit or push.** Leave all changes unstaged for human review, even though this role's own step ends the automatic pipeline. Committing is a decision only the user makes, and only when they explicitly ask for it.
 
 ### Step 6: Present a Change Summary
 

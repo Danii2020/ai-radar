@@ -1,0 +1,141 @@
+/* AI Radar Feed — the feed stylesheet.
+   Copy into apps/web/features/feed/feed.module.css (class names are already
+   camelCase for CSS Modules) and app/globals.css for the reset block below.
+   Every value is a token from tokens.css; no hard-coded colour, size or radius. */
+
+/* ---- reset + page (app/globals.css) ---- */
+.feedPage {
+  box-sizing: border-box;
+  max-width: var(--feed-width);
+  margin: 0 auto;
+  padding: var(--space-7) var(--space-5);
+  background: var(--surface-page);
+  color: var(--ink);
+  font-family: var(--font-sans);
+}
+.feedPage *, .feedPage *::before, .feedPage *::after { box-sizing: inherit; }
+
+/* ---- masthead ---- */
+.masthead {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: var(--space-6);
+}
+.wordmark { font-family: var(--font-mono); font-size: 13px; line-height: 16px; font-weight: 700; letter-spacing: 0.18em; color: var(--ink); }
+.tagline { font-family: var(--font-mono); font-size: 12.5px; line-height: 18px; font-weight: 500; color: var(--ink-muted); }
+
+/* ---- tag filter ---- */
+.chipRow { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.chipNote { margin: var(--space-2) 0 0; font-size: 14px; line-height: 22px; color: var(--ink-muted); }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  height: var(--control-height);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  background: var(--surface-sunken);
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  text-decoration: none;
+}
+.chip:hover { background: var(--surface-hover); color: var(--ink); }
+.chipActive { border-color: var(--border-strong); color: var(--ink); font-weight: 600; }
+.clearLink { font-family: var(--font-mono); font-size: 12px; color: var(--link); text-decoration: underline; }
+.clearLink:hover { color: var(--link-hover); }
+
+/* ---- card ---- */
+.feedList { display: flex; flex-direction: column; gap: var(--space-4); margin: var(--space-4) 0 0; padding: 0; list-style: none; }
+.card {
+  --accent: var(--accent-neutral);          /* unknown type -> neutral, never a crash */
+  position: relative;
+  padding: var(--space-5);
+  padding-left: calc(var(--space-5) + var(--accent-rule));
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  box-shadow: var(--shadow-card);
+}
+.card:hover { box-shadow: var(--shadow-hover); }
+.card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--accent-rule);
+  border-radius: var(--radius-md) 0 0 var(--radius-md);
+  background: var(--accent);
+}
+/* The _TYPE_COLOR port (src/shared/cards.py). Duplicated across a language
+   boundary on purpose; drift here is cosmetic only. */
+.card[data-type="paper"]   { --accent: var(--accent-paper); }
+.card[data-type="news"]    { --accent: var(--accent-news); }
+.card[data-type="concept"] { --accent: var(--accent-concept); }
+.card[data-type="release"] { --accent: var(--accent-release); }
+.card[data-type="project"] { --accent: var(--accent-project); }
+
+.cardTitle { margin: 0; font-size: 18px; line-height: 26px; font-weight: 600; }
+.cardTitleLink { color: var(--ink); text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 2px; }
+.cardTitleLink:hover { text-decoration-color: currentColor; }
+.summary { max-width: var(--body-measure); margin: var(--space-3) 0 0; font-size: 16px; line-height: 26px; color: var(--ink); }
+.takeaways { max-width: var(--body-measure); margin: var(--space-3) 0 0; padding: 0; list-style: none; }
+.takeaways li { position: relative; padding-left: var(--space-4); font-size: 14px; line-height: 22px; color: var(--ink-muted); }
+.takeaways li::before { content: "–"; position: absolute; left: 0; font-family: var(--font-mono); }
+.cardTags { margin-top: var(--space-4); }
+.cardFoot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-3); }
+.badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: var(--space-1) 6px;
+  border: 1px solid currentColor;
+  border-radius: var(--radius-xs);
+  color: var(--accent);
+}
+.meta { font-family: var(--font-mono); font-size: 12.5px; line-height: 18px; font-weight: 500; color: var(--ink-muted); }
+.metaSep { padding: 0 var(--space-2); }
+.urlLine { display: block; margin-top: var(--space-2); font-family: var(--font-mono); font-size: 12.5px; color: var(--link); text-decoration: underline; }
+.urlLine:hover { color: var(--link-hover); }
+
+/* ---- pagination ---- */
+.pagerBar { display: flex; justify-content: space-between; gap: var(--space-4); margin-top: var(--space-6); padding-top: var(--space-4); border-top: 1px solid var(--border-subtle); }
+.pagerLink {
+  display: inline-flex;
+  align-items: center;
+  height: var(--control-height);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  color: var(--link);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: underline;
+}
+.pagerLink:hover { background: var(--surface-hover); color: var(--link-hover); }
+
+/* ---- states ---- */
+.state {
+  padding: var(--space-8) var(--space-5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  box-shadow: var(--shadow-card);
+  text-align: left;
+}
+.stateError { position: relative; padding-left: calc(var(--space-5) + var(--accent-rule)); }
+.stateError::before { content: ""; position: absolute; inset: 0 auto 0 0; width: var(--accent-rule); border-radius: var(--radius-md) 0 0 var(--radius-md); background: var(--accent-danger); }
+.stateHeading { margin: 0; font-size: 17px; line-height: 24px; font-weight: 600; color: var(--ink); }
+.stateError .stateHeading { color: var(--accent-danger); }
+.stateBody { max-width: var(--body-measure); margin: var(--space-3) 0 0; font-size: 16px; line-height: 26px; color: var(--ink-muted); }
+.stateActions { margin-top: var(--space-4); }
+
+/* ---- focus, once, for everything ---- */
+.feedPage a:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; border-radius: var(--radius-xs); }

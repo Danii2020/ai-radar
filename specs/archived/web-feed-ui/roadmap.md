@@ -30,9 +30,15 @@ locally, all committed to git with the right ignores.
    generated project to this spec by hand — do **not** switch package managers
    or add Tailwind.)
 2. Trim the scaffold to an empty shell: delete the demo markup/assets from
-   `app/page.tsx`, replace `app/globals.css` with a minimal reset + the type
-   accent custom properties (AD-7), keep `app/layout.tsx` with a real
-   `metadata` title ("AI Radar — curated AI news").
+   `app/page.tsx`; replace `app/globals.css` with the committed
+   `specs/web-feed-ui/claude-design-outputs/tokens.css`, copied **verbatim**
+   (light/dark palette via `prefers-color-scheme`, spacing/radius/type scales,
+   per-type accents — AD-7/AD-12; do not hand-edit values while copying); keep
+   `app/layout.tsx` with a real `metadata` title ("AI Radar — curated AI
+   news") and set the `<body>` background/text/font from the same custom
+   properties (`var(--surface-page)`/`var(--ink)`/`var(--font-sans)`) — the
+   one hand-authored styling line in the app, since the copied `tokens.css`
+   carries no `html`/`body` reset (AD-7).
 3. Verify the ESLint setup is the Next 16 one: `eslint.config.mjs` importing
    `eslint-config-next/core-web-vitals`, and `"lint": "eslint"` in
    `package.json` (**not** `next lint`, which no longer exists).
@@ -91,18 +97,23 @@ exist and are wired to a thin async page.
    `src/shared/cards.py`: title→`url` (`target="_blank" rel="noopener
    noreferrer"`), summary, takeaway bullets, tag chips, and the
    `TYPE · relevance n/10 · source · published` meta line. `tags`/`takeaways`
-   `undefined`-safe; `published === ""` → `date n/a`.
+   `undefined`-safe; `published === ""` → `date n/a`. Root element carries
+   `data-type={card.type}` — the accent colour comes from `feed.module.css`'s
+   attribute selectors (AD-7); no colour lookup in this file.
 2. `features/feed/tag-filter.tsx` and `features/feed/pagination.tsx` — links
-   only, built exclusively through `feedHref`. "Next page" renders iff
-   `nextCursor !== null`.
-3. `features/feed/feed-view.tsx` — the exhaustive switch over `FeedViewState`
+   only, built exclusively through `feedHref`, plus `tag-filter.tsx`'s pinned
+   `CHIP_NOTE` copy line (AD-11). "Next page" renders iff `nextCursor !==
+   null`.
+3. `features/feed/feed-view.tsx` — the static masthead (`WORDMARK`/`TAGLINE`
+   constants, AD-13) followed by the exhaustive switch over `FeedViewState`
    producing exactly one of `feed-list` / `feed-empty` / `feed-no-match` /
    `feed-error`, each with a stable `data-testid` and distinct copy (including
    the "searched the first N pages" wording when the drain cap was hit with a
-   live cursor).
-4. `features/feed/feed.module.css` + the globals: type accent colours ported
-   from `_TYPE_COLOR` with a neutral fallback for an unknown type; readable
-   line length; no framework.
+   live cursor). The masthead renders identically in all four states.
+4. `features/feed/feed.module.css` — copy the committed
+   `specs/web-feed-ui/claude-design-outputs/feed.module.css` **verbatim**
+   (masthead, chip, card, pagination, and state classes, all keyed to tokens
+   from Phase 1's `globals.css`); no framework, no hand-invented values.
 5. `app/page.tsx` — the ~25-line shell from contract.md: await `searchParams`,
    normalise `tag`/`cursor`, `try { loadFeed } catch { log + error state }`,
    render `<FeedView>`. Keep it thin; any branching added here belongs in
@@ -256,8 +267,8 @@ names that origin.
 - `apps/web/.env.example` — CREATE — `FEED_API_BASE_URL`, server-only note
 - `apps/web/.gitignore` — CREATE — scaffolded (`.next/`, `node_modules/`, `.env*.local`)
 - `apps/web/README.md` — CREATE — short pointer to the repo README's runbook
-- `apps/web/app/layout.tsx` — CREATE — shell + metadata
-- `apps/web/app/globals.css` — CREATE — reset + type accent custom properties
+- `apps/web/app/layout.tsx` — CREATE — shell + metadata + `<body>` background/text/font from tokens (AD-7)
+- `apps/web/app/globals.css` — CREATE — `tokens.css` copied verbatim (AD-7/AD-12)
 
 **Create — contract + logic (Phase 2)**
 - `apps/web/scripts/generate-api-types.mjs` — CREATE — codegen (mirror of `export_api_schema.py`)
@@ -273,7 +284,7 @@ names that origin.
 - `apps/web/features/feed/card-item.tsx` — CREATE — HTML port of `cards.py`'s `render()`
 - `apps/web/features/feed/tag-filter.tsx` — CREATE — chip row + clear link
 - `apps/web/features/feed/pagination.tsx` — CREATE — next/first-page links
-- `apps/web/features/feed/feed.module.css` — CREATE — component styles
+- `apps/web/features/feed/feed.module.css` — CREATE — `feed.module.css` copied verbatim (AD-7)
 
 **Create — tests (Phase 4)**
 - `apps/web/features/feed/types.generated.test.ts` — CREATE — schema drift + field-set parity

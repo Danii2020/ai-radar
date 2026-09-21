@@ -123,6 +123,11 @@ spec. That restructure touches `Dockerfile`, `Dockerfile.feed_api`, `infra/`,
 enormous blast radius, zero benefit to this feature. `apps/web/` is additive:
 nothing existing moves.
 
+This is a deferral, not a rejection: `architecture-principles.md`'s named
+layout (`apps/curation`, `apps/api`, `apps/web`) is still the eventual target,
+and a future spec remains free to propose the Python-side move on its own
+merits, once it has a concrete trigger — this spec just isn't that trigger.
+
 ### AD-2 — Package manager: **npm**, one lockfile, no workspaces (DECIDED)
 
 | Option | Verdict |
@@ -226,7 +231,7 @@ Rejected: draining until non-empty with no cap (unbounded cost), and not
 draining at all (the documented misreading, and a bad UX for any tag whose
 matches start on page 2).
 
-### AD-7 — Styling: **CSS Modules**, no framework (DECIDED)
+### AD-7 — Styling: **CSS Modules**, using the committed design-token deliverables (DECIDED, revised 2026-09-18)
 
 Next has built-in CSS Modules support: zero dependencies, zero config, no
 PostCSS/Tailwind/`content` globs to maintain, and no class-name soup in the
@@ -238,6 +243,48 @@ cannot be imported and cannot be drift-tested, exactly as `feed-api` AD-4's
 literals are duplicated across a toolchain boundary. Unlike those, drift here is
 purely cosmetic (an unknown type falls back to a neutral accent), so no test
 guards it; the duplication is called out in a code comment.
+
+**Revision, 2026-09-18:** two hand-authored design deliverables were added to
+`specs/web-feed-ui/claude-design-outputs/` — `tokens.css` (light/dark colour
+palette via `[data-theme]` and `prefers-color-scheme`, the spacing/radius/type
+scales, the five per-type accents plus a neutral fallback, and an
+`--accent-danger` for error states) and `feed.module.css` (concrete class
+names for every component in this contract, keyed to the `data-testid`s below).
+These supersede the "port the map by hand" plan above with pinned values and
+names. They are copied **verbatim**, not redesigned:
+
+```
+specs/web-feed-ui/claude-design-outputs/tokens.css        →  apps/web/app/globals.css
+specs/web-feed-ui/claude-design-outputs/feed.module.css   →  apps/web/features/feed/feed.module.css
+```
+
+No hand-authored CSS introduces a colour, spacing, or radius value outside
+these two files' custom properties. The per-type accent is applied by a
+`data-type` attribute on the card's root element (`.card[data-type="paper"]`
+etc. in `feed.module.css`) — `card-item.tsx` sets the attribute and writes no
+colour-mapping logic of its own; an unrecognised `type` matches no selector and
+falls through to `.card`'s own `--accent: var(--accent-neutral)` default, so
+the neutral-fallback behaviour above is unchanged, now enforced by CSS rather
+than a TypeScript helper.
+
+**The page-level background is set in `layout.tsx`, not in the copied CSS.**
+`tokens.css` copied verbatim defines only custom properties and type-scale
+classes — no `html`/`body` reset, so the viewport outside `.feedPage`'s
+centered 46rem column would otherwise stay browser-default white (visibly
+wrong in dark mode). Rather than hand-add a reset block to the otherwise
+verbatim `globals.css` — which would blur the "these two files, nothing
+hand-authored outside their tokens" rule above — `app/layout.tsx` sets the
+`<body>` background/text/font directly from the same custom properties:
+
+```tsx
+<body style={{ margin: 0, background: 'var(--surface-page)', color: 'var(--ink)', fontFamily: 'var(--font-sans)' }}>
+```
+
+This reads the identical tokens `feed.module.css`'s `.feedPage` already reads
+(no new value invented), keeps both design files byte-verbatim copies, and
+keeps the one hand-authored line where it's visible and obviously
+intentional — the root layout — rather than mixed into a "generated, don't
+touch" file.
 
 ### AD-8 — Testing: Vitest + React Testing Library on the **synchronous** pieces (DECIDED)
 
@@ -306,7 +353,54 @@ list would be unusable anyway. So:
   "clear filter" affordance.
 
 The limitation — "these are the tags on this page, not all tags in the feed" —
-is stated in the UI copy, not hidden.
+is stated in the UI copy, not hidden. That copy is pinned, not paraphrased:
+`feed.module.css`'s design mockup (`.chipNote`) fixes the exact string —
+
+> Top tags on this page — every tag on a card is clickable.
+
+— exported as a `CHIP_NOTE` constant from `tag-filter.tsx` so it is asserted
+verbatim in `feed-view.test.tsx` (AD-8: `TagFilter` has no test file of its
+own — it's exercised through `FeedView`) rather than left to the executor's
+phrasing.
+
+### AD-12 — Dark mode is **OS-preference only**; no toggle ships in Phase 2 (DECIDED, 2026-09-18)
+
+`tokens.css` (AD-7) defines both an automatic path
+(`@media (prefers-color-scheme: dark)`) and a manual override path
+(`[data-theme="dark"]` / `[data-theme="light"]`). Phase 2 wires up **only** the
+automatic path: `app/globals.css` gets the media query as-authored, and nothing
+in the app ever sets a `data-theme` attribute. There is no toggle control, no
+`"use client"` theme component, and no persisted preference.
+
+- Building a toggle now would need client state and a persisted choice
+  (`localStorage` or a cookie) to survive navigation between server-rendered
+  pages — directly contradicting State Changes' existing "no cookies, no
+  localStorage, no session, no client store" guarantee, for a control nobody
+  has asked for.
+- Leaving the `[data-theme]` selectors authored-but-unused in the copied CSS
+  costs nothing (dead CSS, no runtime cost) and pre-paves a real toggle for a
+  later phase without committing to build one now.
+- If a future spec adds a toggle, it is additive to `tokens.css`'s existing
+  selectors, not a rewrite.
+
+### AD-13 — The masthead is static markup inside `FeedView`, not a component (DECIDED, 2026-09-18)
+
+The design mockup's header (wordmark "AI RADAR" + tagline "curated AI news")
+carries no props, no per-request data, and no state — it is identical on every
+render. It is written as inline JSX at the top of `FeedView`'s output, styled
+by `feed.module.css`'s `.masthead`/`.wordmark`/`.tagline` classes, rather than
+factored into a fifth component:
+
+- It keeps AD-7's "one route, four components" component count accurate — a
+  fifth file for markup that never varies is a test file and an import for
+  zero behaviour.
+- It renders identically across all four `FeedView` states (list, empty,
+  no-match, error) — the masthead is chrome around the state, not part of it,
+  so it needs no `data-testid` of its own and no entry in Guarantee 10's
+  exhaustive state list.
+- The two strings are named constants (`WORDMARK`, `TAGLINE`) exported from
+  `feed-view.tsx` so `feed-view.test.tsx` can assert their presence without
+  hard-coding copy in the test.
 
 ## Interfaces
 
@@ -501,6 +595,11 @@ export function topTags(cards: CardOut[], limit?: number): string[]
 ```tsx
 import type { FeedErrorCode, FeedPage } from './client'
 
+/** Static masthead copy (AD-13) — exported so feed-view.test.tsx can assert
+ *  presence without hard-coding the strings in the test. */
+export const WORDMARK = 'AI RADAR'
+export const TAGLINE = 'curated AI news'
+
 export type FeedViewState =
   | { status: 'ok'; page: FeedPage }
   | { status: 'error'; code: FeedErrorCode }
@@ -514,13 +613,16 @@ export interface FeedViewProps {
 }
 
 /**
- * Renders exactly one of four things, each with a stable `data-testid`:
+ * Renders the static masthead (AD-13; `.masthead`/`.wordmark`/`.tagline` from
+ * feed.module.css), then exactly one of four things, each with a stable
+ * `data-testid`:
  *   'feed-list'      — one or more cards (in API order; never re-sorted)
  *   'feed-empty'     — no cards, no tag, cursor exhausted  ("no cards yet")
  *   'feed-no-match'  — no cards, a tag is active           ("no cards tagged X")
  *   'feed-error'     — state.status === 'error'
- * Pagination and the tag chip row render alongside 'feed-list'/'feed-no-match'
- * whenever a next cursor exists.
+ * The masthead renders identically across all four states. Pagination and the
+ * tag chip row render alongside 'feed-list'/'feed-no-match' whenever a next
+ * cursor exists.
  */
 export function FeedView(props: FeedViewProps): React.ReactElement
 ```
@@ -537,6 +639,10 @@ import type { CardOut } from './types.generated'
  * `TYPE · relevance n/10 · source · published`.
  * `tags`/`takeaways` are OPTIONAL in the v1 schema — `undefined` renders as
  * nothing, never as a crash.
+ * The root element carries `data-type={card.type}` — feed.module.css's
+ * `.card[data-type="…"]` selectors (AD-7) apply the accent colour; this
+ * component performs no colour lookup of its own, and an unrecognised type
+ * simply matches no selector (neutral fallback, by CSS default).
  */
 export function CardItem({ card }: { card: CardOut }): React.ReactElement
 ```
@@ -544,6 +650,9 @@ export function CardItem({ card }: { card: CardOut }): React.ReactElement
 ### `apps/web/features/feed/tag-filter.tsx` + `pagination.tsx` — CREATE
 
 ```tsx
+/** Pinned mockup copy (AD-11) — asserted verbatim, not paraphrased. */
+export const CHIP_NOTE = 'Top tags on this page — every tag on a card is clickable.'
+
 export function TagFilter(props: {
   cards: CardOut[]
   activeTag?: string
@@ -557,7 +666,8 @@ export function Pagination(props: {
 ```
 
 `TagFilter` renders `topTags(cards)` as `<Link href={feedHref({ tag })}>`
-chips plus, when `activeTag` is set, an "All cards" clear link.
+chips, the `CHIP_NOTE` line (`.chipNote` in `feed.module.css`), plus, when
+`activeTag` is set, an "All cards" clear link.
 `Pagination` renders "Next page →" `<Link href={feedHref({ tag, cursor:
 nextCursor })}>` **iff** `nextCursor !== null`, and "← First page" iff `cursor`
 is set. No page numbers (cursor pagination has none) and no "Previous" link —
@@ -791,7 +901,10 @@ None to any existing runtime state, in either plane. This spec adds a
 **Deliberately absent**: any CSS framework, UI kit, icon pack, data-fetching or
 state library, HTTP client (`fetch` is built in), date library (`published` is
 already a display-ready ISO date), analytics/monitoring SDK, AWS SDK,
-Playwright/Cypress.
+Playwright/Cypress. `tokens.css` and `feed.module.css` (AD-7) are hand-authored
+design tokens and CSS Modules, copied in verbatim from
+`specs/web-feed-ui/claude-design-outputs/` — not a package, not a framework,
+nothing to add to `package.json`.
 
 **External services**: the deployed `feed-api` (read-only, unauthenticated) and
 Vercel's free tier. No new AWS resource, no new recurring cost.

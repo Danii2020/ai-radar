@@ -14,3 +14,11 @@ cdk.context.json
 **/cdk.context.json
 .bedrock_agentcore/
 .bedrock_agentcore.yaml
+
+# Node / Next.js / Vercel (apps/web/)
+node_modules/
+.next/
+out/
+.vercel/
+*.tsbuildinfo
+apps/web/.env*.local
