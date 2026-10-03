@@ -53,7 +53,7 @@ npm run build        # next build
 npm run test:e2e     # Playwright against a local feed-api stub (offline; needs `npx playwright install chromium` once)
 ```
 
-The per-turn Stop hook runs eslint + tsc; CI runs `harny-feedback-web.yml`.
+The per-turn Stop hook runs eslint + tsc; CI runs `harny-feedback-apps-web.yml`.
 Package manager is **npm** (no workspaces, no pnpm/yarn). `@playwright/test` is the
 only sanctioned dev dependency beyond the base toolchain (e2e tier only).
 

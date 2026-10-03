@@ -16,4 +16,4 @@ separate from the repo root's Python one: `.sdd/` (`stack: typescript`),
 base at [`specs/current/_index.md`](specs/current/_index.md). Launch `claude`
 from **this directory** for frontend work so the eslint + tsc per-turn hook
 and these agents/skills apply. CI runs the same checks via the root
-`.github/workflows/harny-feedback-web.yml`.
+`.github/workflows/harny-feedback-apps-web.yml`.

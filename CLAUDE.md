@@ -79,11 +79,11 @@ several stacks in one install:
   Use it for backend work.
 - **`apps/web/`** (`stack: typescript`): `apps/web/.sdd/`, `apps/web/.claude/`,
   `apps/web/specs/`. The Stop hook runs eslint + tsc, and CI runs
-  `harny-feedback-web.yml`. Use it for frontend work, and **launch `claude` from
+  `harny-feedback-apps-web.yml`. Use it for frontend work, and **launch `claude` from
   `apps/web/`** so `CLAUDE_PROJECT_DIR` points there and its hooks, agents,
   and skills load.
 
-ADR numbers are monotonic across both roots (next: 0008). When you change
+ADR numbers are monotonic across both roots (next: 0009). When you change
 `.sdd/feedback/run-feedback.mjs` or a shared role or skill in one root, make
 the same change in the other.
 

@@ -798,9 +798,10 @@ zero-behavior-change refactor of `apps/web/features/feed/`; see
   normalized because moving the CSS file changes them by design.
 - Local gates: `npm test` 87/87, `npm run test:e2e` 23/23, lint, typecheck and
   build green.
-- Reservations: the untracked `.github/workflows/harny-feedback-apps-web.yml`
-  duplicates `harny-feedback-web.yml` and has no CI run yet (audit F3, left for
-  the human to resolve).
+- Reservations: audit F3 — the duplicate web workflow was resolved by removing
+  the hand-relocated `harny-feedback-web.yml` and keeping the generated
+  `harny-feedback-apps-web.yml`; a green CI run against the refactor is still
+  pending.
 
 ### Run the web feed locally
 

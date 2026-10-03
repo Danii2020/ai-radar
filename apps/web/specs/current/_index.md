@@ -69,7 +69,7 @@ the repo root's). The next ADR written in either harness is **0009**.
 | WEB-R1 | Not yet deployed: no Vercel project exists, and `feed-api`'s CORS allow-list has not been updated to a real Vercel origin. Locally verified only, not live. | HIGH (operational, expected — Phase 5 is human-gated by design) | `specs/archived/web-feed-ui/audit.md` | web-feed |
 | WEB-R2 | Whether `AbortSignal.timeout` on the feed fetch disables Next's Data Cache was researched but never empirically confirmed live. Accepted as final, not reopened. | LOW (accepted) | `specs/archived/web-feed-ui/audit.md` AD-9/C25 | web-feed |
 | WEB-R3 | `conventions.test.ts`'s no-`NEXT_PUBLIC_`/no-`execute-api` guard scans only `features/**`/`app/**`, not `scripts/`/`*.mjs`/`*.mts`/configs — narrower than its own description, no violation exists today. | LOW | `specs/archived/web-feed-ui/audit.md` | web-feed |
-| WEB-R4 | Untracked `.github/workflows/harny-feedback-apps-web.yml` duplicates `harny-feedback-web.yml`; no CI run exists against the refactor yet. Left for the human to resolve. | LOW | `specs/archived/feed-structure-refactor/audit.md` F3 | web-feed |
+| WEB-R4 | Duplicate web workflow resolved (the hand-relocated `harny-feedback-web.yml` was removed; `harny-feedback-apps-web.yml` is kept). No green CI run exists against the refactor yet. | LOW | `specs/archived/feed-structure-refactor/audit.md` F3 | web-feed |
 
 ## Notes
 
