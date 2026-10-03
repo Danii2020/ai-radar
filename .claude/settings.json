@@ -1,0 +1,25 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.sdd/feedback/run-feedback.mjs\" accumulate"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node --input-type=commonjs -e 'const cp=require(\"child_process\");const fs=require(\"fs\");const runner=process.argv[1];const commands=process.argv[2];let input;try{input=fs.readFileSync(0);}catch(e){input=Buffer.from(\"\");}const r=cp.spawnSync(\"node\",[runner,\"run\",\"--commands\",commands],{input});if(r.status===2){const out=((r.stdout?r.stdout.toString():\"\")+(r.stderr?r.stderr.toString():\"\")).trim();const context=out.length>0?out:\"harny-feedback: a mapped command reported a finding.\";process.stdout.write(JSON.stringify({hookSpecificOutput:{hookEventName:\"Stop\",additionalContext:context}})+String.fromCharCode(10));}process.exit(0);' -- \"${CLAUDE_PROJECT_DIR}/.sdd/feedback/run-feedback.mjs\" '[{\"id\":\"ruff\",\"kind\":\"lint\",\"argv\":[\"uv\",\"run\",\"ruff\",\"check\"],\"pathMode\":\"per-file\",\"requires\":{\"binary\":\"uv\"},\"extensions\":[\".py\",\".pyi\"]},{\"id\":\"mypy\",\"kind\":\"typecheck\",\"argv\":[\"uv\",\"run\",\"mypy\"],\"pathMode\":\"per-file\",\"requires\":{\"binary\":\"uv\"},\"extensions\":[\".py\",\".pyi\"]}]'"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -55,14 +55,37 @@ specs (post-Phase-1)" table and the "Current live AWS state" note in
 **Phase 2 ("web feed") has begun.** Its first spec, `feed-api` (`GET
 /v1/cards` via API Gateway HTTP API → Lambda → `dynamodb:Query` on
 `feed-by-score`, plus a versioned `CardOut`/`FeedResponse` Pydantic contract
-under `src/contracts/`), is implemented and test-verified
-(`uv run pytest tests/` → 349 passed) and its Lambda image builds and
-smoke-tests cleanly locally — but it has **not been deployed**: no
-`AiRadarFeedApi` stack, no API Gateway, no new Lambda/IAM role exist in AWS
-yet, and Spec 02 (`web-feed-ui`, the Next.js frontend) hasn't started. See
-the "Phase 2 — Web Feed" section in [`README.md`](README.md) for the full
-status table, the Docker-packaging gotcha it surfaced, and what a real
-deploy still needs to verify (AD-6's open IAM question).
+under `src/contracts/`), is implemented, test-verified
+(`uv run pytest tests/` → 349 passed), and **deployed** — the
+`AiRadarFeedApi` stack was `cdk deploy`'d 2026-09-03 and is live-curl-verified
+(pagination, tag filter, validation, and CORS all confirmed against the real
+API Gateway URL; AD-6's index-only IAM grant is sufficient, no
+`AccessDeniedException`). Spec 02 (`web-feed-ui`, the Next.js frontend) is
+implemented and **audit-approved** (locally verified: `apps/web/` build/lint/
+typecheck/test all green, 55/55 tests pass, real cards render against the
+deployed API, tag chips and pagination work as designed). Vercel deploy and
+`feed-api` CORS update are human-only steps (Phase 5, not executor tasks).
+See the "Phase 2 — Web Feed" section
+in [`README.md`](README.md) for the full status table, the Docker-packaging
+gotcha `feed-api` surfaced, and the live-deploy verification detail.
+
+## SDD harness: two roots
+
+[harny](../harny) is installed twice, once per stack, until harny supports
+several stacks in one install:
+
+- **Repo root** (`stack: python`): `.sdd/`, `.claude/`, `specs/`. The Stop hook
+  runs ruff + mypy (gated to `.py`/`.pyi`), and CI runs `harny-feedback.yml`.
+  Use it for backend work.
+- **`apps/web/`** (`stack: typescript`): `apps/web/.sdd/`, `apps/web/.claude/`,
+  `apps/web/specs/`. The Stop hook runs eslint + tsc, and CI runs
+  `harny-feedback-apps-web.yml`. Use it for frontend work, and **launch `claude` from
+  `apps/web/`** so `CLAUDE_PROJECT_DIR` points there and its hooks, agents,
+  and skills load.
+
+ADR numbers are monotonic across both roots (next: 0009). When you change
+`.sdd/feedback/run-feedback.mjs` or a shared role or skill in one root, make
+the same change in the other.
 
 ## Package management: uv (not pip)
 

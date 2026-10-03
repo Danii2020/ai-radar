@@ -1,0 +1,395 @@
+{
+  "next_cursor": "e2e+cur/sor==page2",
+  "page1": [
+    {
+      "card_id": "e2e-card-01",
+      "title": "E2E fixture card 1",
+      "url": "https://example.invalid/e2e/1",
+      "source": "E2E Source 1",
+      "summary": "Summary for E2E fixture card 1.",
+      "tags": [
+        "agents",
+        "robotics",
+        "rare-x"
+      ],
+      "type": "news",
+      "relevance": 2,
+      "published": "2026-09-02",
+      "takeaways": [
+        "Takeaway A for 1",
+        "Takeaway B for 1"
+      ],
+      "created_at": "2026-09-30T00:00:00+00:00",
+      "updated_at": "2026-09-30T00:00:00+00:00"
+    },
+    {
+      "card_id": "e2e-card-02",
+      "title": "E2E fixture card 2",
+      "url": "https://example.invalid/e2e/2",
+      "source": "E2E Source 2",
+      "summary": "Summary for E2E fixture card 2.",
+      "tags": [
+        "llm",
+        "vision"
+      ],
+      "type": "concept",
+      "relevance": 3,
+      "published": "2026-09-03",
+      "takeaways": [
+        "Takeaway A for 2",
+        "Takeaway B for 2"
+      ],
+      "created_at": "2026-09-30T00:00:00+00:00",
+      "updated_at": "2026-09-30T00:00:00+00:00"
+    },
+    {
+      "card_id": "e2e-card-03",
+      "title": "E2E fixture card 3",
+      "url": "https://example.invalid/e2e/3",
+      "source": "E2E Source 0",
+      "summary": "Summary for E2E fixture card 3.",
+      "type": "release",
+      "relevance": 4,
+      "published": "2026-09-04",
+      "created_at": "2026-09-30T00:00:00+00:00",
+      "updated_at": "2026-09-30T00:00:00+00:00"
+    },
+    {
+      "card_id": "e2e-card-04",
+      "title": "E2E fixture card 4",
+      "url": "https://example.invalid/e2e/4",
+      "source": "E2E Source 1",
+      "summary": "Summary for E2E fixture card 4.",
+      "tags": [
+        "evals",
+        "infra"
+      ],
+      "type": "project",
+      "relevance": 5,
+      "published": "",
+      "takeaways": [
+        "Takeaway A for 4",
+        "Takeaway B for 4"
+      ],
+      "created_at": "2026-09-30T00:00:00+00:00",
+      "updated_at": "2026-09-30T00:00:00+00:00"
+    },
+    {
+      "card_id": "e2e-card-05",
+      "title": "E2E fixture card 5",
+      "url": "https://example.invalid/e2e/5",
+      "source": "E2E Source 2",
+      "summary": "Summary for E2E fixture card 5.",
+      "tags": [
+        "safety",
+        "open-source"
+      ],
+      "type": "paper",
+      "relevance": 6,
+      "published": "2026-09-06",
+      "takeaways": [
+        "Takeaway A for 5",
+        "Takeaway B for 5"
+      ],
+      "created_at": "2026-09-30T00:00:00+00:00",
+      "updated_at": "2026-09-30T00:00:00+00:00"
+    },
+    {
+      "card_id": "e2e-card-06",
+      "title": "E2E fixture card 6",
+      "url": "https://example.invalid/e2e/6",
+      "source": "E2E Source 0",
+      "summary": "Summary for E2E fixture card 6.",
+      "tags": [
+        "robotics",
+        "policy"
+      ],
+      "type": "news",
+      "relevance": 7,
+      "published": "2026-09-07",
+      "takeaways": [
+        "Takeaway A for 6",
+        "Takeaway B for 6"
+      ],
+      "created_at": "2026-09-30T00:00:00+00:00",
+      "updated_at": "2026-09-30T00:00:00+00:00"
+    },
+    {
+      "card_id": "e2e-card-07",
+      "title": "E2E fixture card 7",
+      "url": "https://example.invalid/e2e/7",
+      "source": "E2E Source 1",
+      "summary": "Summary for E2E fixture card 7.",
+      "tags": [
+        "vision",
+        "benchmarks"
+      ],
+      "type": "concept",
+      "relevance": 8,
+      "published": "2026-09-08",
+      "takeaways": [
+        "Takeaway A for 7",
+        "Takeaway B for 7"
+      ],
+      "created_at": "2026-09-30T00:00:00+00:00",
+      "updated_at": "2026-09-30T00:00:00+00:00"
+    },
+    {
+      "card_id": "e2e-card-08",
+      "title": "E2E fixture card 8",
+      "url": "https://example.invalid/e2e/8",
+      "source": "E2E Source 2",
+      "summary": "Summary for E2E fixture card 8.",
+      "tags": [
+        "audio",
+        "tooling"
+      ],
+      "type": "release",
+      "relevance": 9,
+      "published": "2026-09-09",
+      "takeaways": [
+        "Takeaway A for 8",
+        "Takeaway B for 8"
+      ],
+      "created_at": "2026-09-30T00:00:00+00:00",
+      "updated_at": "2026-09-30T00:00:00+00:00"
+    },
+    {
+      "card_id": "e2e-card-09",
+      "title": "E2E fixture card 9",
+      "url": "https://example.invalid/e2e/9",
+      "source": "E2E Source 0",
+      "summary": "Summary for E2E fixture card 9.",
+      "tags": [
+        "infra",
+        "agents"
+      ],
+      "type": "project",
+      "relevance": 10,
+      "published": "2026-09-10",
+      "takeaways": [
+        "Takeaway A for 9",
+        "Takeaway B for 9"
+      ],
+      "created_at": "2026-09-30T00:00:00+00:00",
+      "updated_at": "2026-09-30T00:00:00+00:00"
+    },
+    {
+      "card_id": "e2e-card-10",
+      "title": "E2E fixture card 10",
+      "url": "https://example.invalid/e2e/10",
+      "source": "E2E Source 1",
+      "summary": "Summary for E2E fixture card 10.",
+      "tags": [
+        "open-source",
+        "llm"
+      ],
+      "type": "paper",
+      "relevance": 1,
+      "published": "2026-09-11",
+      "takeaways": [
+        "Takeaway A for 10",
+        "Takeaway B for 10"
+      ],
+      "created_at": "2026-09-30T00:00:00+00:00",
+      "updated_at": "2026-09-30T00:00:00+00:00"
+    },
+    {
+      "card_id": "e2e-card-11",
+      "title": "E2E fixture card 11",
+      "url": "https://example.invalid/e2e/11",
+      "source": "E2E Source 2",
+      "summary": "Summary for E2E fixture card 11.",
+      "tags": [
+        "policy",
+        "rag"
+      ],
+      "type": "news",
+      "relevance": 2,
+      "published": "2026-09-12",
+      "takeaways": [
+        "Takeaway A for 11",
+        "Takeaway B for 11"
+      ],
+      "created_at": "2026-09-30T00:00:00+00:00",
+      "updated_at": "2026-09-30T00:00:00+00:00"
+    },
+    {
+      "card_id": "e2e-card-12",
+      "title": "E2E fixture card 12",
+      "url": "https://example.invalid/e2e/12",
+      "source": "E2E Source 0",
+      "summary": "Summary for E2E fixture card 12.",
+      "tags": [
+        "benchmarks",
+        "evals"
+      ],
+      "type": "concept",
+      "relevance": 3,
+      "published": "2026-09-13",
+      "takeaways": [
+        "Takeaway A for 12",
+        "Takeaway B for 12"
+      ],
+      "created_at": "2026-09-30T00:00:00+00:00",
+      "updated_at": "2026-09-30T00:00:00+00:00"
+    },
+    {
+      "card_id": "e2e-card-13",
+      "title": "E2E fixture card 13",
+      "url": "https://example.invalid/e2e/13",
+      "source": "E2E Source 1",
+      "summary": "Summary for E2E fixture card 13.",
+      "tags": [
+        "tooling",
+        "safety"
+      ],
+      "type": "release",
+      "relevance": 4,
+      "published": "2026-09-14",
+      "takeaways": [
+        "Takeaway A for 13",
+        "Takeaway B for 13"
+      ],
+      "created_at": "2026-09-30T00:00:00+00:00",
+      "updated_at": "2026-09-30T00:00:00+00:00"
+    },
+    {
+      "card_id": "e2e-card-14",
+      "title": "E2E fixture card 14",
+      "url": "https://example.invalid/e2e/14",
+      "source": "E2E Source 2",
+      "summary": "Summary for E2E fixture card 14.",
+      "tags": [
+        "agents",
+        "robotics"
+      ],
+      "type": "project",
+      "relevance": 5,
+      "published": "2026-09-15",
+      "takeaways": [
+        "Takeaway A for 14",
+        "Takeaway B for 14"
+      ],
+      "created_at": "2026-09-30T00:00:00+00:00",
+      "updated_at": "2026-09-30T00:00:00+00:00"
+    },
+    {
+      "card_id": "e2e-card-15",
+      "title": "E2E fixture card 15",
+      "url": "https://example.invalid/e2e/15",
+      "source": "E2E Source 0",
+      "summary": "Summary for E2E fixture card 15.",
+      "tags": [
+        "agents",
+        "weird tag & <b>"
+      ],
+      "type": "unknown-type",
+      "relevance": 6,
+      "published": "2026-09-16",
+      "takeaways": [
+        "Takeaway A for 15",
+        "Takeaway B for 15"
+      ],
+      "created_at": "2026-09-30T00:00:00+00:00",
+      "updated_at": "2026-09-30T00:00:00+00:00"
+    }
+  ],
+  "page2": [
+    {
+      "card_id": "e2e-card-16",
+      "title": "E2E fixture card 16",
+      "url": "https://example.invalid/e2e/16",
+      "source": "E2E Source 1",
+      "summary": "Summary for E2E fixture card 16.",
+      "tags": [
+        "agents"
+      ],
+      "type": "news",
+      "relevance": 7,
+      "published": "2026-09-17",
+      "takeaways": [
+        "Takeaway A for 16",
+        "Takeaway B for 16"
+      ],
+      "created_at": "2026-09-30T00:00:00+00:00",
+      "updated_at": "2026-09-30T00:00:00+00:00"
+    },
+    {
+      "card_id": "e2e-card-17",
+      "title": "E2E fixture card 17",
+      "url": "https://example.invalid/e2e/17",
+      "source": "E2E Source 2",
+      "summary": "Summary for E2E fixture card 17.",
+      "tags": [
+        "llm"
+      ],
+      "type": "concept",
+      "relevance": 8,
+      "published": "2026-09-18",
+      "takeaways": [
+        "Takeaway A for 17",
+        "Takeaway B for 17"
+      ],
+      "created_at": "2026-09-30T00:00:00+00:00",
+      "updated_at": "2026-09-30T00:00:00+00:00"
+    },
+    {
+      "card_id": "e2e-card-18",
+      "title": "E2E fixture card 18",
+      "url": "https://example.invalid/e2e/18",
+      "source": "E2E Source 0",
+      "summary": "Summary for E2E fixture card 18.",
+      "tags": [],
+      "type": "release",
+      "relevance": 9,
+      "published": "2026-09-19",
+      "takeaways": [
+        "Takeaway A for 18",
+        "Takeaway B for 18"
+      ],
+      "created_at": "2026-09-30T00:00:00+00:00",
+      "updated_at": "2026-09-30T00:00:00+00:00"
+    }
+  ],
+  "late": [
+    {
+      "card_id": "e2e-card-19",
+      "title": "E2E fixture card 19",
+      "url": "https://example.invalid/e2e/19",
+      "source": "E2E Source 1",
+      "summary": "Summary for E2E fixture card 19.",
+      "tags": [
+        "late"
+      ],
+      "type": "project",
+      "relevance": 10,
+      "published": "2026-09-20",
+      "takeaways": [
+        "Takeaway A for 19",
+        "Takeaway B for 19"
+      ],
+      "created_at": "2026-09-30T00:00:00+00:00",
+      "updated_at": "2026-09-30T00:00:00+00:00"
+    },
+    {
+      "card_id": "e2e-card-20",
+      "title": "E2E fixture card 20",
+      "url": "https://example.invalid/e2e/20",
+      "source": "E2E Source 2",
+      "summary": "Summary for E2E fixture card 20.",
+      "tags": [
+        "late"
+      ],
+      "type": "paper",
+      "relevance": 1,
+      "published": "2026-09-21",
+      "takeaways": [
+        "Takeaway A for 20",
+        "Takeaway B for 20"
+      ],
+      "created_at": "2026-09-30T00:00:00+00:00",
+      "updated_at": "2026-09-30T00:00:00+00:00"
+    }
+  ]
+}

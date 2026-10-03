@@ -574,7 +574,7 @@ was never actually exercised live; it's covered by an offline test only.
 ### Tests
 
 ```bash
-uv run pytest tests/ -v   # 349 tests, all offline (Bedrock/Tavily stubbed, DynamoDB via moto, CDK via synth-only assertions, AgentCore handler mocked, feed-api Lambda handler tested against moto)
+uv run pytest tests/ -v   # 350 tests, all offline (Bedrock/Tavily stubbed, DynamoDB via moto, CDK via synth-only assertions, AgentCore handler mocked, feed-api Lambda handler tested against moto)
 ```
 
 Live API/AWS calls (Bedrock, Tavily, real DynamoDB, the real `cdk deploy` +
@@ -583,7 +583,7 @@ steps — never in the automated suite. (This count now includes `feed-api`'s
 tests too — see "Phase 2 — Web Feed" below; there is no separate `pytest`
 invocation per phase.)
 
-## Phase 2 — Web Feed (1 of 2 specs implemented — not yet deployed)
+## Phase 2 — Web Feed (1 of 2 specs implemented and deployed)
 
 Design §8's Phase 2 deliverable is *"I can open a URL and see the cards."*
 Two specs make that true: `feed-api` (a real, versioned HTTP contract in
@@ -593,15 +593,17 @@ See [`tasks/phase-2-web-feed/`](tasks/phase-2-web-feed/) for the plan and
 
 | Spec | Status | What it added |
 |---|---|---|
-| [`feed-api`](specs/feed-api/) | 🧪 Implemented & tested — **NOT deployed** | `GET /v1/cards` (API Gateway HTTP API → Lambda → `dynamodb:Query` on `feed-by-score`, cursor pagination, `?tag=`/`?limit=` filtering) plus the versioned `CardOut`/`FeedResponse` Pydantic contract (`src/contracts/card.py`) and its committed JSON Schema artifact. Details below. |
-| `web-feed-ui` | Not started | Blocked on `feed-api` having a real deployed URL and response shapes (`tasks/phase-2-web-feed/02-web-feed-ui.md`). |
+| [`feed-api`](specs/feed-api/) | ✅ Deployed & live-curl-verified | `GET /v1/cards` (API Gateway HTTP API → Lambda → `dynamodb:Query` on `feed-by-score`, cursor pagination, `?tag=`/`?limit=` filtering) plus the versioned `CardOut`/`FeedResponse` Pydantic contract (`src/contracts/card.py`) and its committed JSON Schema artifact. Details below. |
+| [`web-feed-ui`](apps/web/specs/archived/web-feed-ui/) | ✅ Locally verified (build/lint/typecheck/test all green); **Vercel deploy + CORS redeploy still pending (human step, AD-10)** | `apps/web/` — the repo's first frontend: Next.js 16 (App Router) + React 19, server-rendered feed at `/`, tag filtering and cursor pagination via plain links, a generated+drift-tested `CardOut`/`FeedResponse` TypeScript mirror of `feed-api`'s schema artifact, and a bounded empty-page drain for `feed-api`'s Guarantee 4. Details below. |
+| [`feed-structure-refactor`](apps/web/specs/archived/feed-structure-refactor/) | ✅ Locally verified (87 unit + 23 Playwright e2e tests green); shipped 2026-10-03, audit APPROVED WITH RESERVATIONS | `apps/web/` — zero-behavior-change split of `features/feed/` into `api/`, `components/`, `lib/` behind a single `index.ts` entry point, plus an offline Playwright e2e tier. Details below. |
 
 ### `feed-api` — read-only feed HTTP API
 
 **What's actually verified, offline, 2026-09-01/02** (audited **APPROVED WITH
 RESERVATIONS** by `sdd-auditor` — every one of contract.md's 15 Behavior
 Guarantees checked against the implementation text and holds; 14/16
-requirements PASS, the other 2 are the deferred live-deploy rows below):
+requirements PASS at that time, the other 2 needed a live deploy — since
+closed by the 2026-09-03 deploy + 2026-09-04 live-curl verification below):
 
 - `uv run pytest tests/` → **349 passed, 0 failed**, fully offline
   (moto-backed DynamoDB, `Template.from_stack` CDK synth, re-verified by the
@@ -645,38 +647,40 @@ requirements PASS, the other 2 are the deferred live-deploy rows below):
 > indefinitely if you only ever run tests inside the repo's own `.venv` — the
 > only real check is building the image and importing inside it.
 
-**What is explicitly NOT done — genuinely open, not rounded up:**
+**Live deploy + curl verification (2026-09-03, `AiRadarFeedApi` stack,
+`CREATE_COMPLETE`).** Deployed outside this conversation (no commit records
+the `cdk deploy` itself — confirmed against real AWS on 2026-09-04 via
+`aws cloudformation describe-stacks` and re-verified live with fresh curls
+before starting `web-feed-ui`):
 
-- **No AWS resources for this spec exist.** `cdk deploy AiRadarFeedApi` has
-  never been run — no API Gateway, no Lambda, no new IAM role exist in AWS.
-  Nothing above should be read as "deployed."
-- No live curl has ever hit this code, and no real `ai-radar-cards` item has
-  ever been validated by `CardOut`.
-- **AD-6 is still an open technical question**: whether `dynamodb:Query`
-  scoped to the index ARN alone suffices, or whether it also needs the
-  base-table ARN, is unknown until a real deploy + curl. The fallback
-  (`grant_base_table_query=True` on the `FeedApi` construct) is implemented
-  and offline-tested, ready to flip if `AccessDeniedException` shows up.
-- `web-feed-ui` (the Next.js frontend, Spec 02) hasn't started — it depends
-  on this spec having a real deployed URL and response shapes.
+- **Stack outputs**: `FeedApiUrl = https://fdcksuokyh.execute-api.us-east-1.amazonaws.com`,
+  `FeedApiFunctionName = ai-radar-feed-api`,
+  `FeedApiLogGroupName = /aws/lambda/ai-radar-feed-api`,
+  `FeedApiAllowedOrigins = http://localhost:3000` (still the pre-Vercel
+  default — `web-feed-ui` updates this to the real deployed Vercel origin).
+- **`GET /v1/cards?limit=2`** → real `ai-radar-cards` items, 200.
+- **Cursor pagination**: `?limit=2&cursor=<next_cursor>` → a disjoint next
+  page (verified card IDs don't repeat).
+- **Tag filter**: `?tag=security&limit=3` → all 3 returned cards carry
+  `security`.
+- **Validation**: `?limit=0` → `400 {"error": "invalid_limit", ...}`.
+- **CORS**: `Origin: http://localhost:3000` → `access-control-allow-origin`
+  echoed back; an unlisted origin (`https://evil.example.com`) gets no
+  CORS header at all (correctly rejected).
+- **AD-6 resolved**: the index-only `dynamodb:Query` IAM grant (no base-table
+  ARN) is sufficient — no `AccessDeniedException`, so the
+  `grant_base_table_query=True` fallback was never needed.
+- **AD-7 deviation, live-observed**: the deployed function's
+  `ReservedConcurrentExecutions` is `null` (unreserved), not AD-7's intended
+  `5` — consistent with `infra/lib/feed_api.py`'s documented
+  `-c feed_api_reserved_concurrency=none` account-quota bridge (this
+  account's Lambda concurrent-executions quota is still 10, the same
+  constraint `runtime-packaging` hit). Endpoint throttling
+  (`ThrottlingRateLimit=20`/`ThrottlingBurstLimit=40`) still applies at the
+  API Gateway edge regardless. Worth flipping back to reserved `5` if/when
+  the account quota increase lands.
 
-**Deploy runbook — planned, not yet run.** Phase 6 (deploy, live curl,
-document) is a separate, human-supervised step per the spec's own roadmap;
-when it happens, the plan is:
-
-```bash
-uv run cdk diff --app "python infra/app.py"    # confirm the 4 existing stacks are unaffected (expect empty)
-uv run cdk deploy --app "python infra/app.py" AiRadarFeedApi
-# capture FeedApiUrl / FeedApiFunctionName / FeedApiLogGroupName / FeedApiAllowedOrigins outputs
-
-curl "$FEED_API_URL/v1/cards?limit=2"                          # expect real cards
-curl "$FEED_API_URL/v1/cards?cursor=<next_cursor from above>"  # expect a disjoint page
-curl "$FEED_API_URL/v1/cards?tag=<a real tag>"                 # expect a narrowed set
-curl "$FEED_API_URL/v1/cards?limit=0"                          # expect 400 invalid_limit
-curl -H "Origin: http://localhost:3000" -i "$FEED_API_URL/v1/cards"   # expect access-control-allow-origin
-```
-
-Teardown, once deployed: `uv run cdk destroy --app "python infra/app.py"
+Teardown, if ever needed: `uv run cdk destroy --app "python infra/app.py"
 AiRadarFeedApi` — the RETAINed `ai-radar-cards` table survives (this stack
 only ever references it by name, never creates it); the image's ECR asset
 does not auto-delete and needs its own cleanup.
@@ -685,6 +689,213 @@ This section will be updated with real curl output, real counts, and the
 AD-6 resolution once Phase 6 actually runs — see
 [`specs/feed-api/audit.md`](specs/feed-api/audit.md)'s Final Verdict and
 Manual/live-verification table for the full list of what remains pending.
+
+### `web-feed-ui` — the Next.js feed frontend
+
+**What's verified, offline, 2026-09-18** (see
+[`apps/web/specs/archived/web-feed-ui/audit.md`](apps/web/specs/archived/web-feed-ui/audit.md) for the full
+requirement-by-requirement table):
+
+- `apps/web/` is a Next 16.3.5 / React 19.2.8 / TypeScript App Router project,
+  npm-only (`package-lock.json`, no workspaces), living alongside — not
+  replacing — the Python backend. Nothing under `src/`, `tests/`, `infra/`,
+  `docs/api/`, `pyproject.toml`, or `uv.lock` was touched by this spec.
+- `features/feed/api/types.generated.ts` is generated by `npm run generate:types`
+  from the committed `docs/api/feed-api.v1.schema.json` (via
+  `json-schema-to-typescript`, `additionalProperties: false`) and drift-tested:
+  regenerating in-memory must reproduce the committed file byte-for-byte, and
+  a second test asserts the field-name sets against the artifact's own
+  `properties` keys.
+- `features/feed/api/client.ts`'s `fetchFeed()` is the **only** module that calls
+  `fetch` — exactly one request per call, `limit` always present, `tag`/
+  `cursor` present iff non-empty, `cursor` passed through byte-identical,
+  `{ next: { revalidate: 300 } }` for Next's Data Cache, and a per-card
+  `isCardOut` runtime guard (types are erased at runtime) that drops and
+  counts malformed cards rather than failing the whole page.
+- `features/feed/api/load-feed.ts`'s `loadFeed()` implements the AD-6 bounded
+  drain: `feed-api`'s Guarantee 4 means `?tag=<x>` can return `{"cards": [],
+  "next_cursor": "<token>"}` — an empty page with a *live* cursor — live-
+  verified against the deployed API (`?tag=zzz-no-such-tag&limit=5`, probed
+  2026-09-04). `loadFeed` follows the cursor while the page is empty, up to
+  `MAX_DRAIN_REQUESTS = 5`, and never claims "no matches" for a page it
+  never read.
+- Four exhaustive, distinctly-tested UI states (`feed-list` / `feed-empty` /
+  `feed-no-match` / `feed-error`), each a stable `data-testid` asserted by
+  `features/feed/components/feed-view.test.tsx` — no blank page, no unhandled exception,
+  no client-side re-sort (`features/feed/conventions.test.ts` greps for
+  `.sort(`/`.reverse(` under `features/feed/` and fails if either appears).
+- All fetching is server-side (AD-4): no `NEXT_PUBLIC_*` variable and no
+  `"use client"` module imports `api/client.ts`/`api/load-feed.ts`, both grep-asserted
+  by `conventions.test.ts`. `FEED_API_BASE_URL` is read lazily inside
+  `feedApiBaseUrl()` — never at module import — so `npm run build` succeeds
+  with the variable **unset** (verified this session: `mv .env.local
+  /tmp && rm -rf .next && npm run build` → exit 0).
+- Styling is CSS Modules only, using two hand-authored design deliverables
+  copied byte-verbatim (diffed, not hand-edited) from
+  `apps/web/specs/archived/web-feed-ui/claude-design-outputs/`: `tokens.css` →
+  `apps/web/app/globals.css` and `feed.module.css` →
+  `apps/web/features/feed/components/feed.module.css`.
+- Local green gates, all exit 0 in `apps/web/`: `npm test` (8/8 files, 55/55
+  tests — covers T1–T33 from `audit.md`'s Test Coverage table), `npm run
+  lint` (0 errors; one pre-existing warning on the generated file's own
+  `/* eslint-disable */` banner, which is never hand-edited), `npm run
+  typecheck` (`tsc --noEmit`), `npm run build` (`next build`, Turbopack).
+- Backend untouched: `uv run pytest tests/` → 350 passed (the spec's
+  documented baseline was 349 as of 2026-09-04; the +1 predates this
+  implementation session — `git status --porcelain` confirms zero diff under
+  `src/`, `tests/`, `infra/`, `docs/api/`, `pyproject.toml`, `uv.lock`,
+  `Dockerfile*` throughout this work).
+
+**Not yet done, by design (AD-10 — deployment is a human step):** no Vercel
+project exists yet and `feed-api`'s CORS allow-list still only contains
+`http://localhost:3000`. See "Run the web feed locally" below for the
+executor-verifiable local check, and the Phase 5 runbook after it for the
+exact human steps to take it live.
+
+**Open question, recorded per AD-9 (house style — see `feed-api` AD-6):**
+whether passing `signal: AbortSignal.timeout(FETCH_TIMEOUT_MS)` on the feed
+fetch disables Next's Data Cache for that request is not settled by the Next
+16 docs. The `fetch` API reference's `options.next.revalidate` section makes
+no mention of `signal` at all; the same page's Memoization section *does*
+document that passing an `AbortController`/`AbortSignal` opts a request out
+of Next's **per-render-pass memoization** (a different, shorter-lived
+mechanism than the persistent Data Cache) — which is expected and harmless
+here, since `loadFeed`'s drain hops use distinct URLs (different cursors)
+that would never have memoized against each other anyway. No documented
+interaction between `signal` and `next.revalidate` was found either way.
+`signal` is being **kept** (it bounds a hung upstream call to 8s instead of
+letting API Gateway's full 30s hold a render open) pending the live
+dev-server repeat-view check in the Phase 5/Task 4.11 runbook below, which
+can observe directly whether a second view within 300s re-hits the API. See
+`apps/web/specs/archived/web-feed-ui/audit.md`'s Audit Log (2026-09-18 entry) for the full
+finding.
+
+### `feed-structure-refactor` — feed folder split by role, Playwright e2e tier
+
+Shipped 2026-10-03 (audit: APPROVED WITH RESERVATIONS, round 1; the WEB-11 local
+smoke check against the real `feed-api` was run by hand and passed). A
+zero-behavior-change refactor of `apps/web/features/feed/`; see
+[`apps/web/specs/archived/feed-structure-refactor/`](apps/web/specs/archived/feed-structure-refactor/).
+
+- `features/feed/` is split into `api/` (`client.ts`, `load-feed.ts`,
+  `load-feed-state.ts`, `types.generated.ts`), `components/` (`feed-view.tsx`,
+  `card-item.tsx`, `tag-filter.tsx`, `pagination.tsx`, `feed.module.css`) and
+  `lib/` (`href.ts`, `tags.ts`, `search-params.ts`), each test beside its source.
+  Only `index.ts` and `conventions.test.ts` stay at the feature root.
+- `features/feed/index.ts` is the only public surface (three runtime exports:
+  `FeedView`, `loadFeedState`, `parseFeedSearchParams`). `app/page.tsx` is now an
+  11-line shell that imports only from it; the search-param parsing and the
+  `feed_fetch_failed` error-to-state mapping moved into the tested
+  `lib/search-params.ts` and `api/load-feed-state.ts`. Guards in
+  `conventions.test.ts` fail on deep imports from outside the feature, barrel
+  self-imports, and any `"use client"` import of the barrel or `api/`.
+- `feed.module.css` and `types.generated.ts` moved byte-identical (same SHA-256);
+  `npm run generate:types` now writes to `features/feed/api/types.generated.ts`.
+- New end-to-end tier: `@playwright/test` (devDependency) runs 23 scenarios via
+  `npm run test:e2e` against a local `node:http` stub of `feed-api` (no AWS
+  traffic), comparing normalized DOM, computed styles and console output with a
+  baseline captured from the pre-refactor app. CSS-module class hashes are
+  normalized because moving the CSS file changes them by design.
+- Local gates: `npm test` 87/87, `npm run test:e2e` 23/23, lint, typecheck and
+  build green.
+- Reservations: audit F3 — the duplicate web workflow was resolved by removing
+  the hand-relocated `harny-feedback-web.yml` and keeping the generated
+  `harny-feedback-apps-web.yml`; a green CI run against the refactor is still
+  pending.
+
+### Run the web feed locally
+
+```bash
+cd apps/web
+npm install                 # first time only
+cp .env.example .env.local  # already points at the real deployed feed-api
+npm run dev                 # http://localhost:3000
+```
+
+Expect: the real curated feed (currently ~87 cards) server-rendered on first
+load — no loading spinner, no empty shell. Click a tag chip → the URL becomes
+`/?tag=<x>` and the page re-renders with a real new `GET /v1/cards?tag=<x>`
+request (not a client-side filter). "Next page →" advances via `?cursor=`;
+browser Back returns to the previous page for free (there is no "Previous"
+link by design — AD-5). `http://localhost:3000/?tag=zzz-no-such-tag` exercises
+the AD-6 drain and renders the `feed-no-match` state, not a blank page.
+`http://localhost:3000` already works out of the box against the real API: it
+is the one origin `feed-api`'s CORS allow-list permits today (though CORS
+itself is not exercised by this app — see AD-4 — since `next dev`'s fetch is
+server-side).
+
+To exercise the `feed-error` state locally, temporarily point at an
+unreachable host and reload:
+
+```bash
+FEED_API_BASE_URL=http://127.0.0.1:9 npm run dev
+```
+
+To run the offline end-to-end suite (Playwright, local `feed-api` stub, no AWS
+requests; needs the Chromium browser installed once via
+`npx playwright install chromium`):
+
+```bash
+npm run test:e2e
+```
+
+### Deploying `web-feed-ui` (manual runbook — human-run only, AD-10)
+
+No agent may run any command in this section — `vercel*`, `cdk deploy`, or
+`cdk destroy`. This is a transcription of `apps/web/specs/archived/web-feed-ui/roadmap.md`
+Phase 5, with `<placeholders>` for the values only an actual deploy can
+produce. Record the real values here (and in
+`apps/web/specs/archived/web-feed-ui/audit.md`'s `M*` rows) once run.
+
+1. **Create the Vercel project.**
+   - Import the repository at <https://vercel.com/new>.
+   - **Root Directory: `apps/web`** — the one setting that must not be left
+     at the repo root.
+   - Framework preset: Next.js (auto-detected); build/install commands: leave
+     as detected (`next build` / `npm install`).
+   - Environment Variables → Production (and Preview, if wanted):
+     `FEED_API_BASE_URL = https://fdcksuokyh.execute-api.us-east-1.amazonaws.com`
+     — **no** `NEXT_PUBLIC_` prefix (server-only by design, AD-4).
+   - Deploy. Record the production URL: `https://<project>.vercel.app`.
+   - CLI alternative: `npm i -g vercel && vercel link && vercel env add
+     FEED_API_BASE_URL production && vercel --prod`, run from `apps/web/`.
+2. **Browser-verify the deployed URL:** real cards, ordered by relevance then
+   date; a tag chip narrows the feed and the URL becomes `/?tag=<x>`; "Next
+   page →" shows cards absent from page 1 (spot-check two `card_id`s/titles
+   for disjointness); `/?tag=zzz-no-such-tag` renders the no-match state, not
+   a blank page.
+3. **Update `feed-api`'s CORS allow-list** (this is why it waits until now —
+   it needs the real origin):
+   ```bash
+   uv sync --group infra
+   uv run cdk deploy --app "python infra/app.py" AiRadarFeedApi \
+     -c feed_api_allowed_origins="http://localhost:3000,https://<project>.vercel.app" \
+     -c feed_api_reserved_concurrency=none   # ONLY if AWS Support case
+                                              # 178836416700301 is still open
+                                              # — see specs/feed-api/tasks.md 6.2
+   ```
+   Run `uv run cdk diff --app "python infra/app.py" AiRadarFeedApi` first and
+   confirm the **only** change is `CorsConfiguration.AllowOrigins`. (Durable
+   alternative: edit `DEFAULT_ALLOWED_ORIGINS` in `infra/lib/feed_api.py` and
+   the origin assertion in `tests/test_infra_feed_api.py`, then deploy with
+   no `-c` override.)
+4. **Verify CORS by curl, both halves:**
+   ```bash
+   API=https://fdcksuokyh.execute-api.us-east-1.amazonaws.com
+   curl -si -H "Origin: https://<project>.vercel.app" "$API/v1/cards?limit=1" \
+     | grep -i access-control-allow-origin      # EXPECT: the Vercel origin
+   curl -si -H "Origin: https://evil.example.com" "$API/v1/cards?limit=1" \
+     | grep -i access-control                   # EXPECT: no output at all
+   ```
+5. **Record the real values here and in `apps/web/specs/archived/web-feed-ui/audit.md`**: the
+   Vercel URL, the origin now allow-listed, the deploy date, and the teardown
+   steps (delete the Vercel project; redeploy `AiRadarFeedApi` with the
+   origin list back to `http://localhost:3000`).
+
+**Teardown, if ever needed:** delete the Vercel project from its dashboard
+(free tier, no AWS resource involved); revert `feed-api`'s CORS allow-list to
+`http://localhost:3000` with the same `cdk deploy -c feed_api_allowed_origins=...`
+pattern above.
 
 ## Phase 0 spike (reference baseline)
 
