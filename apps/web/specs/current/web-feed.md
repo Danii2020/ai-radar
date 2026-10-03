@@ -1,6 +1,6 @@
 # Web Feed Specification
 
-> Last synced: 2026-09-18. Owned artifacts: `apps/web/` (Next.js 16 App Router
+> Last synced: 2026-10-03. Owned artifacts: `apps/web/` (Next.js 16 App Router
 > project — `app/`, `features/feed/`, `scripts/generate-api-types.mjs`).
 
 ## Purpose
@@ -27,8 +27,9 @@ NOT expose the API base URL to the browser bundle.
 #### Scenario: No client-side fetch or public env var exists
 - **WHEN** the application source tree under `apps/web/` is inspected
 - **THEN** no file contains a `NEXT_PUBLIC_*` identifier, and no
-  `"use client"`-directive module imports the fetch client (`client.ts`) or
-  the drain helper (`load-feed.ts`)
+  `"use client"`-directive module imports the barrel (`features/feed/index.ts`),
+  the fetch client (`api/client.ts`) or the drain helper (`api/load-feed.ts`);
+  `components/` and `lib/` use only `import type` from `api/`
 
 ### Requirement: WEB-2 — Types are generated from the schema artifact, never hand-authored
 
@@ -41,7 +42,7 @@ fresh regeneration.
 
 #### Scenario: The schema artifact changes upstream
 - **WHEN** `feed-api`'s schema artifact adds, removes, or renames a field
-- **THEN** `apps/web/features/feed/types.generated.test.ts`'s drift check
+- **THEN** `apps/web/features/feed/api/types.generated.test.ts`'s drift check
   fails loudly, rather than the UI silently drifting from the real contract
 
 ### Requirement: WEB-3 — Cursor pagination is URL-addressable and opaque
@@ -141,7 +142,7 @@ attribute anywhere in application code, and SHALL NOT persist a theme choice
 ### Requirement: WEB-9 — Design tokens and component CSS are copied byte-verbatim
 
 The system SHALL treat `apps/web/app/globals.css` and
-`apps/web/features/feed/feed.module.css` as verbatim copies of the
+`apps/web/features/feed/components/feed.module.css` as verbatim copies of the
 hand-authored design deliverables under `specs/archived/web-feed-ui/
 claude-design-outputs/`; no hand-authored colour, spacing, or radius value
 may exist outside those two files' custom properties.
@@ -192,10 +193,18 @@ one local dev-server browser check against the real `feed-api`.
    reconstruction (mirrors `feed-api.md`'s own FA-2/FA-3 framing).
 2. **Cursors are bytes.** No feature in this capability may parse, decode,
    log-decode, compare, or synthesize a cursor.
-3. **`app/page.tsx` stays a thin, ~25-line shell.** All render-state branching
-   lives in the synchronous `FeedView`, which is unit-testable; the async
-   page shell itself is not (Next's Server Components aren't
-   Vitest/RTL-testable) and is covered only by the manual browser check.
+3. **`app/page.tsx` stays a thin shell (11 lines since `feed-structure-refactor`).**
+   It only awaits `searchParams`, calls `parseFeedSearchParams`, awaits
+   `loadFeedState` and renders `FeedView`, importing only `@/features/feed`; it
+   has no `try`/`catch`/`console`. All render-state branching lives in the
+   synchronous `FeedView`, and the parsing and error-to-state mapping live in
+   unit-tested `lib/search-params.ts` and `api/load-feed-state.ts`. The page
+   itself is covered by the Playwright e2e suite (`npm run test:e2e`) and the
+   manual browser check.
+4. **`features/feed/index.ts` is the only public surface.** It exports exactly
+   `FeedView`, `loadFeedState` and `parseFeedSearchParams` (no types, no
+   `export *`); nothing outside the feature imports a sub-folder path; no
+   module inside imports the barrel; the folders are `api/`, `components/`, `lib/`.
 
 ## Open reservations
 
@@ -204,12 +213,14 @@ one local dev-server browser check against the real `feed-api`.
 | WEB-R1 | Not yet deployed: no Vercel project exists, and `feed-api`'s CORS allow-list has not been updated to a real Vercel origin. `R17`/`R18` and all `M1`-`M10` rows in the archived audit remain PENDING — this capability is locally verified only, not live. | HIGH (operational, expected — Phase 5 is human-gated by design) | `specs/archived/web-feed-ui/audit.md` |
 | WEB-R2 | Whether `AbortSignal.timeout` on the feed fetch disables Next's Data Cache for that request (i.e. whether WEB-6's 300s caching genuinely applies) was researched but never empirically confirmed via a live repeat-view request count. Accepted as final, not reopened — worst case is uncached views, still bounded by `MAX_DRAIN_REQUESTS` and backstopped by `AiRadarBudget`. One-line revert (drop `signal`) if ever needed. | LOW (accepted) | `specs/archived/web-feed-ui/audit.md` AD-9/C25 |
 | WEB-R3 | `apps/web/features/feed/conventions.test.ts`'s T29/T30 (no `NEXT_PUBLIC_`/`execute-api` literal, no client-side fetch) scan only `.ts`/`.tsx` under `features/**` and `app/**` — not `scripts/`, `*.mjs`/`*.mts`, or config files — so the guard is narrower than its own description, though no violation exists today. | LOW | `specs/archived/web-feed-ui/audit.md` |
+| WEB-R4 | Untracked `.github/workflows/harny-feedback-apps-web.yml` duplicates `harny-feedback-web.yml`; no CI run exists against the refactor yet. Left for the human to resolve. | LOW | `specs/archived/feed-structure-refactor/audit.md` F3 |
 
 ## Contributing features
 
 | Feature | Shipped | What it established |
 |---|---|---|
 | web-feed-ui | 2026-09-18 | Created this capability from scratch: the Next.js app, generated-types drift guarantee, server-only fetch client, bounded drain, cursor-link pagination, four-state `FeedView`, page-local tag chips, and the byte-verbatim design-token CSS pipeline. |
+| feed-structure-refactor | 2026-10-03 | Zero-behavior-change split of `features/feed/` into `api/`, `components/`, `lib/` behind a three-export `index.ts`; `parseFeedSearchParams` and `loadFeedState` extracted from the page; barrel/deep-import/`"use client"` guards; Playwright e2e tier against a local stub and a pre-refactor baseline. Audit: APPROVED WITH RESERVATIONS. |
 
 ## Related ADRs
 
@@ -222,3 +233,4 @@ one local dev-server browser check against the real `feed-api`.
 | [0005](../archived/web-feed-ui/decisions/0005-byte-verbatim-design-tokens.md) | Styling is CSS Modules, copied byte-verbatim from hand-authored design deliverables | Accepted |
 | [0006](../archived/web-feed-ui/decisions/0006-explicit-revalidate-and-abort-signal.md) | Explicit 300s revalidate on the feed fetch; keep the AbortSignal timeout | Accepted |
 | [0007](../archived/web-feed-ui/decisions/0007-deployment-is-a-human-step.md) | Deployment is a human-run step; the automated pipeline stops at local verification | Accepted |
+| [0008](../archived/feed-structure-refactor/decisions/0008-feed-feature-split-by-role-behind-one-entry-point.md) | Split the feed feature by role behind one public entry point, verified by an offline Playwright baseline | Accepted |

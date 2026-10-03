@@ -1,7 +1,7 @@
 # Tasks: feed-structure-refactor
 
 ## Status
-Awaiting intent approval
+Implemented and audited (round 1: approved with reservations, accepted by the human). Intent approval is being recorded by the architect. Remaining: O7 docs and O9 final audit record.
 
 ## Baseline
 - Base commit: d343830 (on branch `harny-demo`; the working tree has unrelated, uncommitted harny harness changes under `.claude/` and `.sdd/`)
@@ -15,7 +15,7 @@ Awaiting intent approval
   - `features/feed/types.generated.ts`: `405dab9ee7ad478b73098870f03f76b2c7e39f3eba1f2a9fe7bcde2d0a1deb7d`
 
 ## Outcomes
-- [ ] **O1** (AC7, AC10): The Playwright tooling and the characterization baseline are captured on the unmodified tree, before any refactor edit.
+- [x] **O1** (AC7, AC10): The Playwright tooling and the characterization baseline are captured on the unmodified tree, before any refactor edit.
   - Steps:
     1. Add `@playwright/test@1.63.0` as a devDependency. This is the sanctioned exception.
     2. Add the `test:e2e` script, `playwright.config.ts`, the stub and the fixtures, `e2e/feed.e2e.ts`, and the `.gitignore` and ESLint ignore entries.
@@ -81,7 +81,7 @@ Awaiting intent approval
     - `styles/tag-not-promoted.json` `bd0b48930d7f128ecc54d80fd8c0808fcd7e2be94df2576670b8cecb077530a7`
     - `styles/tag-promoted.json` `02f35be363feb0756d0d6d68fa7d6cce4e9758b8d2f1e438cc2e00ec8e3262fe`
     - `styles/tag-untrimmed.json` `2e63f2aa89ccde40c34beaaf5cc200b0d5fcb329fc1810a5e6dae77cb833da16`
-- [ ] **O2** (AC4, AC5, AC2, AC3, AC1): New unit tests and guard cases are written and fail for the right reason.
+- [x] **O2** (AC4, AC5, AC2, AC3, AC1): New unit tests and guard cases are written and fail for the right reason.
   - Tests:
     - `features/feed/lib/search-params.test.ts`
     - `features/feed/api/load-feed-state.test.ts`
@@ -89,41 +89,46 @@ Awaiting intent approval
   - Red (2026-10-03, `npm test`): 3 files failed, 7 passed; 62 tests passed, 2 failed. `features/feed/lib/search-params.test.ts` and `features/feed/api/load-feed-state.test.ts` fail at import (`Failed to resolve import "./search-params"` / `"./client"`: the modules are not in `api/` or `lib/` yet). In `conventions.test.ts` the failing cases are `AC1: the feature root holds only index.ts, conventions.test.ts and api/ components/ lib/` (root still holds 18 files) and `AC2: the barrel exports exactly ...` (`Cannot find module '/features/feed/index'`). T29 to T31 pass. The other new guard cases pass on today's tree because nothing violates them yet. Each was shown to fail with temporary violating files, since deleted: `app/tmp-violation-a.tsx` (deep import), `features/feed/components/tmp-violation-b.tsx` (`'use client'` + `from '..'`), `features/feed/lib/tmp-violation-c.ts` (value import of `../api/client`) made 4 scan cases fail (deep-import, barrel self-import, client-import, type-only api/). The barrel-surface case was also run against a temporary 3-name stub (pass) and a wrong stub (fail), then removed. Pure checkers are additionally exercised on inline sources (`AC2 guard`, `AC3 guard` cases).
   - Note for O3: `lib/` and `api/` already exist holding only the two new tests. `typecheck` is red until O3/O4 (TS2307 on those modules), as expected; `lint` has 0 errors.
   - Green: recorded under O3 and O4.
-- [ ] **O3** (AC1, AC9, AC8): Files are moved with `git mv`, intra-feature imports are fixed, and the codegen output path is updated.
+- [x] **O3** (AC1, AC9, AC8): Files are moved with `git mv`, intra-feature imports are fixed, and the codegen output path is updated.
+  - Evidence (2026-10-03): `git mv` into api/ components/ lib/; `npm test` 10 files, 87 tests pass; `npm run generate:types` leaves no diff; SHA-256 css `fedbe6ba...151f7` and types `405dab9e...deb7d` match.
   - Tests: the 7 existing test files, moved
   - Red: not applicable (migration)
   - Green: `npm test` (55 original tests plus O2 tests). `npm run generate:types && git status --porcelain features/feed` shows no diff. The SHA-256 values match the Baseline section. `git diff -M --stat d343830 -- features/feed` shows renames.
-- [ ] **O4** (AC2, AC3, AC4, AC5, AC6): Add `lib/search-params.ts`, `api/load-feed-state.ts` and `index.ts` with the three-name surface. Rewrite `app/page.tsx` to import only from `@/features/feed`.
+- [x] **O4** (AC2, AC3, AC4, AC5, AC6): Add `lib/search-params.ts`, `api/load-feed-state.ts` and `index.ts` with the three-name surface. Rewrite `app/page.tsx` to import only from `@/features/feed`.
+  - Evidence: `npm test` 87 passed; `npm run typecheck` clean. loadFeedState params typed optional (`tag?`, `cursor?`) because the red test calls it with `{}`.
   - Tests: as in O2
   - Red: O2's result
   - Green: `npm test`, result to be recorded. `grep -nE "try|catch|console|\.\./features" app/page.tsx` should print nothing.
-- [ ] **O5** (AC7, AC6): No behavior or HTML regression.
+- [x] **O5** (AC7, AC6): No behavior or HTML regression.
+  - Evidence: `npm run test:e2e` 23 passed, no update flag; baseline aggregate `8ff62845...8bd3` unchanged; `git status e2e` clean.
   - Tests: `e2e/feed.e2e.ts`
   - Green: `npm run test:e2e` run without `--update-snapshots`. The baseline SHA-256 values must equal O1's, and `git status e2e/__baseline__` must be clean.
-- [ ] **O6** Migration (AC8): `app/page.tsx` is the only external consumer and is migrated in O4. The 7 moved tests change only import, mock and path lines, which a review of `git diff -M d343830 -- features/feed` must confirm. `scripts/generate-api-types.mjs` points `OUT` at the new path.
+- [x] **O6** Migration (AC8): `app/page.tsx` is the only external consumer and is migrated in O4. The 7 moved tests change only import, mock and path lines, which a review of `git diff -M d343830 -- features/feed` must confirm. `scripts/generate-api-types.mjs` points `OUT` at the new path.
+  - Evidence: only import/mock specifiers and path constants/comment changed in moved tests; `OUT` points to `features/feed/api/types.generated.ts`.
 - [ ] **O7** Docs: the documentation role does this after the audit. The executor does not edit these files.
   - `AGENTS.md` § Components tree.
   - The repo-root `README.md` "Phase 2 — Web Feed" path references (around lines 702–736), plus a `npm run test:e2e` runbook line.
   - `specs/current/web-feed.md`: WEB-2, WEB-9 and WEB-R3 paths and invariant 3. `harny-sync` handles these in archive mode.
   - ADR 0008, only if the human asks for it.
   - Leave the `feed.module.css` header comment unchanged (WEB-9).
-- [ ] **O8** Broader suite against the baseline (AC10, WEB-11):
+- [x] **O8** Broader suite against the baseline (AC10, WEB-11):
   - Run `npm run lint && npm run typecheck && npm test && npm run build && npm run test:e2e`. Lint may show only the pre-existing warning.
   - `git diff d343830 -- package.json` should show only `@playwright/test` and `test:e2e`.
   - Run the WEB-11 local `npm run dev` smoke check against the real `feed-api`.
+  - Evidence (2026-10-03): lint 0 errors/1 pre-existing warning, typecheck clean, `npm test` 87/87, build ok, `npm run test:e2e` 23 passed, baseline aggregate `8ff62845...8bd3` unchanged. WEB-11 smoke check was run manually by the human on 2026-10-03: "the smoke test looks good". The executor did not run it.
 - [ ] **O9** Independent audit: the verdict will come from `audit.md` (not yet written)
 
 ## Working state
 - Updated: 2026-10-03
-- Outcome: none started
-- Phase: spec drafting complete; awaiting human approval of intent revision 1
+- Outcome: O1-O6 and O8 done; O7 (docs) and O9 (audit record) remain
+- Phase: audit round 1 accepted (approved with reservations); F4 comment fix applied
 - In progress: nothing
-- Last command: `npm test` passed 55/55 (baseline)
-- Next step: after approval, the test-writer starts O1, capturing the e2e baseline on the unmodified tree before anything is moved
+- Last command: `npm run test:e2e` 23 passed; lint, typecheck, `npm test` (87/87) green
+- Next step: architect records intent approval; documentation role does O7
 
 ## Finding responses
 | Finding | Response | Evidence |
 |---|---|---|
 
 ## Checkpoint
-The specs are drafted and awaiting the human gate. Resume at O1. The baseline must be captured before any file under `features/feed/` or `app/` is touched.
+Implementation complete and verified. Resume at O7 (documentation role). Do not regenerate `e2e/__baseline__`.

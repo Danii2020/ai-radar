@@ -1,8 +1,8 @@
 import Link from 'next/link'
 import { CardItem } from './card-item'
-import type { FeedErrorCode, FeedPage } from './client'
+import type { FeedErrorCode, FeedPage } from '../api/client'
 import styles from './feed.module.css'
-import { feedHref } from './href'
+import { feedHref } from '../lib/href'
 import { Pagination } from './pagination'
 import { TagFilter } from './tag-filter'
 

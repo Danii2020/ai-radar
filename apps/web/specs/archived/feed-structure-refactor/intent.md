@@ -1,7 +1,9 @@
 # Intent: feed-structure-refactor
 
+Shipped: 2026-10-03
+
 Revision: 1
-Approval: Pending
+Approval: Approved revision 1 by Daniel Erazo on 2026-10-03
 
 ## Outcome
 `apps/web/features/feed/` is reorganized by role into `api/`, `components/` and `lib/`, with each test next to its source. The feature has a single public entry point (`features/feed/index.ts`), and `app/page.tsx` imports only from it. The page's untested logic (search-param parsing, error-to-state mapping, the `feed_fetch_failed` log line) moves into tested feature functions. Behavior does not change: every page a user can reach renders the same DOM, styles, copy and links as before. A deterministic Playwright end-to-end suite proves this by checking the refactored app against a baseline captured from the pre-refactor app.

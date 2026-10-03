@@ -14,7 +14,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { CardItem } from "./card-item";
-import type { CardOut } from "./types.generated";
+import type { CardOut } from "../api/types.generated";
 
 afterEach(cleanup);
 

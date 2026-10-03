@@ -13,15 +13,15 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { generate } from "../../scripts/generate-api-types.mjs";
+import { generate } from "../../../scripts/generate-api-types.mjs";
 import { REQUIRED_STRING_FIELDS } from "./client";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const GENERATED_PATH = join(here, "types.generated.ts");
-// apps/web/features/feed -> repo root is four levels up.
+// apps/web/features/feed/api -> repo root is five levels up.
 const SCHEMA_PATH = join(
   here,
-  "../../../../docs/api/feed-api.v1.schema.json",
+  "../../../../../docs/api/feed-api.v1.schema.json",
 );
 
 interface JsonSchemaObject {

@@ -11,6 +11,27 @@ a version number. Each entry links to its archived SDD spec
 Nothing pending beyond `apps/web/specs/archived/web-feed-ui/` (Phase 2 spec 02, the Next.js
 frontend — still in progress, not yet archived).
 
+## 2026-10-03 — feed-structure-refactor
+
+Spec: `apps/web/specs/archived/feed-structure-refactor/`. Audit: APPROVED WITH
+RESERVATIONS (round 1); no behavior change.
+
+### Added
+- `apps/web/features/feed/index.ts`, the feature's single public entry point
+  (`FeedView`, `loadFeedState`, `parseFeedSearchParams`), plus
+  `api/load-feed-state.ts` and `lib/search-params.ts` (tested logic extracted
+  from `app/page.tsx`).
+- Playwright e2e tier (`npm run test:e2e`, `@playwright/test` devDependency):
+  23 offline scenarios against a local `feed-api` stub, compared to a baseline
+  captured from the pre-refactor app.
+- `conventions.test.ts` guards for the barrel surface, deep imports, barrel
+  self-imports and `"use client"` imports of the barrel or `api/`.
+
+### Changed
+- `apps/web/features/feed/` reorganized into `api/`, `components/` and `lib/`
+  with tests beside their source; `app/page.tsx` slimmed to an 11-line shell.
+- `npm run generate:types` now writes `features/feed/api/types.generated.ts`.
+
 ## 2026-09-03 — feed-api
 
 ### Added

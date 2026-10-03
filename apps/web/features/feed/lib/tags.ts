@@ -1,4 +1,4 @@
-import type { CardOut } from './types.generated'
+import type { CardOut } from '../api/types.generated'
 
 export const MAX_TAG_CHIPS = 12
 

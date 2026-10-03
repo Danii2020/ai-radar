@@ -6,7 +6,7 @@ import { compileFromFile } from 'json-schema-to-typescript'
 
 const here = dirname(fileURLToPath(import.meta.url))            // apps/web/scripts
 const SCHEMA = join(here, '../../../docs/api/feed-api.v1.schema.json')
-const OUT = join(here, '../features/feed/types.generated.ts')
+const OUT = join(here, '../features/feed/api/types.generated.ts')
 
 export const BANNER = `/* eslint-disable */
 /**

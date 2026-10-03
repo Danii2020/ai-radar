@@ -1,6 +1,6 @@
-import { feedHref } from './href'
+import { feedHref } from '../lib/href'
 import styles from './feed.module.css'
-import type { CardOut } from './types.generated'
+import type { CardOut } from '../api/types.generated'
 
 /**
  * The HTML port of `render()` in src/shared/cards.py: title (linking out to

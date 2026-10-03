@@ -6,10 +6,10 @@
  */
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import type { FeedErrorCode, FeedPage } from "./client";
+import type { FeedErrorCode, FeedPage } from "../api/client";
 import { TAGLINE, WORDMARK, FeedView } from "./feed-view";
 import { CHIP_NOTE } from "./tag-filter";
-import type { CardOut } from "./types.generated";
+import type { CardOut } from "../api/types.generated";
 
 afterEach(cleanup);
 

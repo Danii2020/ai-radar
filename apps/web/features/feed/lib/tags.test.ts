@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { MAX_TAG_CHIPS, topTags } from "./tags";
-import type { CardOut } from "./types.generated";
+import type { CardOut } from "../api/types.generated";
 
 function card(tags: string[] | undefined): CardOut {
   return {

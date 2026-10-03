@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import styles from './feed.module.css'
-import { feedHref } from './href'
+import { feedHref } from '../lib/href'
 
 export function Pagination({
   tag,

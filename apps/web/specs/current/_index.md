@@ -1,7 +1,7 @@
 # Current-State Specifications — apps/web (frontend)
 
 > Current truth for the Next.js frontend. Maintained by `harny-sync`; do not hand-edit.
-> Last synced: 2026-09-20 (component split — this index was carved out of the
+> Last synced: 2026-10-03 (feed-structure-refactor archived; earlier: component split — this index was carved out of the
 > repo-root `specs/current/_index.md` when `apps/web/` got its own harny harness,
 > `stack: typescript`; see Notes)
 
@@ -15,7 +15,7 @@
 
 | Capability | Current-State Specification | Incorporated Changes |
 |---|---|---|
-| web-feed | [web-feed.md](./web-feed.md) | [web-feed-ui](../archived/web-feed-ui/) |
+| web-feed | [web-feed.md](./web-feed.md) | [web-feed-ui](../archived/web-feed-ui/), [feed-structure-refactor](../archived/feed-structure-refactor/) |
 
 ## Keyword lookup
 
@@ -32,6 +32,9 @@
 | cursor drain / MAX_DRAIN_REQUESTS | web-feed |
 | CSS Modules / tokens.css / feed.module.css | web-feed |
 | Vercel deploy | web-feed |
+| features/feed/index.ts / barrel / api-components-lib layout | web-feed |
+| Playwright / test:e2e / e2e baseline | web-feed |
+| loadFeedState / parseFeedSearchParams | web-feed |
 | server-only fetch / "use client" | web-feed |
 
 ## Synchronized Changes
@@ -39,11 +42,12 @@
 | Change | Archive | Current-State Specification |
 |---|---|---|
 | web-feed-ui | [specs/archived/web-feed-ui/](../archived/web-feed-ui/) | [web-feed.md](./web-feed.md) |
+| feed-structure-refactor | [specs/archived/feed-structure-refactor/](../archived/feed-structure-refactor/) | [web-feed.md](./web-feed.md) |
 
 ## Decisions (ADR registry)
 
 ADR numbers are **repo-wide monotonic** across both harness roots (this one and
-the repo root's). The next ADR written in either harness is **0008**.
+the repo root's). The next ADR written in either harness is **0009**.
 
 | ADR | Title | Status | Capability | Path |
 |---|---|---|---|---|
@@ -54,6 +58,7 @@ the repo root's). The next ADR written in either harness is **0008**.
 | 0005 | Styling is CSS Modules, copied byte-verbatim from hand-authored design deliverables | Accepted | web-feed | [specs/archived/web-feed-ui/decisions/0005-byte-verbatim-design-tokens.md](../archived/web-feed-ui/decisions/0005-byte-verbatim-design-tokens.md) |
 | 0006 | Explicit 300s revalidate on the feed fetch; keep the AbortSignal timeout | Accepted | web-feed | [specs/archived/web-feed-ui/decisions/0006-explicit-revalidate-and-abort-signal.md](../archived/web-feed-ui/decisions/0006-explicit-revalidate-and-abort-signal.md) |
 | 0007 | Deployment is a human-run step; the automated pipeline stops at local verification | Accepted | web-feed | [specs/archived/web-feed-ui/decisions/0007-deployment-is-a-human-step.md](../archived/web-feed-ui/decisions/0007-deployment-is-a-human-step.md) |
+| 0008 | Split the feed feature by role behind one public entry point, verified by an offline Playwright baseline | Accepted | web-feed | [specs/archived/feed-structure-refactor/decisions/0008-feed-feature-split-by-role-behind-one-entry-point.md](../archived/feed-structure-refactor/decisions/0008-feed-feature-split-by-role-behind-one-entry-point.md) |
 
 ## Open reservations
 
@@ -64,6 +69,7 @@ the repo root's). The next ADR written in either harness is **0008**.
 | WEB-R1 | Not yet deployed: no Vercel project exists, and `feed-api`'s CORS allow-list has not been updated to a real Vercel origin. Locally verified only, not live. | HIGH (operational, expected — Phase 5 is human-gated by design) | `specs/archived/web-feed-ui/audit.md` | web-feed |
 | WEB-R2 | Whether `AbortSignal.timeout` on the feed fetch disables Next's Data Cache was researched but never empirically confirmed live. Accepted as final, not reopened. | LOW (accepted) | `specs/archived/web-feed-ui/audit.md` AD-9/C25 | web-feed |
 | WEB-R3 | `conventions.test.ts`'s no-`NEXT_PUBLIC_`/no-`execute-api` guard scans only `features/**`/`app/**`, not `scripts/`/`*.mjs`/`*.mts`/configs — narrower than its own description, no violation exists today. | LOW | `specs/archived/web-feed-ui/audit.md` | web-feed |
+| WEB-R4 | Untracked `.github/workflows/harny-feedback-apps-web.yml` duplicates `harny-feedback-web.yml`; no CI run exists against the refactor yet. Left for the human to resolve. | LOW | `specs/archived/feed-structure-refactor/audit.md` F3 | web-feed |
 
 ## Notes
 
