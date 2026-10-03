@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "generate:types": "node scripts/generate-api-types.mjs"
+    "generate:types": "node scripts/generate-api-types.mjs",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "next": "16.3.5",
@@ -18,6 +19,7 @@
     "react-dom": "19.2.8"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
     "@types/node": "^20",
