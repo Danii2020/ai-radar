@@ -1,0 +1,44 @@
+[
+  {
+    "id": "eslint",
+    "kind": "lint",
+    "argv": [
+      "npx",
+      "eslint"
+    ],
+    "pathMode": "per-file",
+    "extensions": [
+      ".ts",
+      ".tsx",
+      ".js",
+      ".jsx",
+      ".mjs",
+      ".cjs",
+      ".mts",
+      ".cts"
+    ],
+    "requires": {
+      "anyFile": [
+        "eslint.config.js",
+        "eslint.config.mjs",
+        ".eslintrc.json",
+        ".eslintrc.cjs"
+      ]
+    }
+  },
+  {
+    "id": "tsc",
+    "kind": "typecheck",
+    "argv": [
+      "npx",
+      "tsc",
+      "--noEmit"
+    ],
+    "pathMode": "whole-project",
+    "requires": {
+      "anyFile": [
+        "tsconfig.json"
+      ]
+    }
+  }
+]

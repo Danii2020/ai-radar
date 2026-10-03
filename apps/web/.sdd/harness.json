@@ -6,7 +6,7 @@
   "roles": [
     {
       "id": "sdd-architect",
-      "tier": "most-capable"
+      "tier": "mid"
     },
     {
       "id": "sdd-test-writer",
@@ -18,11 +18,11 @@
     },
     {
       "id": "sdd-auditor",
-      "tier": "most-capable"
+      "tier": "mid"
     },
     {
       "id": "sdd-documentation",
-      "tier": "cheapest"
+      "tier": "mid"
     }
   ],
   "gates": [

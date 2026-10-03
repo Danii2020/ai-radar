@@ -1,0 +1,9 @@
+#!/bin/sh
+# harny commit-checks: git pre-push hook. Tool-neutral: it runs for every agent and every
+# person who commits here. Installed by `harny init`; see README.md beside the
+# canonical copy in harny's templates/git-hooks/.
+command -v node >/dev/null 2>&1 || {
+  echo "harny commit-checks: node not found on PATH; pre-push checks skipped" >&2
+  exit 0
+}
+exec node "$(dirname "$0")/run-git-hook.mjs" pre-push "$@"

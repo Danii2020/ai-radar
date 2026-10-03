@@ -2,16 +2,16 @@
 name: harny-implement
 description: >-
   Implements a feature that has already been specified by harny-propose, following the
-  contract and roadmap exactly. Reads the spec files from specs/<feature-name>/,
-  implements the solution, checks off tasks as completed, and runs harny-standards
+  intent acceptance criteria and execution plan exactly. Reads the spec files from
+  specs/<feature-name>/, implements the solution, checks off outcomes as completed, and runs harny-standards
   before marking any task done. Must run AFTER a feature's specs exist. In the default
   TDD flow it runs after harny-test's red-phase tests exist, and its job is to make
   them pass without editing them. Use this to execute an approved SDD spec — invoked
   by the `sdd-executor` role, or directly by a human.
 license: MIT
 compatibility: >-
-  Requires the feature's full `specs/<feature-name>/` directory (all five files) and,
-  ideally, a `harny-standards` skill in the same skill set.
+  Requires the feature's full `specs/<feature-name>/` directory (`intent.md`,
+  `execution-plan.md`, `tasks.md`; `audit.md` appears after the first audit) and, ideally, a `harny-standards` skill in the same skill set.
 allowed-tools: Bash, Read, Write, Edit, Glob, WebFetch, WebSearch
 metadata:
   author: daniel
@@ -22,9 +22,9 @@ metadata:
 
 # harny-implement
 
-You are acting as an expert software engineer executing implementations from SDD
-(Specification-Driven Development) specifications. You do NOT design — you follow the
-spec precisely.
+You are an expert software engineer executing an approved SDD (Specification-Driven
+Development) spec. You do NOT design — you follow the spec precisely, and you prove
+each step with evidence.
 
 ## When to use this
 
@@ -34,72 +34,53 @@ spec precisely.
 
 ## Inputs
 
-Before writing ANY code, read all 5 spec files in `/specs/<feature-name>/`, in order:
-1. `intent.md` — understand the WHY.
-2. `contract.md` — understand the WHAT (this is your primary guide).
-3. `roadmap.md` — understand the HOW and ordering.
-4. `tasks.md` — your granular work list.
-5. `audit.md` — know what will be audited.
-
-If the user has not specified a feature name, ask for one.
-
-`CLAUDE.md` (repo root), if it exists, is the source of truth for this project's
-conventions. Rules that apply to every implementation:
-- **Reuse existing modules** instead of duplicating them; match the repo's existing
-  style.
-- **Use the project's own package manager and tooling** as observed in the codebase
-  (lockfile, config files) — never assume one.
-- If the feature touches a different stack than what you've seen elsewhere in the repo,
-  follow that stack's own conventions and package manager instead.
-- **Verify library APIs via Context7 (or the target tool's equivalent docs-lookup MCP)
-  before using them** — do not trust memory for library APIs.
+- The files in `specs/<feature-name>/`, in this order: `intent.md` (why, with the
+  acceptance criteria), `execution-plan.md` (binding constraints, approach and
+  § Validation — your primary guide), `tasks.md` (your work list and working state), and
+  `audit.md` once the auditor has written it. Ask for the feature name if none was
+  given. A feature dir holding `contract.md`/`roadmap.md` is legacy; read them in place
+  of `execution-plan.md`.
+- The current diff, including untracked files, and the latest `audit.md` findings if
+  this is a repair round.
+- The project's conventions doc (`CLAUDE.md`, `AGENTS.md`, or equivalent). Reuse
+  existing modules, match the existing style, and use the package manager and tooling
+  observed in the codebase (lockfile, config) — never assume one. Verify library APIs
+  via Context7 (or the tool's equivalent docs-lookup MCP) before using them.
 
 ## Steps
 
-1. **Validate prerequisites.** Check that all spec files exist and are non-empty;
-   verify that Phase 1 dependencies are satisfied (no external blockers); read the
-   existing codebase files listed in the roadmap's "File Change Map" to understand
-   current state.
-2. **Execute tasks phase by phase.** Follow the roadmap phases IN ORDER. For each
-   phase:
-   1. Read the tasks for that phase from `tasks.md`.
-   2. Implement each task one at a time.
-   3. After completing each task, update `tasks.md` to mark it done: change `- [ ]` to
-      `- [x]`, and add a brief completion note if relevant.
-   4. If a task is blocked, mark it `- [!]` with a reason and move to the next
-      unblocked task.
-3. **Progress reporting.** After completing each phase, provide a brief summary: tasks
-   completed in this phase; any deviations from the spec (with justification); any
-   blocked items; ready for next phase (yes/no).
-4. **Run the `harny-standards` skill before marking any task done**, and confirm the
-   change satisfies every standard that document marks as binding on implementation
-   work, per that skill's own procedure. **Also run the `harny-feedback` skill**
-   alongside it — unconditionally, since `harny-feedback` is a core skill and always
-   present — to consult and run this stack's mapped lint/type-check commands over the
-   files the task touched, and address any finding before moving on.
-5. **Final checklist**, after all phases are complete:
-   - All tasks in `tasks.md` are marked `[x]` or `[!]` with explanation.
-   - All interfaces from `contract.md` are implemented.
-   - All behavior guarantees from `contract.md` are honored.
-   - File Change Map from `roadmap.md` matches actual changes.
-   - No unspecified dependencies were added.
-   - The test suite passes via the project's own runner — including any pre-existing
-     red-phase tests for this feature.
-   - `harny-standards` was checked (this skill's own addition to the checklist).
-   - `harny-feedback` was checked (this skill's own addition to the checklist,
-     alongside `harny-standards`).
-   Update `tasks.md` with a completion timestamp at the bottom.
+1. **Prepare.** Confirm the spec files exist and are non-empty, and read the files the
+   execution plan names as owners. Check the branch and preserve unrelated edits; never
+   reset the tree. Before changing anything, run the project's tests and checks and
+   record the baseline failures in `tasks.md`, so you can tell yours from pre-existing
+   ones. If `tasks.md` already holds a working state, resume from it.
+2. **Execute the outcomes in `tasks.md` in order.** For each outcome: implement it, then
+   update `tasks.md` (`- [ ]` → `- [x]` with evidence: the command run, its result,
+   anything left; record an unavailable required check as unavailable, never as a
+   pass). Mark a blocked outcome `- [!]` with the reason and move on. Update the
+   working state after every outcome so a later call can resume. Never erase history or
+   weaken criteria. Answer each audit finding in `tasks.md` § Finding responses; never
+   write `audit.md`.
+3. **Before checking a task off**, run `harny-standards` (confirm the change satisfies every standard that document marks as binding on implementation work) and
+   `harny-feedback` (run this stack's mapped lint/type-check over the files the task
+   touched). Address every finding before moving on. Read their `SKILL.md` on demand.
+4. **Report after each outcome or group**: outcomes completed, deviations from the spec with
+   justification, blocked items, ready for the next phase.
+5. **Final checks.** All outcomes are `[x]` or `[!]` with an explanation; every AC and
+   binding constraint is met; the change matches the ownership in the execution plan; no unspecified dependency was added; existing consumers and their tests are
+   migrated and no test seam is left dead; the full suite passes via the project's own
+   runner, including the red-phase tests; and remaining failures match the baseline by
+   identity and cause. Add a completion timestamp to `tasks.md`.
 
 ## Guardrails
 
-- **Contract is law**: every interface in `contract.md` must be implemented exactly as
-  specified (function signatures, types, behavior guarantees).
-- **No scope creep**: do NOT implement anything not in the spec. If you identify
-  something missing, note it in `tasks.md` under "Notes" but do not implement it.
-- **Follow project conventions**: match the existing code style (imports, naming, error
-  handling patterns) you observe in the codebase.
-- **Error handling**: implement the error handling contract table exactly as specified.
-- **Dependencies**: only add external dependencies explicitly listed in `contract.md`.
-- **Make red tests pass without editing them.** If red-phase tests were written first
-  (TDD), your definition of done includes making them pass without editing them — test
-  bugs get reported, not silently rewritten.
+- **The intent ACs and execution-plan binding constraints are law**: meet every AC and
+  binding constraint as specified. The proposed approach is revisable if you record why.
+- **No scope creep.** If you see something missing, note it in `tasks.md` under "Notes";
+  do not implement it.
+- **Dependencies**: add only those the execution plan's binding constraints list.
+- **Red tests are not yours to edit.** Make them pass; report a test bug rather than
+  rewriting the test.
+- **Never weaken an assertion or skip a test to get a pass.** Fix the failures you
+  introduced; never assume a failure is pre-existing without the baseline to show it.
+- **Never write the audit or certify your own work.** The auditor does.

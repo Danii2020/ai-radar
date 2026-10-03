@@ -1,0 +1,403 @@
+{
+  "version": 1,
+  "git": {
+    "protectedBranches": [
+      "main",
+      "master",
+      "production",
+      "release/*"
+    ]
+  },
+  "read": {
+    "deny": [
+      ".env",
+      ".env.*",
+      "*.pem",
+      "*.key",
+      "secrets/**"
+    ],
+    "allow": [
+      ".env.example",
+      ".env.sample",
+      ".env.template"
+    ]
+  },
+  "commands": {
+    "deny": [
+      {
+        "pattern": "git push *--force*",
+        "reason": "a force push rewrites shared history; push without --force, or ask the human to do it"
+      },
+      {
+        "pattern": "git push -f",
+        "reason": "a force push rewrites shared history; push without --force, or ask the human to do it"
+      },
+      {
+        "pattern": "git push -f *",
+        "reason": "a force push rewrites shared history; push without --force, or ask the human to do it"
+      },
+      {
+        "pattern": "git push * -f",
+        "reason": "a force push rewrites shared history; push without --force, or ask the human to do it"
+      },
+      {
+        "pattern": "git push * -f *",
+        "reason": "a force push rewrites shared history; push without --force, or ask the human to do it"
+      },
+      {
+        "pattern": "git push * +*",
+        "reason": "a force push rewrites shared history; push without --force, or ask the human to do it"
+      },
+      {
+        "pattern": "git commit *--no-verify*",
+        "reason": "--no-verify skips the repository's git hooks; fix what the hook reports instead"
+      },
+      {
+        "pattern": "git commit -n",
+        "reason": "--no-verify skips the repository's git hooks; fix what the hook reports instead"
+      },
+      {
+        "pattern": "git commit -n *",
+        "reason": "--no-verify skips the repository's git hooks; fix what the hook reports instead"
+      },
+      {
+        "pattern": "git commit * -n",
+        "reason": "--no-verify skips the repository's git hooks; fix what the hook reports instead"
+      },
+      {
+        "pattern": "git commit * -n *",
+        "reason": "--no-verify skips the repository's git hooks; fix what the hook reports instead"
+      },
+      {
+        "pattern": "git push *--no-verify*",
+        "reason": "--no-verify skips the repository's git hooks; fix what the hook reports instead"
+      },
+      {
+        "pattern": "rm -rf*",
+        "reason": "recursive forced deletion is irreversible; delete specific paths, or ask the human to do it"
+      },
+      {
+        "pattern": "rm -fr*",
+        "reason": "recursive forced deletion is irreversible; delete specific paths, or ask the human to do it"
+      },
+      {
+        "pattern": "rm -Rf*",
+        "reason": "recursive forced deletion is irreversible; delete specific paths, or ask the human to do it"
+      },
+      {
+        "pattern": "rm -fR*",
+        "reason": "recursive forced deletion is irreversible; delete specific paths, or ask the human to do it"
+      },
+      {
+        "pattern": "rm -r -f*",
+        "reason": "recursive forced deletion is irreversible; delete specific paths, or ask the human to do it"
+      },
+      {
+        "pattern": "rm -f -r*",
+        "reason": "recursive forced deletion is irreversible; delete specific paths, or ask the human to do it"
+      },
+      {
+        "pattern": "rm -R -f*",
+        "reason": "recursive forced deletion is irreversible; delete specific paths, or ask the human to do it"
+      },
+      {
+        "pattern": "rm --recursive --force*",
+        "reason": "recursive forced deletion is irreversible; delete specific paths, or ask the human to do it"
+      },
+      {
+        "pattern": "rm --force --recursive*",
+        "reason": "recursive forced deletion is irreversible; delete specific paths, or ask the human to do it"
+      }
+    ],
+    "ask": [
+      {
+        "pattern": "vercel deploy*",
+        "reason": "deploys change a live environment; ask the human to run or approve it"
+      },
+      {
+        "pattern": "vercel --prod*",
+        "reason": "deploys change a live environment; ask the human to run or approve it"
+      },
+      {
+        "pattern": "netlify deploy*",
+        "reason": "deploys change a live environment; ask the human to run or approve it"
+      },
+      {
+        "pattern": "fly deploy*",
+        "reason": "deploys change a live environment; ask the human to run or approve it"
+      },
+      {
+        "pattern": "flyctl deploy*",
+        "reason": "deploys change a live environment; ask the human to run or approve it"
+      },
+      {
+        "pattern": "firebase deploy*",
+        "reason": "deploys change a live environment; ask the human to run or approve it"
+      },
+      {
+        "pattern": "serverless deploy*",
+        "reason": "deploys change a live environment; ask the human to run or approve it"
+      },
+      {
+        "pattern": "sls deploy*",
+        "reason": "deploys change a live environment; ask the human to run or approve it"
+      },
+      {
+        "pattern": "cdk deploy*",
+        "reason": "deploys change a live environment; ask the human to run or approve it"
+      },
+      {
+        "pattern": "npx cdk deploy*",
+        "reason": "deploys change a live environment; ask the human to run or approve it"
+      },
+      {
+        "pattern": "terraform apply*",
+        "reason": "deploys change a live environment; ask the human to run or approve it"
+      },
+      {
+        "pattern": "terraform destroy*",
+        "reason": "deploys change a live environment; ask the human to run or approve it"
+      },
+      {
+        "pattern": "kubectl apply*",
+        "reason": "deploys change a live environment; ask the human to run or approve it"
+      },
+      {
+        "pattern": "kubectl delete*",
+        "reason": "deploys change a live environment; ask the human to run or approve it"
+      },
+      {
+        "pattern": "helm install*",
+        "reason": "deploys change a live environment; ask the human to run or approve it"
+      },
+      {
+        "pattern": "helm upgrade*",
+        "reason": "deploys change a live environment; ask the human to run or approve it"
+      },
+      {
+        "pattern": "helm uninstall*",
+        "reason": "deploys change a live environment; ask the human to run or approve it"
+      },
+      {
+        "pattern": "npm publish*",
+        "reason": "deploys change a live environment; ask the human to run or approve it"
+      },
+      {
+        "pattern": "pnpm publish*",
+        "reason": "deploys change a live environment; ask the human to run or approve it"
+      },
+      {
+        "pattern": "yarn publish*",
+        "reason": "deploys change a live environment; ask the human to run or approve it"
+      },
+      {
+        "pattern": "gh pr merge*",
+        "reason": "deploys change a live environment; ask the human to run or approve it"
+      },
+      {
+        "pattern": "prisma migrate *",
+        "reason": "database migrations and resets can destroy data; ask the human to run or approve it"
+      },
+      {
+        "pattern": "npx prisma migrate *",
+        "reason": "database migrations and resets can destroy data; ask the human to run or approve it"
+      },
+      {
+        "pattern": "prisma db push*",
+        "reason": "database migrations and resets can destroy data; ask the human to run or approve it"
+      },
+      {
+        "pattern": "npx prisma db push*",
+        "reason": "database migrations and resets can destroy data; ask the human to run or approve it"
+      },
+      {
+        "pattern": "prisma db execute*",
+        "reason": "database migrations and resets can destroy data; ask the human to run or approve it"
+      },
+      {
+        "pattern": "npx prisma db execute*",
+        "reason": "database migrations and resets can destroy data; ask the human to run or approve it"
+      },
+      {
+        "pattern": "drizzle-kit push*",
+        "reason": "database migrations and resets can destroy data; ask the human to run or approve it"
+      },
+      {
+        "pattern": "npx drizzle-kit push*",
+        "reason": "database migrations and resets can destroy data; ask the human to run or approve it"
+      },
+      {
+        "pattern": "drizzle-kit migrate*",
+        "reason": "database migrations and resets can destroy data; ask the human to run or approve it"
+      },
+      {
+        "pattern": "npx drizzle-kit migrate*",
+        "reason": "database migrations and resets can destroy data; ask the human to run or approve it"
+      },
+      {
+        "pattern": "knex migrate:*",
+        "reason": "database migrations and resets can destroy data; ask the human to run or approve it"
+      },
+      {
+        "pattern": "npx knex migrate:*",
+        "reason": "database migrations and resets can destroy data; ask the human to run or approve it"
+      },
+      {
+        "pattern": "sequelize db:*",
+        "reason": "database migrations and resets can destroy data; ask the human to run or approve it"
+      },
+      {
+        "pattern": "npx sequelize db:*",
+        "reason": "database migrations and resets can destroy data; ask the human to run or approve it"
+      },
+      {
+        "pattern": "npx sequelize-cli db:*",
+        "reason": "database migrations and resets can destroy data; ask the human to run or approve it"
+      },
+      {
+        "pattern": "rails db:*",
+        "reason": "database migrations and resets can destroy data; ask the human to run or approve it"
+      },
+      {
+        "pattern": "bin/rails db:*",
+        "reason": "database migrations and resets can destroy data; ask the human to run or approve it"
+      },
+      {
+        "pattern": "rake db:*",
+        "reason": "database migrations and resets can destroy data; ask the human to run or approve it"
+      },
+      {
+        "pattern": "python manage.py migrate*",
+        "reason": "database migrations and resets can destroy data; ask the human to run or approve it"
+      },
+      {
+        "pattern": "python manage.py flush*",
+        "reason": "database migrations and resets can destroy data; ask the human to run or approve it"
+      },
+      {
+        "pattern": "alembic upgrade*",
+        "reason": "database migrations and resets can destroy data; ask the human to run or approve it"
+      },
+      {
+        "pattern": "alembic downgrade*",
+        "reason": "database migrations and resets can destroy data; ask the human to run or approve it"
+      },
+      {
+        "pattern": "supabase db reset*",
+        "reason": "database migrations and resets can destroy data; ask the human to run or approve it"
+      },
+      {
+        "pattern": "supabase db push*",
+        "reason": "database migrations and resets can destroy data; ask the human to run or approve it"
+      },
+      {
+        "pattern": "dropdb *",
+        "reason": "database migrations and resets can destroy data; ask the human to run or approve it"
+      },
+      {
+        "pattern": "sh",
+        "reason": "piping a downloaded script into a shell runs unreviewed code; download it, review it, then run it"
+      },
+      {
+        "pattern": "bash",
+        "reason": "piping a downloaded script into a shell runs unreviewed code; download it, review it, then run it"
+      },
+      {
+        "pattern": "zsh",
+        "reason": "piping a downloaded script into a shell runs unreviewed code; download it, review it, then run it"
+      },
+      {
+        "pattern": "dash",
+        "reason": "piping a downloaded script into a shell runs unreviewed code; download it, review it, then run it"
+      },
+      {
+        "pattern": "sh -s*",
+        "reason": "piping a downloaded script into a shell runs unreviewed code; download it, review it, then run it"
+      },
+      {
+        "pattern": "bash -s*",
+        "reason": "piping a downloaded script into a shell runs unreviewed code; download it, review it, then run it"
+      },
+      {
+        "pattern": "npm install *",
+        "reason": "adding a dependency changes the supply chain; confirm the package with the human first"
+      },
+      {
+        "pattern": "npm i *",
+        "reason": "adding a dependency changes the supply chain; confirm the package with the human first"
+      },
+      {
+        "pattern": "npm add *",
+        "reason": "adding a dependency changes the supply chain; confirm the package with the human first"
+      },
+      {
+        "pattern": "pnpm add *",
+        "reason": "adding a dependency changes the supply chain; confirm the package with the human first"
+      },
+      {
+        "pattern": "yarn add *",
+        "reason": "adding a dependency changes the supply chain; confirm the package with the human first"
+      },
+      {
+        "pattern": "bun add *",
+        "reason": "adding a dependency changes the supply chain; confirm the package with the human first"
+      },
+      {
+        "pattern": "pip install *",
+        "reason": "adding a dependency changes the supply chain; confirm the package with the human first"
+      },
+      {
+        "pattern": "pip3 install *",
+        "reason": "adding a dependency changes the supply chain; confirm the package with the human first"
+      },
+      {
+        "pattern": "python -m pip install *",
+        "reason": "adding a dependency changes the supply chain; confirm the package with the human first"
+      },
+      {
+        "pattern": "uv add *",
+        "reason": "adding a dependency changes the supply chain; confirm the package with the human first"
+      },
+      {
+        "pattern": "uv pip install *",
+        "reason": "adding a dependency changes the supply chain; confirm the package with the human first"
+      },
+      {
+        "pattern": "poetry add *",
+        "reason": "adding a dependency changes the supply chain; confirm the package with the human first"
+      },
+      {
+        "pattern": "cargo add *",
+        "reason": "adding a dependency changes the supply chain; confirm the package with the human first"
+      },
+      {
+        "pattern": "cargo install *",
+        "reason": "adding a dependency changes the supply chain; confirm the package with the human first"
+      },
+      {
+        "pattern": "go get *",
+        "reason": "adding a dependency changes the supply chain; confirm the package with the human first"
+      },
+      {
+        "pattern": "go install *",
+        "reason": "adding a dependency changes the supply chain; confirm the package with the human first"
+      },
+      {
+        "pattern": "gem install *",
+        "reason": "adding a dependency changes the supply chain; confirm the package with the human first"
+      },
+      {
+        "pattern": "brew install *",
+        "reason": "adding a dependency changes the supply chain; confirm the package with the human first"
+      },
+      {
+        "pattern": "apt install *",
+        "reason": "adding a dependency changes the supply chain; confirm the package with the human first"
+      },
+      {
+        "pattern": "apt-get install *",
+        "reason": "adding a dependency changes the supply chain; confirm the package with the human first"
+      }
+    ]
+  }
+}
