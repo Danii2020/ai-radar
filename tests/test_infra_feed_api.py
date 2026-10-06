@@ -11,7 +11,7 @@ built by the CDK CLI at deploy time, not during `Template.from_stack`) —
 template in-process, matching `tests/test_infra_agent_runtime.py`'s
 precedent.
 
-The pinned account (536697225154) and region (us-east-1) match the
+The pinned account (626259825216) and region (us-east-1) match the
 already-deployed `ai-radar-cards` table (AD-6) — a change to either is a
 deploy-time decision that must update this file and `infra/lib/feed_api.py`
 together.
@@ -37,7 +37,7 @@ from aws_cdk.assertions import Match, Template
 from lib.feed_api import DEFAULT_ALLOWED_ORIGINS, FeedApi
 from stacks.feed_api_stack import FeedApiStack
 
-ACCOUNT = "536697225154"
+ACCOUNT = "626259825216"
 REGION = "us-east-1"
 CARD_TABLE_NAME = "ai-radar-cards"
 FEED_GSI_NAME = "feed-by-score"

@@ -8,6 +8,15 @@ a version number. Each entry links to its archived SDD spec
 
 ## [Unreleased]
 
+### Changed
+- Backend redeployed into AWS account `626259825216` (all six stacks and the
+  `ai_radar_curation` agent, smoke-verified). The pinned `account` default in
+  `infra/lib/agent_runtime.py` and `infra/lib/feed_api.py`, and the matching
+  assertions in `tests/test_infra_agent_runtime.py` and
+  `tests/test_infra_feed_api.py`, moved from `536697225154` to `626259825216`.
+- `apps/web/.env.example` and the README runbook now point at the new feed API
+  URL. See README "Account migration (2026-10-05)".
+
 Nothing pending beyond `apps/web/specs/archived/web-feed-ui/` (Phase 2 spec 02, the Next.js
 frontend — still in progress, not yet archived).
 

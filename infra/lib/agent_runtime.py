@@ -41,7 +41,7 @@ class AgentRuntime(Construct):
     by name (already deployed by CardStoreStack, RETAINed) — never recreated.
 
     The permission-policy resource ARNs (Bedrock/DynamoDB/Secrets/Logs/ECR) use
-    the LITERAL pinned account (536697225154) + source region (us-east-1) per
+    the LITERAL pinned account (626259825216) + source region (us-east-1) per
     contract.md — the referenced `ai-radar-cards` table lives in a separate
     stack with no cross-stack export, so there is nothing to token-reference.
     Only the trust-policy condition uses `Aws.ACCOUNT_ID`/`Aws.REGION` tokens
@@ -53,7 +53,7 @@ class AgentRuntime(Construct):
         scope: Construct,
         construct_id: str,
         *,
-        account: str = "536697225154",
+        account: str = "626259825216",
         region: str = "us-east-1",
         card_table_name: str = "ai-radar-cards",
         feed_gsi_name: str = "feed-by-score",

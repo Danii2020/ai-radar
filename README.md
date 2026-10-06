@@ -432,7 +432,7 @@ still applies**: null `aws.execution_role` in `.bedrock_agentcore.yaml` before
 `agentcore destroy`, or it deletes the CDK-owned execution role out from under
 `AiRadarRuntimeRole`.
 
-**Current live AWS state (as of 2026-08-30):** four CDK stacks are deployed
+**Previous live AWS state (account `536697225154`, as of 2026-08-30 — superseded by "Account migration (2026-10-05)" below):** four CDK stacks are deployed
 and **not** torn down — `AiRadarCardStore`, `AiRadarRuntimeRole`,
 `AiRadarSchedule`, and `AiRadarBudget`. The `runtime-packaging` agent
 (`ai_radar_curation`, runtime ID `ai_radar_curation-sIf5Dw979w`) is running
@@ -648,12 +648,12 @@ closed by the 2026-09-03 deploy + 2026-09-04 live-curl verification below):
 > only real check is building the image and importing inside it.
 
 **Live deploy + curl verification (2026-09-03, `AiRadarFeedApi` stack,
-`CREATE_COMPLETE`).** Deployed outside this conversation (no commit records
+`CREATE_COMPLETE`, original account `536697225154`).** Deployed outside this conversation (no commit records
 the `cdk deploy` itself — confirmed against real AWS on 2026-09-04 via
 `aws cloudformation describe-stacks` and re-verified live with fresh curls
 before starting `web-feed-ui`):
 
-- **Stack outputs**: `FeedApiUrl = https://fdcksuokyh.execute-api.us-east-1.amazonaws.com`,
+- **Stack outputs** (original account; the migrated account's URL is under "Account migration"): `FeedApiUrl = https://fdcksuokyh.execute-api.us-east-1.amazonaws.com`,
   `FeedApiFunctionName = ai-radar-feed-api`,
   `FeedApiLogGroupName = /aws/lambda/ai-radar-feed-api`,
   `FeedApiAllowedOrigins = http://localhost:3000` (still the pre-Vercel
@@ -854,7 +854,7 @@ produce. Record the real values here (and in
    - Framework preset: Next.js (auto-detected); build/install commands: leave
      as detected (`next build` / `npm install`).
    - Environment Variables → Production (and Preview, if wanted):
-     `FEED_API_BASE_URL = https://fdcksuokyh.execute-api.us-east-1.amazonaws.com`
+     `FEED_API_BASE_URL = https://25p45q6m6f.execute-api.us-east-1.amazonaws.com`
      — **no** `NEXT_PUBLIC_` prefix (server-only by design, AD-4).
    - Deploy. Record the production URL: `https://<project>.vercel.app`.
    - CLI alternative: `npm i -g vercel && vercel link && vercel env add
@@ -881,7 +881,7 @@ produce. Record the real values here (and in
    no `-c` override.)
 4. **Verify CORS by curl, both halves:**
    ```bash
-   API=https://fdcksuokyh.execute-api.us-east-1.amazonaws.com
+   API=https://25p45q6m6f.execute-api.us-east-1.amazonaws.com
    curl -si -H "Origin: https://<project>.vercel.app" "$API/v1/cards?limit=1" \
      | grep -i access-control-allow-origin      # EXPECT: the Vercel origin
    curl -si -H "Origin: https://evil.example.com" "$API/v1/cards?limit=1" \
@@ -896,6 +896,52 @@ produce. Record the real values here (and in
 (free tier, no AWS resource involved); revert `feed-api`'s CORS allow-list to
 `http://localhost:3000` with the same `cdk deploy -c feed_api_allowed_origins=...`
 pattern above.
+
+## Account migration (2026-10-05)
+
+The whole backend was redeployed into a second AWS account, **`626259825216`**
+(IAM user `daniele`, `us-east-1`), from scratch — no data was migrated, so
+`ai-radar-cards` started empty. This is the **current live state**; the
+original account (`536697225154`) is no longer the deploy target.
+
+**Deployed and verified (2026-10-05/06):** `CDKToolkit` (bootstrap) plus
+`AiRadarCardStore`, `AiRadarRuntimeRole`, `AiRadarSchedule` (`DISABLED`),
+`AiRadarBudget` and `AiRadarFeedApi`, and the `ai_radar_curation` agent runtime
+(`ai_radar_curation-FW1w976PCI`, `READY`; its ARN is in SSM
+`/ai-radar/agent-runtime-arn`). A smoke `agentcore invoke '{}'` acked
+immediately and the `curation_run_complete` record showed `discovered: 30`,
+`persisted: 8` in 26.9s; the table went 0 → 8. `GET /v1/cards` returned those
+cards, an out-of-range `limit` returned 400, and CORS allowed only
+`http://localhost:3000`. New feed API URL: `https://25p45q6m6f.execute-api.us-east-1.amazonaws.com`.
+
+**What had to change for a new account**
+
+- **The account is pinned as a literal in code.** `infra/lib/agent_runtime.py`
+  and `infra/lib/feed_api.py` default `account=` to `626259825216` (and their
+  tests assert it). Redeploying to yet another account means changing both
+  files and `tests/test_infra_agent_runtime.py` / `tests/test_infra_feed_api.py`;
+  forgetting is silent — CDK builds IAM policies pointing at the other account's
+  resources and the failure only shows up as `AccessDenied` at runtime. Run
+  `cdk diff` and grep it for the old account ID before deploying.
+- **Regenerate `.bedrock_agentcore.yaml`** (gitignored, holds the old account's
+  role, ECR and agent ARN): move it and `.bedrock_agentcore/` aside, then
+  `agentcore configure --create ... -er <ExecutionRoleArn>` as in the runbook.
+- **Lambda concurrency quota is 10** in this account, same as the original, so
+  `AiRadarFeedApi` fails with "decreases account's UnreservedConcurrentExecution
+  below its minimum value of [10]". Deploy it with
+  `-c feed_api_reserved_concurrency=none` (every time, until the quota is
+  raised). API Gateway throttling (20 rps / burst 40) still applies. A failed
+  first create leaves a `ROLLBACK_COMPLETE` stack that must be deleted before
+  retrying.
+- **Budget limit is $500** here, set with `-c budget_limit_usd=500` (the code
+  default is still $250); a later deploy without the flag reverts it. Thresholds
+  stay at $50/$100/$250. The SNS email subscription must be confirmed by hand.
+- The Tavily key is seeded manually with `aws secretsmanager put-secret-value`
+  (never via CDK or the image).
+
+**Still open:** point `apps/web`'s `FEED_API_BASE_URL` (Vercel env var) and the
+feed API's CORS allow-list at the new deployment; tear down or leave the old
+account's stacks as you see fit (note the `agentcore destroy` role gotcha above).
 
 ## Phase 0 spike (reference baseline)
 

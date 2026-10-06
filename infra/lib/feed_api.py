@@ -69,7 +69,7 @@ class FeedApi(Construct):
         scope: Construct,
         construct_id: str,
         *,
-        account: str = "536697225154",
+        account: str = "626259825216",
         region: str = "us-east-1",
         card_table_name: str = CARD_TABLE_NAME,
         feed_gsi_name: str = FEED_GSI_NAME,
