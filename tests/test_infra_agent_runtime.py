@@ -10,7 +10,7 @@ Synth-only: no `cdk deploy`, no AWS credentials, no network - `aws_cdk.
 assertions.Template` inspects the synthesized CloudFormation template
 in-process, matching tests/test_infra.py's precedent (Spec 03).
 
-The pinned account (536697225154), source region (us-east-1), Haiku profile
+The pinned account (626259825216), source region (us-east-1), Haiku profile
 id, table/GSI names, and secret name are LOCKED per contract.md; a change to
 any of them is a data-plane decision that must update this file and
 infra/lib/agent_runtime.py together (see tasks.md "Region drift" note).
@@ -42,7 +42,7 @@ from stacks.agent_runtime_stack import AgentRuntimeStack
 # the cross-boundary equality check below (F10 regression).
 from curation.config import TAVILY_SECRET_UNSET_SENTINEL as _APP_TAVILY_SECRET_UNSET_SENTINEL
 
-ACCOUNT = "536697225154"
+ACCOUNT = "626259825216"
 REGION = "us-east-1"
 
 

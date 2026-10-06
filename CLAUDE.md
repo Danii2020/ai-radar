@@ -24,6 +24,16 @@ default vector backing (~$700/mo); it would burn the budget in under a month.
 
 Both write to `.ai_radar_cache/` (gitignored): `cards.json`, `seen.json`, `embeddings.json`.
 
+**Account migration (2026-10-05):** the whole backend was redeployed into AWS account
+`626259825216` (all six CDK stacks + the agent, smoke-verified). Anything below that says
+"still deployed" or cites the old account `536697225154` describes the original
+account; the live state is in the "Account migration" section of
+[`README.md`](README.md). The account is pinned as a literal in
+`infra/lib/agent_runtime.py` and `infra/lib/feed_api.py` (change both plus their
+tests when moving accounts), `AiRadarFeedApi` must be deployed with
+`-c feed_api_reserved_concurrency=none` (Lambda quota is 10), and the budget
+limit is `-c budget_limit_usd=500`.
+
 **Phase 1 (curation MVP) is complete** — all 6 planned specs shipped:
 `curation-graph`, `tavily-discovery`, `dynamodb-card-store`,
 `runtime-packaging` (LangGraph pipeline on AgentCore Runtime),
@@ -119,7 +129,7 @@ docs/                   # design + research + architecture principles
 
 ## AWS / Bedrock — verified facts
 
-- Region **us-east-1**; credentials in `~/.aws` (account `536697225154`, IAM user `daniele`).
+- Region **us-east-1**; credentials in `~/.aws` (account `626259825216` since the 2026-10-05 migration, IAM user `daniele`; the old account was `536697225154`).
   A `.env` can override region/models and is also how deploys will get creds.
 - **Use cross-region inference profiles** (`us.` / `global.` prefix), not bare model
   IDs — bare Anthropic 4.x IDs are not on-demand invocable.
