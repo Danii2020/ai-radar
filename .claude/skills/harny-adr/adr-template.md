@@ -4,7 +4,7 @@
 - **Date**: <YYYY-MM-DD>
 - **Feature**: <feature-name>
 - **Capability**: <capability-id>
-- **Source**: contract.md § <section> | roadmap.md Phase <n>
+- **Source**: execution-plan.md § <section>
 - **Trigger**: <which of the four significance criteria (a)-(d) this meets>
 
 ## Context

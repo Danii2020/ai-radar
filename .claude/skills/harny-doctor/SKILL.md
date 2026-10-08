@@ -10,11 +10,10 @@ description: >-
   before-marking-a-task-done trigger belong to harny-feedback and are never duplicated
   here — this skill owns session-start and pre-spec-work readiness only. Also
   assesses whether this repo carries the documentation an agent needs (purpose,
-  components, validation commands) — at the repo root, and per independently-built
-  component (e.g. a monorepo's frontend/backend/infra, each with its own manifest) —
-  states a ready/not-ready verdict, and, only after the caller says yes, hands off
-  drafting any gap to harny-document. Also usable directly by a human who wants to
-  confirm a repository is ready for SDD work before handing it to an agent.
+  components, validation commands), states a ready/not-ready verdict, and, only
+  after the caller says yes, hands off drafting any gap to harny-document. Also
+  usable directly by a human who wants to confirm a repository is ready for SDD
+  work before handing it to an agent.
 license: MIT
 compatibility: >-
   Requires a scaffolded readiness runner and checks data to exist in the target
@@ -56,8 +55,6 @@ test suite, or a shipped-but-unarchived feature several turns into a session.
   defined, non-fatal outcome for a repo this tool never scaffolded, not an error.
 - **Read by the check itself, not by this skill directly**: `specs/`, the project's
   conventions document, and the resolved stack's full test-suite command.
-- **Discovered by this skill's own judgment, not the runner**: any component
-  directories (see step 4) and their own conventions docs, if present.
 
 ## Steps
 
@@ -79,39 +76,23 @@ test suite, or a shipped-but-unarchived feature several turns into a session.
    its instructions — and **recommended** for the README and the architecture
    document. This is presence-vs-coherence: the runner already asserted presence; this
    step is the judgement a deterministic check cannot make.
-4. **Assess per-component documentation, when the repo has more than one component.**
-   A "component" here means a directory that is independently built or deployed — it
-   carries its own manifest (`package.json`, `pyproject.toml`, `cdk.json`, `go.mod`,
-   `Cargo.toml`, or equivalent) distinct from the repo root's, the way a monorepo's
-   `frontend/`, `backend/`, or `infra/` each would. A repo with only the root manifest
-   has nothing to check here — skip this step silently, it is not a gap.
-   For each detected component, check for a component-scoped conventions doc
-   (`<component>/AGENTS.md` or `<component>/CLAUDE.md`) and, if present, judge it
-   against the same three elements as step 3 — purpose (of this component, within the
-   larger project), components (this component's own internal structure), validation
-   (this component's own test/lint/build commands) — scoped to that component, not
-   restating the root doc's monorepo-wide content. Treat this as **recommended**, not
-   must-have: a growing multi-component repo benefits from it, but a single root doc
-   can still be coherent on its own. Report gaps by component and by missing element,
-   the same way step 3 reports them by document.
-5. **Report a readiness verdict, then ask.** State "ready for SDD work" or "not ready
+4. **Report a readiness verdict, then ask.** State "ready for SDD work" or "not ready
    for SDD work": not ready when the runner failed any must-have entry, or when the
    conventions document is missing any coherence element. Then name the specific files
-   (root-level from step 3, component-scoped from step 4) and the specific missing
-   elements, and **ask the caller whether to delegate drafting to `harny-document`**
-   — one document at a time is fine, but name every gap found so the caller can choose
-   which to act on. Invoke `harny-document` only after an explicit yes, passing it the
-   exact target (root-level or `<component>/AGENTS.md`) for each gap it's asked to
-   fill.
-6. Act on what it reports:
+   and the specific missing elements and **ask the caller whether to delegate drafting
+   to `harny-document`**. Invoke `harny-document` only after an explicit yes.
+5. Act on what it reports:
    - A **failed** check is addressed before spec work begins.
    - A **warned** check is named with its remediation but never blocks — recommended,
-     not must-have.
+     not must-have. Every entry in the **security** family is recommended: report its
+     warnings (for example, `.env` not git-ignored, commit-check hooks not active,
+     no local secret scanner) so the caller can decide, and never treat one as a
+     failure.
    - A **skipped** check is reported as coverage that could not be evaluated here
      (e.g. an absent tool), never treated as a pass.
    - A clean report (every check `ok`, `skip`, or `warn`) means the harness is ready;
      proceed.
-7. Report back which checks failed, warned, or were skipped, so the caller's own
+6. Report back which checks failed, warned, or were skipped, so the caller's own
    checklist or audit trail can cite it.
 
 ## Guardrails
@@ -137,10 +118,3 @@ test suite, or a shipped-but-unarchived feature several turns into a session.
   per-turn and before-marking-a-task-done triggers; `harny-audit` owns mapping any
   finding onto its own severity buckets; `harny-sync` owns archive mode. None of
   their commands or definitions are restated here.
-- **Component detection stays shallow and excludes dependency/build output.** Look
-  at top-level and one-level-deep directories only (e.g. `frontend/`, `apps/*`,
-  `packages/*`), and skip anything under a dependency or build-output directory
-  (`node_modules/`, `.venv/`, `dist/`, `build/`, `cdk.out/`, vendored code, or
-  similar) — a manifest nested inside one of those is not a component of this
-  project. When in doubt whether something is a real component, name it as an
-  open question in the report rather than silently deciding either way.

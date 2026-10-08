@@ -1,47 +1,50 @@
 # Spec Schema: audit.md
 
-> Standalone template for the compliance-tracking file of the 5-file SDD spec
-> schema. Rows are seeded PENDING; the role that audits a feature (e.g. an
-> auditor-style role) fills in status and verification after implementation.
+> Standalone template for the audit file of the SDD spec schema. Only the
+> auditor creates and writes it, on the first audit round; the architect never
+> writes it. Every item cites an AC or a binding constraint. Label each piece of
+> evidence `rerun`, `reused` or `unavailable`.
 
 ## Template
 
 ```markdown
 # Audit: <Feature Name>
 
-## Requirements Checklist
-| ID | Requirement | Source | Status | Notes |
-|---|---|---|---|---|
-| R1 | [requirement from intent] | intent.md | PENDING | |
-| R2 | [requirement from intent] | intent.md | PENDING | |
+## AC results
+| AC | Status | Evidence |
+|---|---|---|
+| AC1 | PASS / FAIL / PARTIAL | [evidence] (rerun / reused / unavailable) |
 
-## Contract Compliance
-| ID | Contract Item | Status | Verified By |
+## Binding-constraint compliance
+| Constraint | Status | Evidence |
+|---|---|---|
+| [from execution-plan.md] | PASS / FAIL | [evidence] |
+
+## Test coverage
+| AC | Test | Status |
+|---|---|---|
+| AC1 | [test and file] | [status] |
+
+### Tier Results
+Check against `execution-plan.md` § Validation: tiers and setup it names, a
+named tier with no tests, a test at a tier it does not name.
+
+| Tier | Status | Evidence |
+|---|---|---|
+| unit | [status] | [evidence] |
+
+## Findings
+| Id | Severity | Closure condition | Status |
 |---|---|---|---|
-| C1 | [interface/guarantee from contract] | PENDING | |
-| C2 | [interface/guarantee from contract] | PENDING | |
+| F1 | Critical / Major / Minor | [what closes it] | Open / Closed |
 
-## Test Coverage
-| ID | Test Description | Status | Test File |
+## Audit log
+| Round | Date | Verdict | Notes |
 |---|---|---|---|
-| T1 | [test description] | PENDING | |
-| T2 | [test description] | PENDING | |
+| 1 | [date] | [verdict] | |
 
-## Audit Log
-| Date | Auditor | Finding | Severity | Resolution |
-|---|---|---|---|---|
-| | | | | |
+## Final verdict
+APPROVED | APPROVED WITH RESERVATIONS | REJECTED
 
-## Final Verdict
-_(to be completed by the auditing role)_
-
-**Status**: PENDING
-
-**Summary**:
-
-**Critical Issues** (must fix before merge):
-
-**Warnings** (should fix, not blocking):
-
-**Recommendations** (nice to have):
+[Summary.]
 ```
