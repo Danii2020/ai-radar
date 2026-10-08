@@ -5,7 +5,7 @@ import hashlib
 import html
 import re
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date
 
 import feedparser
 
@@ -25,7 +25,7 @@ def _published(entry) -> str:
     )
     if not parsed:
         return ""
-    return datetime(*parsed[:6], tzinfo=timezone.utc).date().isoformat()
+    return date(*parsed[:3]).isoformat()
 
 
 @dataclass

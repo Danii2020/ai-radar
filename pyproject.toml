@@ -34,3 +34,16 @@ infra = [
     "aws-cdk-lib>=2.261.0",
     "constructs>=10.7.1",
 ]
+
+[tool.mypy]
+# `src/` and `infra/` are import roots (entrypoints add `src/` to sys.path; CDK
+# adds `infra/`), so mypy needs them too or every cross-package import is unresolved.
+mypy_path = ["src", "infra"]
+explicit_package_bases = true
+exclude = ['(^|/)cdk\.out/']
+plugins = ["pydantic.mypy"]
+
+# These ship no type stubs / py.typed marker.
+[[tool.mypy.overrides]]
+module = ["boto3.*", "feedparser.*", "tavily.*"]
+ignore_missing_imports = true

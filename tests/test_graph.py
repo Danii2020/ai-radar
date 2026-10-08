@@ -29,10 +29,9 @@ import logging
 
 from langgraph.graph import END, START
 
-from shared.cards import Card
-
 import curation.nodes as nodes_module
 from curation.graph import build_graph
+from shared.cards import Card
 
 
 class FakeDiscoverer:

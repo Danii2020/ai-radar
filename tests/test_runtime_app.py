@@ -63,6 +63,7 @@ import sys
 import threading
 from dataclasses import dataclass
 from pathlib import Path
+from typing import ClassVar
 
 # runtime_app.py lives at the REPO ROOT (sibling to run_curation.py), not under
 # src/ - tests/conftest.py only puts src/ on sys.path, so add the repo root too
@@ -71,11 +72,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import boto3
 import pytest
+from bedrock_agentcore import PingStatus
 
 import curation.config as curation_config
-
 import runtime_app
-from bedrock_agentcore import PingStatus
 
 CURATION_LOGGER_NAME = "bedrock_agentcore.app.curation"
 
@@ -188,7 +188,7 @@ def _make_recording_tavily_discoverer_class():
     injected BEFORE `from_config()` ran (contract's ordering guarantee)."""
 
     class _FakeTavilyDiscoverer:
-        from_config_calls: list[str] = []
+        from_config_calls: ClassVar[list[str]] = []
 
         def discover(self):
             return []
@@ -1104,7 +1104,7 @@ def test_curation_run_complete_tavily_enabled_is_false_when_secret_holds_the_uns
     monkeypatch.setattr(runtime_app, "build_graph", _fake_build_graph(final_state, invoke_calls))
 
     with caplog.at_level(logging.INFO, logger=CURATION_LOGGER_NAME):
-        result = _call_handler(loop, {})
+        _call_handler(loop, {})
         _drain(loop)
 
     payload, _ = _find_json_log_record(caplog, "curation_run_complete")

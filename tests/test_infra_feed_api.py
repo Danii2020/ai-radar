@@ -33,7 +33,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "infra"))
 
 import aws_cdk as cdk
 from aws_cdk.assertions import Match, Template
-
 from lib.feed_api import DEFAULT_ALLOWED_ORIGINS, FeedApi
 from stacks.feed_api_stack import FeedApiStack
 

@@ -25,7 +25,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "infra"))
 
 import aws_cdk as cdk
 from aws_cdk.assertions import Match, Template
-
 from lib.cost_budget import DEFAULT_NOTIFICATION_EMAIL
 from stacks.cost_budget_stack import CostBudgetStack
 

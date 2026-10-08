@@ -32,7 +32,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "infra"))
 
 import aws_cdk as cdk
 from aws_cdk.assertions import Match, Template
-
 from lib.agent_runtime import TAVILY_SECRET_UNSET_SENTINEL
 from stacks.agent_runtime_stack import AgentRuntimeStack
 
@@ -40,7 +39,9 @@ from stacks.agent_runtime_stack import AgentRuntimeStack
 # and the infra/ insertion above coexists fine in the same test process - so
 # the app-side sentinel (src/curation/config.py) is importable here too, for
 # the cross-boundary equality check below (F10 regression).
-from curation.config import TAVILY_SECRET_UNSET_SENTINEL as _APP_TAVILY_SECRET_UNSET_SENTINEL
+from curation.config import (
+    TAVILY_SECRET_UNSET_SENTINEL as _APP_TAVILY_SECRET_UNSET_SENTINEL,
+)
 
 ACCOUNT = "626259825216"
 REGION = "us-east-1"

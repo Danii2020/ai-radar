@@ -30,7 +30,7 @@ class CompositeDiscoverer:
         for source in self.sources:
             try:
                 items = source.discover()
-            except Exception as exc:  # per-source failure: log, count, continue
+            except Exception as exc:  # noqa: BLE001 - per-source failure: log, count, continue
                 print(f"! discoverer failed: {exc}")
                 self._failures += 1
                 items = []

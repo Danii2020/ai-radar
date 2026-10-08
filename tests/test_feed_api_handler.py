@@ -36,10 +36,9 @@ import logging
 
 import pytest
 
-from contracts.card import FeedResponse
-
 import api.handler as handler_module
 from api.handler import handler
+from contracts.card import FeedResponse
 
 
 class _PoisonedTable:

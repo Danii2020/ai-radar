@@ -21,7 +21,7 @@ class Card:
     takeaways: list[str] = field(default_factory=list)
 
     @classmethod
-    def from_model(cls, raw_item, model_out: dict) -> "Card":
+    def from_model(cls, raw_item, model_out: dict) -> Card:
         return cls(
             title=model_out.get("title") or raw_item.title,
             url=raw_item.url,

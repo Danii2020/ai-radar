@@ -18,18 +18,18 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from rich.console import Console  # noqa: E402
+from rich.console import Console
 
-from curation import config as curation_config  # noqa: E402
-from curation.composite import CompositeDiscoverer  # noqa: E402
-from curation.dynamo import DynamoCardStore  # noqa: E402
-from curation.graph import build_graph  # noqa: E402
-from curation.interfaces import CardStore, Discoverer  # noqa: E402
-from curation.local import JsonFileCardStore, RssDiscoverer  # noqa: E402
-from curation.summary import build_run_summary  # noqa: E402
-from curation.tavily import TavilyDiscoverer  # noqa: E402
-from shared import config  # noqa: E402
-from shared.cards import render  # noqa: E402
+from curation import config as curation_config
+from curation.composite import CompositeDiscoverer
+from curation.dynamo import DynamoCardStore
+from curation.graph import build_graph
+from curation.interfaces import CardStore, Discoverer
+from curation.local import JsonFileCardStore, RssDiscoverer
+from curation.summary import build_run_summary
+from curation.tavily import TavilyDiscoverer
+from shared import config
+from shared.cards import render
 
 
 def _build_store(force: bool) -> CardStore:

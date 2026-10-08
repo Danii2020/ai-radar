@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from aws_cdk import CfnOutput, Stack
 from constructs import Construct
-
 from lib.agent_runtime import AgentRuntime  # infra/ on sys.path via app.py
 
 

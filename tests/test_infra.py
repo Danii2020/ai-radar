@@ -29,7 +29,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "infra"))
 
 import aws_cdk as cdk
 from aws_cdk.assertions import Match, Template
-
 from stacks.card_store_stack import CardStoreStack
 
 

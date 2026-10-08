@@ -38,7 +38,7 @@ def _raw_item(**overrides) -> dict:
         "summary": "A summary.",
         "tags": ["llm", "agents"],
         "type": "news",
-        "relevance": Decimal("8"),
+        "relevance": Decimal(8),
         "published": "2026-08-29",
         "takeaways": ["k1", "k2"],
         "created_at": "2026-08-29T06:00:03.114512+00:00",
@@ -50,7 +50,7 @@ def _raw_item(**overrides) -> dict:
 
 # Guarantee: `relevance` deserializes from a DynamoDB `Decimal` to a plain int.
 def test_card_out_coerces_integer_decimal_relevance_to_int():
-    card = CardOut.model_validate(_raw_item(relevance=Decimal("7")))
+    card = CardOut.model_validate(_raw_item(relevance=Decimal(7)))
     assert card.relevance == 7
     assert isinstance(card.relevance, int)
     assert not isinstance(card.relevance, Decimal)
@@ -90,7 +90,7 @@ def test_card_out_accepts_any_string_type_value(type_value):
 # `relevance` is an unbounded int, not conint(ge=1, le=10) — a stray
 # out-of-range stored value must still render.
 def test_card_out_accepts_relevance_outside_the_nominal_one_to_ten_range():
-    card = CardOut.model_validate(_raw_item(relevance=Decimal("42")))
+    card = CardOut.model_validate(_raw_item(relevance=Decimal(42)))
     assert card.relevance == 42
 
 

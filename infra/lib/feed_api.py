@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 from aws_cdk import Duration, RemovalPolicy
 from aws_cdk import aws_apigatewayv2 as apigwv2
@@ -132,20 +133,20 @@ class FeedApi(Construct):
 
         # 3. Docker-image Lambda (AD-1/AD-2): pydantic + app code only, no
         #    langgraph/bedrock-agentcore/tavily-python/feedparser/rich.
-        function_kwargs = dict(
-            function_name="ai-radar-feed-api",
-            code=lambda_.DockerImageCode.from_image_asset(
+        function_kwargs = {
+            "function_name": "ai-radar-feed-api",
+            "code": lambda_.DockerImageCode.from_image_asset(
                 str(_REPO_ROOT),
                 file="Dockerfile.feed_api",
                 platform=ecr_assets.Platform.LINUX_ARM64,
             ),
-            architecture=lambda_.Architecture.ARM_64,
-            role=self.role,
-            log_group=self.log_group,
-            memory_size=DEFAULT_MEMORY_MB,
-            timeout=DEFAULT_TIMEOUT,
-            environment={"CARD_TABLE_NAME": card_table_name},
-        )
+            "architecture": lambda_.Architecture.ARM_64,
+            "role": self.role,
+            "log_group": self.log_group,
+            "memory_size": DEFAULT_MEMORY_MB,
+            "timeout": DEFAULT_TIMEOUT,
+            "environment": {"CARD_TABLE_NAME": card_table_name},
+        }
         # Omitting the kwarg entirely (not passing None) is what actually
         # leaves the function's concurrency unreserved — see the deploy-time
         # override comment above.
@@ -176,7 +177,9 @@ class FeedApi(Construct):
         )
 
         # 5. Stage throttling (AD-7) via the typed CfnStage escape hatch.
-        cfn_stage = self.http_api.default_stage.node.default_child
+        default_stage = self.http_api.default_stage
+        assert default_stage is not None  # HttpApi creates $default unless disabled
+        cfn_stage = cast(apigwv2.CfnStage, default_stage.node.default_child)
         cfn_stage.default_route_settings = apigwv2.CfnStage.RouteSettingsProperty(
             throttling_rate_limit=DEFAULT_THROTTLE_RATE,
             throttling_burst_limit=DEFAULT_THROTTLE_BURST,
