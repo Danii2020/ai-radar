@@ -8,6 +8,11 @@
     ],
     "schemaFiles": [
       "intent",
+      "execution-plan",
+      "tasks"
+    ],
+    "legacySchemaFiles": [
+      "intent",
       "contract",
       "roadmap",
       "tasks",
@@ -51,25 +56,12 @@
       }
     },
     {
-      "id": "spec-schema:contract",
-      "description": ".sdd/spec-schema/contract.md exists",
+      "id": "spec-schema:execution-plan",
+      "description": ".sdd/spec-schema/execution-plan.md exists",
       "anyOf": [
-        ".sdd/spec-schema/contract.md"
+        ".sdd/spec-schema/execution-plan.md"
       ],
-      "remediation": "run npx harny init to scaffold .sdd/spec-schema/contract.md",
-      "requires": {
-        "anyFile": [
-          ".sdd/harness.json"
-        ]
-      }
-    },
-    {
-      "id": "spec-schema:roadmap",
-      "description": ".sdd/spec-schema/roadmap.md exists",
-      "anyOf": [
-        ".sdd/spec-schema/roadmap.md"
-      ],
-      "remediation": "run npx harny init to scaffold .sdd/spec-schema/roadmap.md",
+      "remediation": "run npx harny init to scaffold .sdd/spec-schema/execution-plan.md",
       "requires": {
         "anyFile": [
           ".sdd/harness.json"
@@ -257,19 +249,186 @@
     }
   ],
   "repoReadinessLabel": "repo readiness",
+  "security": [
+    {
+      "id": "security:permissions-policy",
+      "description": ".sdd/permissions/policy.json exists",
+      "anyOf": [
+        ".sdd/permissions/policy.json"
+      ],
+      "remediation": "run npx harny init to install the permissions baseline (.sdd/permissions/policy.json)",
+      "tier": "recommended",
+      "requires": {
+        "anyFile": [
+          ".sdd/harness.json"
+        ]
+      }
+    },
+    {
+      "id": "security:permissions-guard",
+      "description": ".sdd/permissions/run-guard.mjs exists",
+      "anyOf": [
+        ".sdd/permissions/run-guard.mjs"
+      ],
+      "remediation": "run npx harny init to install the permissions guard (.sdd/permissions/run-guard.mjs)",
+      "tier": "recommended",
+      "requires": {
+        "anyFile": [
+          ".sdd/harness.json"
+        ]
+      }
+    },
+    {
+      "id": "security:permissions-wired:claude-code",
+      "description": "Claude Code's hook config (.claude/settings.json) calls the permissions guard",
+      "anyOf": [],
+      "assert": {
+        "kind": "fileContains",
+        "path": ".claude/settings.json",
+        "text": "run-guard.mjs"
+      },
+      "remediation": "run npx harny init --tools claude-code to wire the permissions guard into .claude/settings.json",
+      "tier": "recommended",
+      "requires": {
+        "anyFile": [
+          ".sdd/harness.json"
+        ]
+      }
+    },
+    {
+      "id": "security:env-ignored",
+      "description": "git ignores .env and .env.local",
+      "anyOf": [],
+      "assert": {
+        "kind": "gitIgnored",
+        "paths": [
+          ".env",
+          ".env.local"
+        ]
+      },
+      "remediation": "add \".env*\" (and \"!.env.example\") to .gitignore, and untrack any committed .env with git rm --cached",
+      "tier": "recommended"
+    },
+    {
+      "id": "security:git-hooks",
+      "description": "the commit-check hooks exist in .sdd/git-hooks",
+      "anyOf": [
+        ".sdd/git-hooks/pre-commit"
+      ],
+      "remediation": "run npx harny init to install the commit-check hooks (.sdd/git-hooks)",
+      "tier": "recommended",
+      "requires": {
+        "anyFile": [
+          ".sdd/harness.json"
+        ]
+      }
+    },
+    {
+      "id": "security:git-hooks-active",
+      "description": "core.hooksPath points at .sdd/git-hooks",
+      "anyOf": [],
+      "assert": {
+        "kind": "gitConfig",
+        "key": "core.hooksPath",
+        "equals": ".sdd/git-hooks"
+      },
+      "remediation": "run git config core.hooksPath .sdd/git-hooks (or, with a hook manager such as husky or lefthook, call .sdd/git-hooks/pre-commit and pre-push from it)",
+      "tier": "recommended",
+      "requires": {
+        "anyFile": [
+          ".sdd/harness.json"
+        ]
+      }
+    },
+    {
+      "id": "security:gitleaks",
+      "description": "gitleaks is installed, so pre-commit scans staged changes for secrets",
+      "anyOf": [],
+      "assert": {
+        "kind": "probe",
+        "probe": {
+          "binary": "gitleaks"
+        }
+      },
+      "remediation": "install gitleaks (https://github.com/gitleaks/gitleaks#installing); CI still scans without it",
+      "tier": "recommended"
+    },
+    {
+      "id": "security:ci-secret-scan",
+      "description": "the CI workflow runs the \"Secret scan (gitleaks)\" step",
+      "anyOf": [],
+      "assert": {
+        "kind": "fileContains",
+        "path": ".github/workflows/harny-feedback.yml",
+        "text": "Secret scan (gitleaks)"
+      },
+      "remediation": "run npx harny init to regenerate the CI workflow with the secret-scan step",
+      "tier": "recommended",
+      "requires": {
+        "anyFile": [
+          ".sdd/harness.json"
+        ]
+      }
+    }
+  ],
+  "securityLabel": "security",
+  "componentDocs": {
+    "discovery": {
+      "manifests": [
+        "package.json",
+        "pyproject.toml",
+        "go.mod",
+        "Cargo.toml",
+        "pom.xml",
+        "build.gradle",
+        "build.gradle.kts",
+        "Gemfile",
+        "composer.json"
+      ],
+      "sourceRoots": [
+        "src",
+        "lib",
+        "app"
+      ],
+      "ignore": [
+        "node_modules",
+        "dist",
+        "build",
+        "out",
+        "coverage",
+        "vendor",
+        "target",
+        "venv",
+        "__pycache__",
+        "fixtures"
+      ],
+      "maxDepth": 3,
+      "minFiles": 3,
+      "declared": [
+        "."
+      ]
+    },
+    "docName": "AGENTS.md",
+    "bridges": [
+      {
+        "tool": "claude-code",
+        "path": "{dir}/CLAUDE.md",
+        "contents": "@AGENTS.md\n",
+        "marker": "@AGENTS.md"
+      }
+    ]
+  },
   "commands": [
     {
       "id": "pytest",
       "kind": "test",
       "argv": [
-        "uv",
-        "run",
         "pytest",
         "-q"
       ],
       "pathMode": "whole-project",
       "requires": {
-        "binary": "uv"
+        "binary": "pytest"
       }
     }
   ]

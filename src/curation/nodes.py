@@ -86,7 +86,7 @@ def summarize_node(state: CurationState) -> CurationState:
             input_tokens += usage.input_tokens
             output_tokens += usage.output_tokens
             cards.append(Card.from_model(item, model_out))
-        except Exception as exc:  # per-item failure: skip, count, continue
+        except Exception as exc:  # noqa: BLE001 - per-item failure: skip, count, continue
             logger.warning(
                 json.dumps(
                     {

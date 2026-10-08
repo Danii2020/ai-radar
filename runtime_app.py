@@ -92,7 +92,7 @@ def _resolve_tavily_key(secret_name: str) -> str:
     try:
         client = boto3.client("secretsmanager", region_name=config.AWS_REGION)
         response = client.get_secret_value(SecretId=secret_name)
-    except Exception:  # missing secret, denied, throttled, etc. - degrade quietly
+    except Exception:  # noqa: BLE001 - missing secret, denied, throttled, etc.: degrade quietly
         return ""
 
     value = response.get("SecretString") or ""
@@ -186,7 +186,7 @@ async def _curation_run(run_id: str, task_id: int) -> None:
         # applies here one level deeper).
         try:
             emit_run_metrics(summary)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - metrics must never fail a run
             logger.warning(
                 json.dumps(
                     {

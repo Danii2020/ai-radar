@@ -9,7 +9,7 @@ Runtime unchanged (nodes/graph/state/interfaces never see boto3).
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import boto3
 
@@ -100,7 +100,7 @@ class DynamoCardStore:
         if not cards:
             return
 
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
 
         for card in cards:
             try:
@@ -135,7 +135,7 @@ class DynamoCardStore:
                         ":now": now,
                     },
                 )
-            except Exception as exc:  # per-card failure: skip, count, continue
+            except Exception as exc:  # noqa: BLE001 - per-card failure: skip, count, continue
                 print(f"! failed to persist {card.url}: {exc}")
                 self._failures += 1
                 continue

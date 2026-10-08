@@ -14,7 +14,7 @@ license: MIT
 compatibility: >-
   Lookup requires specs/current/_index.md to exist (degrades gracefully with an empty
   brief if it does not). Archive requires the target feature's specs/<feature>/
-  directory with all five files and a Shipped: header already in place.
+  directory with all its spec files (intent, execution-plan, tasks, audit — or the five legacy files) and a Shipped: header already in place.
 allowed-tools: Read, Write, Bash, Glob
 metadata:
   author: daniel
@@ -41,9 +41,9 @@ across two modes that share all their preconditions and state.
 ## Inputs
 
 - **Lookup**: `specs/current/_index.md`; the capability doc(s) it routes to.
-- **Archive**: the target feature's full `specs/<feature-name>/` directory (all five
-  files); the current `specs/current/<capability>.md` doc(s) for every
-  capability the feature's `contract.md` names as affected — or `capability-template.md`
+- **Archive**: the target feature's full `specs/<feature-name>/` directory (all its
+  files: intent, execution-plan, tasks, audit; a legacy dir holds the five legacy files); the current `specs/current/<capability>.md` doc(s) for every
+  capability the feature's `execution-plan.md` § Ownership names as affected (`contract.md` in a legacy dir) — or `capability-template.md`
   (bundled next to this file) if a named capability has no file yet; `specs/current/_index.md`
   and every `specs/archived/*/decisions/*.md` (to regenerate the ADR registry table and
   to check each ADR's own `Capability:` field directly — see step 5).
@@ -75,24 +75,24 @@ without moving anything:
 - `specs/<feature>/audit.md` has a final verdict of `APPROVED` or
   `APPROVED WITH RESERVATIONS` (never `REJECTED`).
 - The human has signed off at the post-audit gate.
-- All five spec files exist and are non-empty.
+- All the spec files of the feature's shape exist and are non-empty: `intent.md`, `execution-plan.md`, `tasks.md` and `audit.md` in the new shape, or all five legacy files (`intent`, `contract`, `roadmap`, `tasks`, `audit`; a legacy-shape dir) in the legacy shape.
 - `specs/<feature>/intent.md` carries a `Shipped:` header.
 - `specs/archived/<feature>/` does not already exist.
 - `<feature>` is neither `current` nor `archived`.
 
 Procedure:
-1. Record the SHA-256 of all five files.
+1. Record the SHA-256 of every file in the directory.
 2. Move `specs/<feature>/` to `specs/archived/<feature>/` as a whole directory. **Check
    whether the source path is tracked first** (e.g. `git ls-files --error-unmatch
    specs/<feature>/ 2>/dev/null` or equivalent): if tracked, move with `git mv` so rename
    detection and history survive; if untracked, move with a plain `mv`. Tolerate either
    state — do not assume one; a feature archived before its first commit is still
    untracked, and both must work.
-3. Re-compute SHA-256 of all five files; on any mismatch, restore the directory to
+3. Re-compute SHA-256 of every file in the directory; on any mismatch, restore the directory to
    `specs/<feature>/` and abort, reporting the differing paths. **The SHA-256 check, not
    which move command ran, is what actually proves integrity in either case** — `git mv`
    is a history-quality improvement, not a correctness dependency.
-4. Determine affected capabilities from the feature's (now-archived) `contract.md`.
+4. Determine affected capabilities from the feature's (now-archived) `execution-plan.md` § Ownership (`contract.md` in a legacy dir).
 5. For each affected capability:
    - **If `specs/current/<capability>.md` already exists**, update it in place:
      add/modify/retire Requirements and their Scenarios — **merging, never

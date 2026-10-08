@@ -5,9 +5,9 @@ from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from shared import config as shared_config   # Bedrock unit prices (see contract §4)
+from shared import config as shared_config  # Bedrock unit prices (see contract §4)
 
-from . import config                       # Tavily prices, namespace, toggles
+from . import config  # Tavily prices, namespace, toggles
 
 
 @dataclass(frozen=True)

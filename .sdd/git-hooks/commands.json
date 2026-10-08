@@ -1,0 +1,33 @@
+[
+  {
+    "id": "ruff",
+    "kind": "lint",
+    "argv": [
+      "ruff",
+      "check"
+    ],
+    "pathMode": "per-file",
+    "extensions": [
+      ".py",
+      ".pyi"
+    ],
+    "requires": {
+      "binary": "ruff"
+    }
+  },
+  {
+    "id": "mypy",
+    "kind": "typecheck",
+    "argv": [
+      "mypy"
+    ],
+    "pathMode": "per-file",
+    "extensions": [
+      ".py",
+      ".pyi"
+    ],
+    "requires": {
+      "binary": "mypy"
+    }
+  }
+]

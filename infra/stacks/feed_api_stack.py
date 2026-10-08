@@ -1,9 +1,10 @@
 """CDK stack wrapping `FeedApi` (Phase 2, spec `feed-api`)."""
 from __future__ import annotations
 
+from typing import Any
+
 from aws_cdk import CfnOutput, Stack
 from constructs import Construct
-
 from lib.feed_api import FeedApi  # infra/ on sys.path via app.py
 
 
@@ -30,7 +31,7 @@ class FeedApiStack(Stack):
             [o.strip() for o in raw_origins.split(",") if o.strip()] if raw_origins else None
         )
 
-        feed_api_kwargs = {}
+        feed_api_kwargs: dict[str, Any] = {}
         raw_concurrency = self.node.try_get_context("feed_api_reserved_concurrency")
         if raw_concurrency is not None:
             if str(raw_concurrency).strip().lower() == "none":

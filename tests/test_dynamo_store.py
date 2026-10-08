@@ -23,11 +23,10 @@ from pathlib import Path
 
 from boto3.dynamodb.conditions import Key
 
-from shared.cards import Card
-
 from curation.dynamo import DynamoCardStore
 from curation.graph import build_graph
 from curation.interfaces import CardStore
+from shared.cards import Card
 
 CARD_TABLE_NAME = "ai-radar-cards"  # fixed per contract.md "Decisions"
 

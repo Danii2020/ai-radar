@@ -188,7 +188,7 @@ def test_cursor_round_trip_reproduces_unpaginated_sequence_unfiltered(dynamo_tab
     paginated = _walk_all_pages_via_cursor(dynamo_table, limit=4)
 
     assert [c.card_id for c in paginated] == [c.card_id for c in unpaginated.cards]
-    assert len(paginated) == len(set(c.card_id for c in paginated))  # no duplicates
+    assert len(paginated) == len({c.card_id for c in paginated})  # no duplicates
 
 
 def test_cursor_round_trip_reproduces_unpaginated_sequence_filtered(dynamo_table, seed_cards):
@@ -200,7 +200,7 @@ def test_cursor_round_trip_reproduces_unpaginated_sequence_filtered(dynamo_table
 
     assert [c.card_id for c in paginated] == [c.card_id for c in unpaginated.cards]
     assert len(unpaginated.cards) == 5
-    assert len(paginated) == len(set(c.card_id for c in paginated))  # no duplicates
+    assert len(paginated) == len({c.card_id for c in paginated})  # no duplicates
 
 
 # T11 (Guarantee 9): a stored item that fails CardOut validation is logged,
@@ -216,7 +216,7 @@ def test_malformed_stored_item_is_skipped_and_counted(dynamo_table, put_card_ite
         "summary": "A summary.",
         "tags": [],
         "type": "news",
-        "relevance": Decimal("5"),
+        "relevance": Decimal(5),
         "published": "2026-08-08",
         "takeaways": [],
         "created_at": "2026-08-01T00:00:00+00:00",

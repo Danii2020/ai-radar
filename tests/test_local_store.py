@@ -12,9 +12,8 @@ from __future__ import annotations
 import hashlib
 import json
 
-from shared.cards import Card
-
 from curation.local import JsonFileCardStore, RssDiscoverer
+from shared.cards import Card
 
 
 def _url_hash(url: str) -> str:

@@ -16,13 +16,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-import aws_cdk as cdk  # noqa: E402
-
-from stacks.agent_runtime_stack import AgentRuntimeStack  # noqa: E402
-from stacks.card_store_stack import CardStoreStack  # noqa: E402
-from stacks.cost_budget_stack import CostBudgetStack  # noqa: E402
-from stacks.curation_schedule_stack import CurationScheduleStack  # noqa: E402
-from stacks.feed_api_stack import FeedApiStack  # noqa: E402
+import aws_cdk as cdk
+from stacks.agent_runtime_stack import AgentRuntimeStack
+from stacks.card_store_stack import CardStoreStack
+from stacks.cost_budget_stack import CostBudgetStack
+from stacks.curation_schedule_stack import CurationScheduleStack
+from stacks.feed_api_stack import FeedApiStack
 
 app = cdk.App()
 CardStoreStack(app, "AiRadarCardStore")  # env resolved from CDK context / profile

@@ -36,7 +36,6 @@ from __future__ import annotations
 import importlib
 import os
 import re
-import sys
 import tomllib
 from contextlib import contextmanager
 from pathlib import Path
@@ -623,11 +622,13 @@ def test_curation_emit_metrics_numeric_one_is_true_after_migration(
 def test_curation_emit_metrics_unparseable_value_raises_after_migration(
     reload_config_module,
 ):
-    with pytest.raises(pydantic.ValidationError, match="CURATION_EMIT_METRICS"):
-        with reload_config_module(
+    with (
+        pytest.raises(pydantic.ValidationError, match="CURATION_EMIT_METRICS"),
+        reload_config_module(
             "curation.config", env={"CURATION_EMIT_METRICS": "yolo"}
-        ):
-            pass
+        ),
+    ):
+        pass
 
 
 # `.env.example`'s `CURATION_EMIT_METRICS` comment promises operators
@@ -691,11 +692,13 @@ def test_shared_config_bad_float_override_raises_validation_error_naming_the_var
     from inside `float()`, naming neither the variable nor the fact that
     config was at fault (intent.md problem #1). After migration:
     `pydantic.ValidationError` naming `HAIKU_INPUT_USD_PER_1M`."""
-    with pytest.raises(pydantic.ValidationError, match="HAIKU_INPUT_USD_PER_1M"):
-        with reload_config_module(
+    with (
+        pytest.raises(pydantic.ValidationError, match="HAIKU_INPUT_USD_PER_1M"),
+        reload_config_module(
             "shared.config", env={"HAIKU_INPUT_USD_PER_1M": "abc"}
-        ):
-            pass
+        ),
+    ):
+        pass
 
 
 def test_curation_config_empty_credit_price_raises_validation_error_naming_the_var(
@@ -703,11 +706,10 @@ def test_curation_config_empty_credit_price_raises_validation_error_naming_the_v
 ):
     with pytest.raises(
         pydantic.ValidationError, match="CURATION_TAVILY_CREDIT_PRICE_USD"
+    ), reload_config_module(
+        "curation.config", env={"CURATION_TAVILY_CREDIT_PRICE_USD": ""}
     ):
-        with reload_config_module(
-            "curation.config", env={"CURATION_TAVILY_CREDIT_PRICE_USD": ""}
-        ):
-            pass
+        pass
 
 
 def test_shared_config_bad_int_override_raises_validation_error_naming_the_var(
@@ -716,11 +718,13 @@ def test_shared_config_bad_int_override_raises_validation_error_naming_the_var(
     """`AI_RADAR_MAX_ITEMS` is a `shared/config.py` knob (`MAX_ITEMS`), per
     contract.md's `_SharedSettings.max_items` field — not a `curation/config.py`
     one."""
-    with pytest.raises(pydantic.ValidationError, match="AI_RADAR_MAX_ITEMS"):
-        with reload_config_module(
+    with (
+        pytest.raises(pydantic.ValidationError, match="AI_RADAR_MAX_ITEMS"),
+        reload_config_module(
             "shared.config", env={"AI_RADAR_MAX_ITEMS": "eight"}
-        ):
-            pass
+        ),
+    ):
+        pass
 
 
 def test_multiple_bad_overrides_raise_one_error_naming_both(reload_config_module):
@@ -728,12 +732,11 @@ def test_multiple_bad_overrides_raise_one_error_naming_both(reload_config_module
     **one** ValidationError listing every offending variable' (pydantic
     collects all field errors before raising) — one run of the fix loop
     instead of N."""
-    with pytest.raises(pydantic.ValidationError) as exc_info:
-        with reload_config_module(
-            "shared.config",
-            env={"HAIKU_INPUT_USD_PER_1M": "abc", "EMBED_DIM": "not-an-int"},
-        ):
-            pass
+    with pytest.raises(pydantic.ValidationError) as exc_info, reload_config_module(
+        "shared.config",
+        env={"HAIKU_INPUT_USD_PER_1M": "abc", "EMBED_DIM": "not-an-int"},
+    ):
+        pass
 
     message = str(exc_info.value)
     assert "HAIKU_INPUT_USD_PER_1M" in message

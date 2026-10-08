@@ -52,7 +52,7 @@ class TavilyDiscoverer:
         self._searches = 0
 
     @classmethod
-    def from_config(cls) -> "TavilyDiscoverer":
+    def from_config(cls) -> TavilyDiscoverer:
         """Build from `curation.config` knobs. Raises ValueError if TAVILY_API_KEY
         is unset (fail fast at construction — the smoke entrypoint surfaces this)."""
         if not config.TAVILY_API_KEY:
@@ -105,7 +105,7 @@ class TavilyDiscoverer:
                     exclude_domains=self.exclude_domains,
                     include_raw_content=False,
                 )
-            except Exception as exc:  # per-seed failure: log, count, continue
+            except Exception as exc:  # noqa: BLE001 - per-seed failure: log, count, continue
                 print(f"! tavily seed failed: {exc}")
                 self._failures += 1
                 continue

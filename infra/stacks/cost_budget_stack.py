@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from aws_cdk import CfnOutput, Stack
 from constructs import Construct
-
 from lib.cost_budget import (  # infra/ on sys.path via app.py
     DEFAULT_BUDGET_NAME,
     DEFAULT_LIMIT_USD,

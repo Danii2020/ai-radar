@@ -17,7 +17,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from contracts.card import json_schema  # noqa: E402
+from contracts.card import json_schema
 
 OUTPUT_PATH = Path(__file__).parent / "docs" / "api" / "feed-api.v1.schema.json"
 

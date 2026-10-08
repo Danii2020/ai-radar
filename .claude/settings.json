@@ -1,5 +1,123 @@
 {
+  "permissions": {
+    "deny": [
+      "Read(.env)",
+      "Read(.env.*)",
+      "Read(*.pem)",
+      "Read(*.key)",
+      "Read(secrets/**)",
+      "Read(!.env.example)",
+      "Read(!.env.sample)",
+      "Read(!.env.template)",
+      "Bash(git push *--force*)",
+      "Bash(git push -f)",
+      "Bash(git push -f *)",
+      "Bash(git push * -f)",
+      "Bash(git push * -f *)",
+      "Bash(git push * +*)",
+      "Bash(git commit *--no-verify*)",
+      "Bash(git commit -n)",
+      "Bash(git commit -n *)",
+      "Bash(git commit * -n)",
+      "Bash(git commit * -n *)",
+      "Bash(git push *--no-verify*)",
+      "Bash(rm -rf*)",
+      "Bash(rm -fr*)",
+      "Bash(rm -Rf*)",
+      "Bash(rm -fR*)",
+      "Bash(rm -r -f*)",
+      "Bash(rm -f -r*)",
+      "Bash(rm -R -f*)",
+      "Bash(rm --recursive --force*)",
+      "Bash(rm --force --recursive*)"
+    ],
+    "ask": [
+      "Bash(vercel deploy*)",
+      "Bash(vercel --prod*)",
+      "Bash(netlify deploy*)",
+      "Bash(fly deploy*)",
+      "Bash(flyctl deploy*)",
+      "Bash(firebase deploy*)",
+      "Bash(serverless deploy*)",
+      "Bash(sls deploy*)",
+      "Bash(cdk deploy*)",
+      "Bash(npx cdk deploy*)",
+      "Bash(terraform apply*)",
+      "Bash(terraform destroy*)",
+      "Bash(kubectl apply*)",
+      "Bash(kubectl delete*)",
+      "Bash(helm install*)",
+      "Bash(helm upgrade*)",
+      "Bash(helm uninstall*)",
+      "Bash(npm publish*)",
+      "Bash(pnpm publish*)",
+      "Bash(yarn publish*)",
+      "Bash(gh pr merge*)",
+      "Bash(prisma migrate *)",
+      "Bash(npx prisma migrate *)",
+      "Bash(prisma db push*)",
+      "Bash(npx prisma db push*)",
+      "Bash(prisma db execute*)",
+      "Bash(npx prisma db execute*)",
+      "Bash(drizzle-kit push*)",
+      "Bash(npx drizzle-kit push*)",
+      "Bash(drizzle-kit migrate*)",
+      "Bash(npx drizzle-kit migrate*)",
+      "Bash(knex migrate:*)",
+      "Bash(npx knex migrate:*)",
+      "Bash(sequelize db:*)",
+      "Bash(npx sequelize db:*)",
+      "Bash(npx sequelize-cli db:*)",
+      "Bash(rails db:*)",
+      "Bash(bin/rails db:*)",
+      "Bash(rake db:*)",
+      "Bash(python manage.py migrate*)",
+      "Bash(python manage.py flush*)",
+      "Bash(alembic upgrade*)",
+      "Bash(alembic downgrade*)",
+      "Bash(supabase db reset*)",
+      "Bash(supabase db push*)",
+      "Bash(dropdb *)",
+      "Bash(sh)",
+      "Bash(bash)",
+      "Bash(zsh)",
+      "Bash(dash)",
+      "Bash(sh -s*)",
+      "Bash(bash -s*)",
+      "Bash(npm install *)",
+      "Bash(npm i *)",
+      "Bash(npm add *)",
+      "Bash(pnpm add *)",
+      "Bash(yarn add *)",
+      "Bash(bun add *)",
+      "Bash(pip install *)",
+      "Bash(pip3 install *)",
+      "Bash(python -m pip install *)",
+      "Bash(uv add *)",
+      "Bash(uv pip install *)",
+      "Bash(poetry add *)",
+      "Bash(cargo add *)",
+      "Bash(cargo install *)",
+      "Bash(go get *)",
+      "Bash(go install *)",
+      "Bash(gem install *)",
+      "Bash(brew install *)",
+      "Bash(apt install *)",
+      "Bash(apt-get install *)"
+    ]
+  },
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node --input-type=commonjs -e 'const cp=require(\"child_process\");const fs=require(\"fs\");const guard=process.argv[1];let input;try{input=fs.readFileSync(0);}catch(e){input=Buffer.from(\"\");}const r=cp.spawnSync(\"node\",[guard],{input});const reason=(r.stderr?r.stderr.toString():\"\").trim();let code=0;if(r.status===2){process.stdout.write(JSON.stringify({hookSpecificOutput:{hookEventName:\"PreToolUse\",permissionDecision:\"deny\",permissionDecisionReason:reason}})+String.fromCharCode(10));}else if(r.status===3){process.stdout.write(JSON.stringify({hookSpecificOutput:{hookEventName:\"PreToolUse\",permissionDecision:\"ask\",permissionDecisionReason:reason}})+String.fromCharCode(10));}else{if(reason.length>0){process.stderr.write(reason+String.fromCharCode(10));}}process.exit(code);' -- \"${CLAUDE_PROJECT_DIR}/.sdd/permissions/run-guard.mjs\""
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Edit|Write",
@@ -16,7 +134,17 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node --input-type=commonjs -e 'const cp=require(\"child_process\");const fs=require(\"fs\");const runner=process.argv[1];const commands=process.argv[2];let input;try{input=fs.readFileSync(0);}catch(e){input=Buffer.from(\"\");}const r=cp.spawnSync(\"node\",[runner,\"run\",\"--commands\",commands],{input});if(r.status===2){const out=((r.stdout?r.stdout.toString():\"\")+(r.stderr?r.stderr.toString():\"\")).trim();const context=out.length>0?out:\"harny-feedback: a mapped command reported a finding.\";process.stdout.write(JSON.stringify({hookSpecificOutput:{hookEventName:\"Stop\",additionalContext:context}})+String.fromCharCode(10));}process.exit(0);' -- \"${CLAUDE_PROJECT_DIR}/.sdd/feedback/run-feedback.mjs\" '[{\"id\":\"ruff\",\"kind\":\"lint\",\"argv\":[\"uv\",\"run\",\"ruff\",\"check\"],\"pathMode\":\"per-file\",\"requires\":{\"binary\":\"uv\"},\"extensions\":[\".py\",\".pyi\"]},{\"id\":\"mypy\",\"kind\":\"typecheck\",\"argv\":[\"uv\",\"run\",\"mypy\"],\"pathMode\":\"per-file\",\"requires\":{\"binary\":\"uv\"},\"extensions\":[\".py\",\".pyi\"]}]'"
+            "command": "node --input-type=commonjs -e 'const cp=require(\"child_process\");const fs=require(\"fs\");const runner=process.argv[1];const commands=process.argv[2];let input;try{input=fs.readFileSync(0);}catch(e){input=Buffer.from(\"\");}const r=cp.spawnSync(\"node\",[runner,\"run\",\"--commands\",commands],{input});if(r.status===2){const out=((r.stdout?r.stdout.toString():\"\")+(r.stderr?r.stderr.toString():\"\")).trim();const context=out.length>0?out:\"harny-feedback: a mapped command reported a finding.\";process.stdout.write(JSON.stringify({hookSpecificOutput:{hookEventName:\"Stop\",additionalContext:context}})+String.fromCharCode(10));}process.exit(0);' -- \"${CLAUDE_PROJECT_DIR}/.sdd/feedback/run-feedback.mjs\" '[{\"id\":\"ruff\",\"kind\":\"lint\",\"argv\":[\"ruff\",\"check\"],\"pathMode\":\"per-file\",\"extensions\":[\".py\",\".pyi\"],\"requires\":{\"binary\":\"ruff\"}},{\"id\":\"mypy\",\"kind\":\"typecheck\",\"argv\":[\"mypy\"],\"pathMode\":\"per-file\",\"extensions\":[\".py\",\".pyi\"],\"requires\":{\"binary\":\"mypy\"}}]'"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node --input-type=commonjs -e 'const cp=require(\"child_process\");const fs=require(\"fs\");const runner=process.argv[1];const commands=process.argv[2];let input;try{input=fs.readFileSync(0);}catch(e){input=Buffer.from(\"\");}const r=cp.spawnSync(\"node\",[runner,\"run\",\"--commands\",commands,\"--keep-turn\"],{input});if(r.status===2){const out=((r.stdout?r.stdout.toString():\"\")+(r.stderr?r.stderr.toString():\"\")).trim();const context=out.length>0?out:\"harny-feedback: a mapped command reported a finding.\";process.stdout.write(JSON.stringify({hookSpecificOutput:{hookEventName:\"SubagentStop\",additionalContext:context}})+String.fromCharCode(10));}process.exit(0);' -- \"${CLAUDE_PROJECT_DIR}/.sdd/feedback/run-feedback.mjs\" '[{\"id\":\"ruff\",\"kind\":\"lint\",\"argv\":[\"ruff\",\"check\"],\"pathMode\":\"per-file\",\"extensions\":[\".py\",\".pyi\"],\"requires\":{\"binary\":\"ruff\"}},{\"id\":\"mypy\",\"kind\":\"typecheck\",\"argv\":[\"mypy\"],\"pathMode\":\"per-file\",\"extensions\":[\".py\",\".pyi\"],\"requires\":{\"binary\":\"mypy\"}}]'"
           }
         ]
       }

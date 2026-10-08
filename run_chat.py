@@ -12,11 +12,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from rich.console import Console  # noqa: E402
-from rich.markdown import Markdown  # noqa: E402
+from rich.console import Console
+from rich.markdown import Markdown
 
-from shared.chat import RagChat  # noqa: E402
-from shared.config import CARDS_PATH  # noqa: E402
+from shared.chat import RagChat
+from shared.config import CARDS_PATH
 
 
 def main() -> None:

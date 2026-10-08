@@ -100,7 +100,7 @@ def summarize_stub_factory(make_model_out):
         raise_for_urls = raise_for_urls or set()
         tokens_by_url = tokens_by_url or {}
 
-        def _summarize_with_usage(item: RawItem) -> tuple[dict, "TokenUsage"]:
+        def _summarize_with_usage(item: RawItem) -> tuple[dict, TokenUsage]:
             if item.url in raise_for_urls:
                 raise RuntimeError(f"stub summarize failure for {item.url}")
             model_out = make_model_out(
