@@ -897,6 +897,103 @@ produce. Record the real values here (and in
 `http://localhost:3000` with the same `cdk deploy -c feed_api_allowed_origins=...`
 pattern above.
 
+## Phase 3 — Chatbot (1 spec started: `chat-retrieval`, not deployed)
+
+Phase 3 turns the curated cards into a RAG chatbot. Its first spec,
+[`chat-retrieval`](specs/archived/chat-retrieval/), is the **retrieval half**: every
+card gets a stored embedding, and Plane B can rank those vectors against a question.
+The chat agent on AgentCore Runtime, the chat API and the web chat UI are later Phase 3
+specs and are not started.
+
+| Spec | Status | What it added |
+|---|---|---|
+| [`chat-retrieval`](specs/archived/chat-retrieval/) | ✅ Implemented, audit APPROVED WITH RESERVATIONS (round 3) — **nothing deployed** | Curation-time Titan v2 embeddings on the DynamoDB `embedding` attribute, a backfill command, a DynamoDB retriever in `src/chat/`, and a `run_chat.py` backend switch. Shipped 2026-10-13. Details below. |
+
+> **Nothing for this spec is deployed.** The embed step runs only once the curation
+> agent image is rebuilt, the execution role gains the Titan grant only once
+> `AiRadarRuntimeRole` is redeployed, and cards persisted before the backfill runs have no
+> vector until it does. The local `run_chat.py` path is unchanged, so nothing above affects
+> the live feed.
+
+### What shipped
+
+- **Curation-time embeddings.** `build_graph(store, discoverer, embedding_writer=…)`
+  (`src/curation/graph.py`) adds an `embed` node after `persist`, only when a writer is
+  passed. `runtime_app.py` passes its `DynamoCardStore`; `run_curation.py` passes it
+  when `CARD_STORE_BACKEND=dynamo`. Each persisted card is embedded from
+  `card_text(card)` (the same text Phase 0 embedded) with Titan v2, `EMBED_DIM` floats,
+  normalized. Vectors are written by `DynamoCardStore.set_embeddings`, a conditional
+  `update_item` that never creates an item. `upsert` still never writes `embedding`
+  (card-persistence PS-2), and a re-upsert leaves a vector intact.
+- **Embedding never fails a run.** A Titan failure on one card leaves that card persisted
+  without a vector. The counts `embedded` and `embed_failed` go into the run's state and
+  the `embed_complete` log record. `RunSummary` and the EMF metrics are unchanged.
+- **Backfill.** `uv run run_backfill_embeddings.py` embeds every card with no vector, or
+  with a vector whose length is not `EMBED_DIM`. It prints the account id and table name
+  first, then `embedded=N skipped=N failed=N`. It is idempotent: a second run prints
+  `embedded=0`. It uses your local AWS credentials. Logic is in `src/curation/backfill.py`.
+- **Plane B retriever.** `DynamoCardRetriever` (`src/chat/retriever.py`) runs a paginated
+  `Query` on the `feed-by-score` index (partition `CARD`), never a `Scan`. It ranks the
+  stored vectors by dot product against the query vector (cosine, since both are
+  normalized), returns the top `k` as `(card_dict, score)` pairs, and strips the vector
+  from each card. Un-embedded and wrong-length cards are excluded.
+- **`RagChat(retriever, k)`.** `src/shared/chat.py` takes a `Retriever` Protocol. The
+  in-memory `CardIndex` and `DynamoCardRetriever` both satisfy it.
+- **`run_chat.py` switch (AC7, offline).** The default is `CARD_STORE_BACKEND=json`, which
+  is the Phase 0 behavior. `CARD_STORE_BACKEND=dynamo` answers from DynamoDB-retrieved
+  cards with `[n]` citations.
+- **Infra (not deployed).** `infra/lib/agent_runtime.py` adds an `InvokeTitanEmbed`
+  statement, `bedrock:InvokeModel` on the Titan v2 foundation-model ARN only. The Haiku
+  statement stays Haiku-only. The retriever's `dynamodb:Query` grant belongs to the later
+  chat-runtime spec.
+
+Test status (offline, Bedrock stubbed, DynamoDB via moto): `uv run pytest tests/` →
+406 passed (baseline 350); `uv run ruff check` clean; `uv run mypy .` clean (78 files).
+Two existing tests were edited: the `_fake_build_graph` helper gained an
+`embedding_writer` parameter, and the "no titan" assertion in
+`tests/test_infra_agent_runtime.py` now covers only the Haiku statement. One assertion
+line in `tests/test_config.py` was removed for audit finding F3 (the `EMBED_MODEL_ID`
+re-export), with human approval.
+
+### Pending deploy (in this order)
+
+1. **Redeploy the `AiRadarRuntimeRole` stack.** This adds the Titan v2 `InvokeModel`
+   grant (`InvokeTitanEmbed`).
+2. **Rebuild and redeploy the curation agent image.** The embed step lives in `src/`,
+   and the image copies all of `src/`. The audit ran an arm64 build and an in-image
+   import and graph probe, which passed, but the image was never pushed or deployed.
+3. **Run the backfill once against the live table** with local credentials:
+   `uv run run_backfill_embeddings.py`. Expect `embedded` equal to the number of cards
+   without vectors, and a second run to print `embedded=0`.
+
+After these, a live check is still needed (see "Not verified live" below): a
+`CARD_STORE_BACKEND=dynamo uv run run_chat.py` run against real DynamoDB and Bedrock.
+
+### Not verified live
+
+Nothing here was run against AWS. The audit had no live access, so these are
+**not** verified:
+
+- A live `run_chat.py` run against real DynamoDB and Bedrock (AC7 is verified offline only).
+- CI on this branch: the branch is unpushed, so no `harny-feedback.yml` run exists.
+- Evidence that the Stop hook fired (audit finding F7, open, LOW).
+
+### Known limitation (F11, accepted)
+
+A card whose `upsert` fails still gets a Titan call. Its conditional vector write then
+fails and the card is counted in `embed_failed`, so AC2 holds. The cost is one small
+Titan call per failed upsert, which the auditor estimated at about $0.00002 per card
+(not checked against current pricing).
+
+### Scale ceiling for brute force
+
+The retriever is brute force on purpose: no vector database, roughly $0 extra. Revisit
+this choice at about **2,000 embedded cards**, or when a measured p95 retrieval latency
+rises above about **1 s**. No retrieval latency has been measured yet. The first remedy
+is an in-process TTL cache in the long-lived chat runtime (planned for the
+chat-agent-runtime spec). The second is pgvector or Aurora, per the design doc's §7. At
+the current cap of 8 new cards per run, 2,000 cards is about eight months of daily runs.
+
 ## Account migration (2026-10-05)
 
 The whole backend was redeployed into a second AWS account, **`626259825216`**
@@ -979,15 +1076,17 @@ chat model, and Titan Embeddings v2 in your region.
 
 Output is also written to `.ai_radar_cache/cards.json` for inspection.
 
-### Mini RAG chat (Plane B preview)
+### Mini RAG chat (Plane B preview, local path)
 
-`uv run run_chat.py` runs a grounded chatbot over the curated cards:
+`uv run run_chat.py` runs a grounded chatbot over the curated cards. This is the
+default local path (`CARD_STORE_BACKEND=json`, reading `.ai_radar_cache/cards.json`).
+The DynamoDB retriever that `chat-retrieval` added is opt-in; see "Phase 3 — Chatbot" below.
 
 | Step | Where | Notes |
 |---|---|---|
-| Embed cards | `src/shared/retrieval.py` | Titan v2 embeddings, cached in `.ai_radar_cache/embeddings.json`. |
-| Retrieve | `src/shared/retrieval.py` | In-memory cosine top-k (normalized → dot product). |
-| Answer | `src/shared/chat.py` | Sonnet, grounded in retrieved cards, inline `[n]` citations, multi-turn memory. |
+| Embed cards | `src/shared/embeddings.py` (called from `src/shared/retrieval.py`) | Titan v2 embeddings, cached in `.ai_radar_cache/embeddings.json`. |
+| Retrieve | `src/shared/retrieval.py` (`CardIndex`) | In-memory cosine top-k (normalized → dot product). Satisfies the `Retriever` Protocol in `src/shared/chat.py`. |
+| Answer | `src/shared/chat.py` | `RagChat(retriever, k)`: Sonnet, grounded in retrieved cards, inline `[n]` citations, multi-turn memory. |
 
 It answers only from retrieved cards (no hallucination) and says so when the corpus
 lacks the answer. The stable system prompt uses a Bedrock prompt-cache point.
@@ -996,7 +1095,7 @@ lacks the answer. The stable system prompt uses a Bedrock prompt-cache point.
 
 - ~~**Search API** (Tavily/Exa)~~ — done, see `tavily-discovery` above.
 - ~~**LangGraph orchestration**~~ — done, see `curation-graph` above.
-- ~~**DynamoDB card persistence**~~ — done, see `dynamodb-card-store` above. A real vector store for RAG (Phase 3) is still deferred — the table reserves an unpopulated `embedding` attribute for it.
+- ~~**DynamoDB card persistence**~~ — done, see `dynamodb-card-store` above. The `embedding` attribute it reserved is now populated by `chat-retrieval` (Phase 3); a real vector store is still deferred (see "Phase 3 — Chatbot" for the scale ceiling).
 - ~~**AgentCore Runtime packaging**~~ — done and deploy-verified, see `runtime-packaging` above.
 - ~~**EventBridge scheduling**~~ — done and live-fire verified, see `eventbridge-schedule` above. Deploys `DISABLED`; going live is a deliberate opt-in (real recurring cost). The first live fire hit a real duplicate-run bug (Scheduler's ~30s synchronous timeout, finding F5) — fixed by `async-invocation-ack`.
 - ~~**Async invocation acknowledgment**~~ — done and live-fire verified, see `async-invocation-ack` above. Fixes F5; `agentcore invoke '{}'` now returns an ack, not the run's counts (see the smoke-test section above).

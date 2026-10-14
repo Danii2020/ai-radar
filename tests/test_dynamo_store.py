@@ -369,3 +369,93 @@ def test_boto3_import_confined_to_dynamo_module():
     assert "boto3" in _imported_roots(dynamo_path), (
         "dynamo.py is the one designated infra-adapter site and must import boto3"
     )
+
+
+# --- specs/chat-retrieval AC3: `set_embeddings` is the sanctioned separate
+# writer; `upsert` still never writes `embedding` (PS-2) -----------------------
+
+
+def _vec(first: float, dim: int = 256) -> list[float]:
+    return [first] + [0.0] * (dim - 1)
+
+
+def _card_for(make_raw_item, make_model_out, url: str) -> Card:
+    return Card.from_model(make_raw_item(url=url), make_model_out())
+
+
+def test_set_embeddings_stores_the_vector_on_the_existing_card_keyed_by_url(
+    dynamo_resource, dynamo_table, make_raw_item, make_model_out
+):
+    card = _card_for(make_raw_item, make_model_out, "https://example.com/a")
+    store = DynamoCardStore(table_name=CARD_TABLE_NAME, client=dynamo_resource)
+    store.upsert([card])
+
+    store.set_embeddings({card.url: _vec(0.5)})
+
+    item = dynamo_table.get_item(Key={"card_id": _url_hash(card.url)})["Item"]
+    assert [float(x) for x in item["embedding"]] == _vec(0.5)
+    assert item["title"] == card.title  # content untouched
+
+
+def test_reupsert_of_an_embedded_card_keeps_the_vector_and_advances_updated_at(
+    dynamo_resource, dynamo_table, make_raw_item, make_model_out
+):
+    card = _card_for(make_raw_item, make_model_out, "https://example.com/a")
+    store = DynamoCardStore(table_name=CARD_TABLE_NAME, client=dynamo_resource)
+    store.upsert([card])
+    store.set_embeddings({card.url: _vec(0.25)})
+    before = dynamo_table.get_item(Key={"card_id": _url_hash(card.url)})["Item"]
+
+    store.upsert([card])
+    after = dynamo_table.get_item(Key={"card_id": _url_hash(card.url)})["Item"]
+
+    assert after["embedding"] == before["embedding"]
+    assert after["updated_at"] > before["updated_at"]
+
+
+def test_set_embeddings_for_an_unknown_card_creates_no_phantom_item(
+    dynamo_resource, dynamo_table
+):
+    store = DynamoCardStore(table_name=CARD_TABLE_NAME, client=dynamo_resource)
+
+    written = store.set_embeddings({"https://example.com/never-persisted": _vec(0.5)})
+
+    assert dynamo_table.scan()["Count"] == 0
+    assert written == 0
+
+
+def test_set_embeddings_returns_the_count_actually_written(
+    dynamo_resource, make_raw_item, make_model_out
+):
+    """F1: 3 vectors given, one for a card that was never persisted -> 2."""
+    a = _card_for(make_raw_item, make_model_out, "https://example.com/a")
+    b = _card_for(make_raw_item, make_model_out, "https://example.com/b")
+    store = DynamoCardStore(table_name=CARD_TABLE_NAME, client=dynamo_resource)
+    store.upsert([a, b])
+
+    written = store.set_embeddings(
+        {a.url: _vec(0.1), b.url: _vec(0.2), "https://example.com/missing": _vec(0.3)}
+    )
+
+    assert written == 2
+
+
+def test_set_embeddings_one_failing_card_does_not_stop_the_rest(
+    dynamo_resource, dynamo_table, make_raw_item, make_model_out
+):
+    a = _card_for(make_raw_item, make_model_out, "https://example.com/a")
+    b = _card_for(make_raw_item, make_model_out, "https://example.com/b")
+    DynamoCardStore(table_name=CARD_TABLE_NAME, client=dynamo_resource).upsert([a, b])
+    flaky = DynamoCardStore(
+        table_name=CARD_TABLE_NAME,
+        client=_FlakyResource(dynamo_resource, fail_card_id=_url_hash(a.url)),
+    )
+
+    written = flaky.set_embeddings({a.url: _vec(0.1), b.url: _vec(0.2)})
+
+    assert written == 1
+
+    item_a = dynamo_table.get_item(Key={"card_id": _url_hash(a.url)})["Item"]
+    item_b = dynamo_table.get_item(Key={"card_id": _url_hash(b.url)})["Item"]
+    assert "embedding" not in item_a
+    assert [float(x) for x in item_b["embedding"]] == _vec(0.2)

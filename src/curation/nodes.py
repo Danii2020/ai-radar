@@ -13,8 +13,9 @@ from typing import Protocol
 
 from shared.bedrock import summarize_with_usage
 from shared.cards import Card
+from shared.embeddings import card_text, embed
 
-from .interfaces import CardStore, Discoverer
+from .interfaces import CardStore, Discoverer, EmbeddingWriter
 from .state import CurationState
 
 logger = logging.getLogger(__name__)     # "curation.nodes" — handlers are the
@@ -129,3 +130,47 @@ def persist_node(store: CardStore) -> NodeFn:
         return {"persisted": len(cards)}
 
     return _persist
+
+
+def embed_node(writer: EmbeddingWriter) -> NodeFn:
+    """Runs after persist. Embedding is best-effort: a Titan failure on one card
+    or a failed write is counted and logged, never raised (AC2)."""
+
+    def _embed(state: CurationState) -> CurationState:
+        vectors: dict[str, list[float]] = {}
+        failed = 0
+        for card in state.get("cards", []):
+            try:
+                vectors[card.url] = embed(card_text(card.to_dict()))
+            except Exception as exc:  # noqa: BLE001 - per-card failure: skip, count, continue
+                logger.warning(
+                    json.dumps(
+                        {
+                            "event": "embed_item_failed",
+                            "run_id": state.get("run_id", ""),
+                            "url": card.url,
+                            "error": str(exc),
+                        }
+                    )
+                )
+                failed += 1
+        embedded = 0
+        if vectors:
+            try:
+                embedded = writer.set_embeddings(vectors)
+                failed += len(vectors) - embedded
+            except Exception as exc:  # noqa: BLE001 - a failed write must not fail the run
+                logger.warning(
+                    json.dumps(
+                        {
+                            "event": "embed_write_failed",
+                            "run_id": state.get("run_id", ""),
+                            "error": str(exc),
+                        }
+                    )
+                )
+                failed += len(vectors)
+        _log("embed_complete", state, embedded=embedded, embed_failed=failed)
+        return {"embedded": embedded, "embed_failed": failed}
+
+    return _embed

@@ -133,7 +133,23 @@ def test_bedrock_statement_scoped_to_haiku_profile_and_regional_foundation_model
     all_resources = [resource for s in statements for resource in _as_list(s.get("Resource", []))]
     assert "bedrock:InvokeModelWithResponseStream" not in all_actions
     assert not any("sonnet" in resource.lower() for resource in all_resources)
-    assert not any("titan" in resource.lower() for resource in all_resources)
+    # The Haiku statement stays Haiku-only; Titan has its own statement
+    # (test_titan_statement_...), so "no titan" is asserted per-statement.
+    assert not any("titan" in r.lower() for r in _as_list(statement["Resource"]))
+
+
+# specs/chat-retrieval AC8: the role gains Titan v2 embeddings, scoped to the
+# one foundation-model ARN (invoked by plain model id, no inference profile).
+def test_titan_statement_grants_invoke_model_on_the_titan_v2_foundation_model_only():
+    template_json = _synthesized_template().to_json()
+    statements = _all_policy_statements(template_json)
+    statement = _statement_by_sid(statements, "InvokeTitanEmbed")
+
+    assert statement["Effect"] == "Allow"
+    assert set(_as_list(statement["Action"])) == {"bedrock:InvokeModel"}
+    assert set(_as_list(statement["Resource"])) == {
+        f"arn:aws:bedrock:{REGION}::foundation-model/amazon.titan-embed-text-v2:0"
+    }
 
 
 # T9 (Guarantee 6 / Success Criteria - DynamoDB scoping): exactly

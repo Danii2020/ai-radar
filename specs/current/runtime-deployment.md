@@ -1,6 +1,6 @@
 # Runtime Deployment Specification
 
-> Last synced: 2026-09-17. Owned artifacts: `runtime_app.py`,
+> Last synced: 2026-10-13. Owned artifacts: `runtime_app.py`,
 > `infra/lib/agent_runtime.py`, `infra/stacks/agent_runtime_stack.py`, `Dockerfile`.
 
 ## Purpose
@@ -43,13 +43,15 @@ sentinel placeholder, the run SHALL proceed RSS-only rather than fail.
 ### Requirement: RD-3 — Least privilege, scoped trust
 
 The synthesized execution-role policy SHALL grant exactly the pinned
-actions/resources (Haiku-only Bedrock, two DynamoDB actions on the table +
-GSI, one secret's `GetSecretValue`, AgentCore logs + ECR pull — no
-`Resource: "*"` except the required `ecr:GetAuthorizationToken`), and SHALL
-be assumable only by `bedrock-agentcore.amazonaws.com` under
-`aws:SourceAccount`/`aws:SourceArn` conditions.
+actions/resources (Haiku-only Bedrock, plus `bedrock:InvokeModel` on the Titan v2
+foundation-model ARN alone, two DynamoDB actions on the table + GSI, one secret's
+`GetSecretValue`, AgentCore logs + ECR pull — no `Resource: "*"` except the required
+`ecr:GetAuthorizationToken`), and SHALL be assumable only by
+`bedrock-agentcore.amazonaws.com` under `aws:SourceAccount`/`aws:SourceArn`
+conditions. Each model gets its own pinned statement; the Haiku statement stays
+Haiku-only.
 
-**Source:** runtime-packaging · contract.md § Behavior Guarantees 6, 7
+**Source:** runtime-packaging · contract.md § Behavior Guarantees 6, 7; amended by chat-retrieval · execution-plan.md § Proposed approach (`InvokeTitanEmbed` statement)
 
 ### Requirement: RD-4 — Immediate ack, background execution
 
@@ -103,8 +105,12 @@ ergonomics, not an oversight.
 |---|---|---|
 | runtime-packaging | 2026-07-27 | `BedrockAgentCoreApp` entrypoint, execution-role CDK stack, Secrets Manager Tavily resolution, `uv`-based Dockerfile. |
 | async-invocation-ack | 2026-08-10 | Async handler with immediate ack + background execution, single-flight guard — fixes `scheduling`'s finding F5 (EventBridge Scheduler's undocumented ~30s synchronous target timeout). |
+| chat-retrieval | 2026-10-13 | RD-3: the `InvokeTitanEmbed` statement (`bedrock:InvokeModel` on the Titan v2 foundation-model ARN only). The role change is in the template; the stack is not redeployed, so it is not live. |
 
 ## Related ADRs
 
-None yet — both contributing features shipped before `harny-adr` existed in
-this project.
+| ADR | Title | Status |
+|---|---|---|
+| [0014](../archived/chat-retrieval/decisions/0014-titan-grant-scoped-to-the-foundation-model.md) | The Titan embedding grant is a separate statement, scoped to the one foundation-model ARN | Accepted |
+
+(Both earlier contributing features shipped before `harny-adr` existed in this project, so they get no retroactive ADRs.)

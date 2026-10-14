@@ -6,9 +6,18 @@ is marked with a Bedrock cachePoint so repeated turns hit the prompt cache.
 """
 from __future__ import annotations
 
+from typing import Protocol
+
 from .bedrock import bedrock_client
 from .config import SONNET_MODEL_ID, TOP_K
-from .retrieval import CardIndex
+
+
+class Retriever(Protocol):
+    """Anything that can rank stored cards against a question: the local
+    `CardIndex` and the DynamoDB `DynamoCardRetriever`."""
+
+    def search(self, query: str, k: int) -> list[tuple[dict, float]]: ...
+
 
 SYSTEM = (
     "You are AI Radar's assistant. You help users dig into AI / GenAI / LLM / ML "
@@ -31,15 +40,15 @@ def _context_block(hits: list[tuple[dict, float]]) -> str:
 
 
 class RagChat:
-    """Stateful RAG chat over a CardIndex."""
+    """Stateful RAG chat over a `Retriever`."""
 
-    def __init__(self, cards: list[dict], k: int = TOP_K):
-        self.index = CardIndex(cards)
+    def __init__(self, retriever: Retriever, k: int = TOP_K):
+        self.retriever = retriever
         self.k = k
         self.history: list[dict] = []  # plain user/assistant turns (no context bloat)
 
     def ask(self, question: str) -> tuple[str, list[tuple[dict, float]]]:
-        hits = self.index.search(question, self.k)
+        hits = self.retriever.search(question, self.k)
         augmented = (
             f"Context cards:\n\n{_context_block(hits)}\n\n"
             f"User question: {question}"

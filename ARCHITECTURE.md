@@ -18,14 +18,16 @@ for the original design. The only type shared between them is `Card`.
 run_curation.py, runtime_app.py   Plane A entrypoints (local script / AgentCore
                                    Runtime async handler)
 run_chat.py                       Plane B entrypoint (RAG REPL)
+run_backfill_embeddings.py        one-time, idempotent Titan backfill for cards lacking an embedding
 export_api_schema.py              Exports the versioned API contract
 
 src/curation/                     Plane A — curation pipeline (discover → dedup →
                                    summarize → rank → persist), built as a
                                    LangGraph `StateGraph` (src/curation/graph.py):
   graph.py, nodes.py, state.py      the graph itself and its node functions
-  interfaces.py, composite.py       CardStore / Discoverer protocols + composition
+  interfaces.py, composite.py       CardStore / Discoverer / EmbeddingWriter protocols + composition
   local.py, dynamo.py               in-memory and DynamoDB CardStore implementations
+  backfill.py                       backfill_embeddings(): embeds cards without an EMBED_DIM vector
   tavily.py                         Tavily-backed discovery (Plane A's discoverer)
   summary.py                        RunSummary — per-run counts, tokens, and
                                      estimated Bedrock+Tavily cost (run-observability)
@@ -42,11 +44,18 @@ src/api/                          Phase 2 — read-only feed HTTP API (Lambda be
 src/contracts/                    Versioned Pydantic contracts shared across planes
                                    and the API boundary (CardOut, FeedResponse)
 
+src/chat/                         Plane B — DynamoDB retriever for the RAG chat:
+  retriever.py                      DynamoCardRetriever: paginated feed-by-score Query,
+                                     brute-force cosine top-k over stored vectors
+  config.py                         table name, backend switch, GSI constants (duplicated
+                                     from curation/config.py, equality-tested)
+
 src/shared/                       Plane B — RAG chat + infra shared by both planes:
   bedrock.py                        bedrock-runtime client, Haiku summarize (forced
                                      tool call)
-  retrieval.py                      Titan embeddings + CardIndex (cosine search)
-  chat.py                           RagChat: retrieve + Sonnet grounded answer
+  embeddings.py                     Titan v2 embed() + card_text(), used by both planes
+  retrieval.py                      CardIndex: in-memory cosine search (local path)
+  chat.py                           RagChat(retriever, k): retrieve + Sonnet grounded answer
   feeds.py                          RSS/Atom discovery → RawItem
   cards.py                          Card model + console rendering
   config.py                         region, model IDs, feeds, tuning (pydantic-settings)
@@ -83,6 +92,11 @@ discover -> dedup -> summarize -> rank -> persist
   forced tool call (`shared/bedrock.py`).
 - **rank** — orders the run's cards.
 - **persist** — writes through the `CardStore` port.
+- **embed** (optional, `chat-retrieval`) — runs after `persist` only when an
+  `embedding_writer` is passed (`runtime_app.py` and `run_curation.py` on DynamoDB; the
+  deployed runtime gets it only after its image is rebuilt).
+  Embeds each persisted card with Titan v2 and writes the vector through the writer.
+  A failure is counted, never raised, so it cannot fail the run.
 
 It runs two ways: locally (`run_curation.py`, local `CardStore`) and deployed
 on Bedrock AgentCore Runtime (`runtime_app.py`, DynamoDB `CardStore`), on an
@@ -96,10 +110,14 @@ Scheduler's synchronous-target timeout can't double-fire it (see
 
 Two surfaces, both read-only over what Plane A persisted:
 
-- **RAG chat** (`run_chat.py` -> `shared/chat.py`) — Titan embeddings +
-  in-memory cosine retrieval (`shared/retrieval.py`) grounding a Sonnet
-  answer with citations, over a Bedrock prompt-cache point on the stable
-  system prompt.
+- **RAG chat** (`run_chat.py` -> `shared/chat.py`) — cosine retrieval over Titan
+  v2 card vectors, grounding a Sonnet answer with citations, over a Bedrock
+  prompt-cache point on the stable system prompt. The retriever is either the
+  in-memory `CardIndex` (`shared/retrieval.py`, the default local path) or
+  `DynamoCardRetriever` (`src/chat/retriever.py`, `CARD_STORE_BACKEND=dynamo`), which
+  reads the vectors that the curation pipeline stored in the `embedding` attribute. Both
+  satisfy the `Retriever` protocol in `shared/chat.py`. Nothing in the chat path is
+  deployed yet (Phase 3, `chat-retrieval`); see `README.md`.
 - **Feed API** (`src/api/`) — `GET /v1/cards` via API Gateway HTTP API ->
   Lambda (`api/handler.py`) -> `dynamodb:Query` on a `feed-by-score` index
   (`api/dynamo.py`), paginated (`api/cursor.py`), returning the versioned

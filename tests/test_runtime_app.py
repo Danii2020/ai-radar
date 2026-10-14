@@ -231,7 +231,7 @@ class FakeCompiledGraph:
 
 
 def _fake_build_graph(final_state: dict, invoke_calls: list):
-    def _build(store, discoverer):
+    def _build(store, discoverer, embedding_writer=None):
         return FakeCompiledGraph(final_state, invoke_calls)
 
     return _build

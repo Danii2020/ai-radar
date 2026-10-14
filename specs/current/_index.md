@@ -1,7 +1,9 @@
 # Current-State Specifications
 
 > Current truth for this repo. Maintained by `harny-sync`; do not hand-edit.
-> Last synced: 2026-09-20 (component split: the frontend `web-feed`
+> Last synced: 2026-10-13 (`chat-retrieval` archived: new `chat-retrieval`
+> capability, ADRs 0009–0015, reservation F7 and F11; nothing deployed — see Notes).
+> Earlier: 2026-09-20 component split: the frontend `web-feed`
 > capability, its `web-feed-ui` archive, ADRs 0001–0007, and WEB-R1..R3 moved
 > to [`apps/web/specs/`](../../apps/web/specs/current/_index.md) — see Notes)
 
@@ -14,13 +16,14 @@
 
 | Capability | Current-State Specification | Incorporated Changes |
 |---|---|---|
-| curation-pipeline | [curation-pipeline.md](./curation-pipeline.md) | [curation-graph](../archived/curation-graph/), [tavily-discovery](../archived/tavily-discovery/) |
-| card-persistence | [card-persistence.md](./card-persistence.md) | [dynamodb-card-store](../archived/dynamodb-card-store/) |
-| runtime-deployment | [runtime-deployment.md](./runtime-deployment.md) | [runtime-packaging](../archived/runtime-packaging/), [async-invocation-ack](../archived/async-invocation-ack/) |
+| curation-pipeline | [curation-pipeline.md](./curation-pipeline.md) | [curation-graph](../archived/curation-graph/), [tavily-discovery](../archived/tavily-discovery/), [chat-retrieval](../archived/chat-retrieval/) |
+| card-persistence | [card-persistence.md](./card-persistence.md) | [dynamodb-card-store](../archived/dynamodb-card-store/), [chat-retrieval](../archived/chat-retrieval/) |
+| runtime-deployment | [runtime-deployment.md](./runtime-deployment.md) | [runtime-packaging](../archived/runtime-packaging/), [async-invocation-ack](../archived/async-invocation-ack/), [chat-retrieval](../archived/chat-retrieval/) |
 | scheduling | [scheduling.md](./scheduling.md) | [eventbridge-schedule](../archived/eventbridge-schedule/) |
 | observability | [observability.md](./observability.md) | [run-observability](../archived/run-observability/) |
 | config-loading | [config-loading.md](./config-loading.md) | [pydantic-settings-config](../archived/pydantic-settings-config/), [rename-spike-to-shared](../archived/rename-spike-to-shared/) |
 | feed-api | [feed-api.md](./feed-api.md) | [feed-api](../archived/feed-api/) |
+| chat-retrieval | [chat-retrieval.md](./chat-retrieval.md) | [chat-retrieval](../archived/chat-retrieval/) |
 
 ## Keyword lookup
 
@@ -38,7 +41,16 @@
 | DynamoCardStore | card-persistence |
 | upsert idempotency | card-persistence |
 | feed-by-score GSI | card-persistence, feed-api |
-| embedding attribute | card-persistence |
+| embedding attribute | card-persistence, chat-retrieval |
+| set_embeddings / set_embedding | card-persistence |
+| embed node / EmbeddingWriter | curation-pipeline |
+| backfill / run_backfill_embeddings | curation-pipeline |
+| Titan v2 / embed() / card_text | chat-retrieval |
+| Retriever / RagChat(retriever, k) | chat-retrieval |
+| DynamoCardRetriever | chat-retrieval |
+| brute force / cosine / scale ceiling | chat-retrieval |
+| CARD_STORE_BACKEND | chat-retrieval |
+| InvokeTitanEmbed | runtime-deployment |
 | card_id | card-persistence |
 | RemovalPolicy.RETAIN | card-persistence |
 | AgentCore Runtime | runtime-deployment |
@@ -86,15 +98,27 @@
 | rename-spike-to-shared | [specs/archived/rename-spike-to-shared/](../archived/rename-spike-to-shared/) | [config-loading.md](./config-loading.md) |
 | pydantic-settings-config | [specs/archived/pydantic-settings-config/](../archived/pydantic-settings-config/) | [config-loading.md](./config-loading.md) |
 | feed-api | [specs/archived/feed-api/](../archived/feed-api/) | [feed-api.md](./feed-api.md) |
+| chat-retrieval | [specs/archived/chat-retrieval/](../archived/chat-retrieval/) | [chat-retrieval.md](./chat-retrieval.md), [card-persistence.md](./card-persistence.md), [curation-pipeline.md](./curation-pipeline.md), [runtime-deployment.md](./runtime-deployment.md) |
 
 ## Decisions (ADR registry)
 
-No backend ADRs yet. ADR numbers are **repo-wide monotonic** across both harness roots: 0001–0007 belong to `web-feed-ui` and are registered in [`apps/web/specs/current/_index.md`](../../apps/web/specs/current/_index.md). The next ADR written in either harness is **0008**.
+ADR numbers are **repo-wide monotonic** across both harness roots: 0001–0007 belong to `web-feed-ui` and 0008 to `feed-structure-refactor`, both registered in [`apps/web/specs/current/_index.md`](../../apps/web/specs/current/_index.md) (the frontend index still names 0008 as next, and is not edited here). The next ADR written in either harness is **0016**.
+
+| ADR | Title | Status | Capability | Path |
+|---|---|---|---|---|
+| 0009 | Brute-force card retrieval over DynamoDB, with a recorded scale ceiling | Accepted | chat-retrieval | [specs/archived/chat-retrieval/decisions/0009-brute-force-card-retrieval-with-a-scale-ceiling.md](../archived/chat-retrieval/decisions/0009-brute-force-card-retrieval-with-a-scale-ceiling.md) |
+| 0010 | Embedding is an optional, best-effort step after persist, injected as a writer | Accepted | curation-pipeline | [specs/archived/chat-retrieval/decisions/0010-embedding-as-an-optional-post-persist-writer.md](../archived/chat-retrieval/decisions/0010-embedding-as-an-optional-post-persist-writer.md) |
+| 0011 | Vectors are written by a separate conditional writer, never through upsert | Accepted | card-persistence | [specs/archived/chat-retrieval/decisions/0011-vectors-written-by-a-separate-conditional-writer.md](../archived/chat-retrieval/decisions/0011-vectors-written-by-a-separate-conditional-writer.md) |
+| 0012 | The Titan embedding call and card text live in a neutral shared module | Accepted | chat-retrieval | [specs/archived/chat-retrieval/decisions/0012-shared-embeddings-module.md](../archived/chat-retrieval/decisions/0012-shared-embeddings-module.md) |
+| 0013 | Plane B duplicates Plane A's table, index and store constants instead of importing them | Accepted | chat-retrieval | [specs/archived/chat-retrieval/decisions/0013-plane-b-duplicates-plane-a-constants.md](../archived/chat-retrieval/decisions/0013-plane-b-duplicates-plane-a-constants.md) |
+| 0014 | The Titan embedding grant is a separate statement, scoped to the one foundation-model ARN | Accepted | runtime-deployment | [specs/archived/chat-retrieval/decisions/0014-titan-grant-scoped-to-the-foundation-model.md](../archived/chat-retrieval/decisions/0014-titan-grant-scoped-to-the-foundation-model.md) |
+| 0015 | The embedding backfill is a local, idempotent one-shot command | Accepted | curation-pipeline | [specs/archived/chat-retrieval/decisions/0015-backfill-as-a-local-one-shot-command.md](../archived/chat-retrieval/decisions/0015-backfill-as-a-local-one-shot-command.md) |
 
 All 10 features archived in the 2026-09-17 bootstrap pass shipped before
 `harny-adr` existed in this project; per that skill's own no-backfill
 guardrail, none get retroactive ADRs. `web-feed-ui`'s ADRs (the first real
-ones) now live with the frontend harness, see above.
+ones) now live with the frontend harness, see above. `chat-retrieval` is the
+first feature archived here with ADRs (0009–0015, from its approved execution plan).
 
 ## Open reservations
 
@@ -107,6 +131,8 @@ ones) now live with the frontend harness, see above.
 | RO-1 | `CURATION_EMIT_METRICS=false` kill switch never exercised live, offline-tested only. | LOW | `specs/archived/run-observability/audit.md` | observability |
 | RO-2 | No unattended/scheduled run has ever produced observability records — depends on ES-2. | MEDIUM (operational) | `specs/archived/run-observability/audit.md` | observability |
 | FA-R1 | Deployed feed-api Lambda's `ReservedConcurrentExecutions` is unreserved (`null`), not the contract's intended `5`, bridged by an account-quota workaround. | LOW (operational) | `specs/archived/feed-api/audit.md` AD-7 | feed-api |
+| F7 | Not verified in CI or live: the branch is unpushed, so no `harny-feedback.yml` run and no Stop-hook evidence exist; AC7 is verified offline only (no live `run_chat.py` against DynamoDB and Bedrock). | LOW | `specs/archived/chat-retrieval/audit.md` (F7) | chat-retrieval |
+| F11 | Accepted limitation: a card whose `upsert` failed still gets a Titan call (about $0.00002 per card, auditor's estimate); counted in `embed_failed`, AC2 holds. | LOW | `specs/archived/chat-retrieval/audit.md` (F11) | curation-pipeline |
 
 ## Notes
 
@@ -156,3 +182,12 @@ instead of the root's ruff/mypy. The frontend knowledge base moved with it:
 `specs/archived/web-feed-ui/` → `apps/web/specs/archived/web-feed-ui/`
 (including ADRs 0001–0007 and reservations WEB-R1..R3). The `feed-api`
 capability stays here — it is backend code, and `web-feed` consumes it.
+
+**2026-10-13 chat-retrieval.** Phase 3's first spec, archived after an approved
+audit (round 3, APPROVED WITH RESERVATIONS) and the human's sign-off. It creates
+the `chat-retrieval` capability and merges into `card-persistence` (PS-2 names
+its sanctioned writer; new PS-5), `curation-pipeline` (CP-1 amended; new CP-6,
+the optional embed step) and `runtime-deployment` (RD-3 names the Titan grant).
+**Nothing from it is deployed:** the runtime role needs a redeploy, the agent image
+needs a rebuild, and the backfill has not been run. The live checks in F7 are open.
+Its ADRs (0009–0015) are the first in this root to be written by `harny-adr`.

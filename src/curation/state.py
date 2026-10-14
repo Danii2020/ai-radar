@@ -26,3 +26,5 @@ class CurationState(TypedDict, total=False):
     persisted: int                         # NEW: persist  -> len(cards) handed to upsert
     input_tokens: int                      # NEW: summarize -> Bedrock input tokens
     output_tokens: int                     # NEW: summarize -> Bedrock output tokens
+    embedded: int                          # embed    -> cards that got a vector (only with a writer)
+    embed_failed: int                      # embed    -> cards whose embedding or write failed

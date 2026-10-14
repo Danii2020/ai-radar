@@ -20,6 +20,50 @@ a version number. Each entry links to its archived SDD spec
 Nothing pending beyond `apps/web/specs/archived/web-feed-ui/` (Phase 2 spec 02, the Next.js
 frontend — still in progress, not yet archived).
 
+## 2026-10-13 — chat-retrieval
+
+Spec: `specs/archived/chat-retrieval/`. Audit: APPROVED WITH RESERVATIONS (round 3).
+**Nothing from this entry is deployed**: the agent image rebuild, the
+`AiRadarRuntimeRole` redeploy and the backfill run are still pending (see README
+"Phase 3 — Chatbot").
+
+### Added
+- Curation-time embeddings: an `embed` node after `persist` (`src/curation/graph.py`,
+  `src/curation/nodes.py`) writes a Titan v2 vector to each persisted card via
+  `DynamoCardStore.set_embeddings` (`src/curation/dynamo.py`). Shared `embed()` and
+  `card_text()` live in `src/shared/embeddings.py`.
+- Backfill: `uv run run_backfill_embeddings.py` (`src/curation/backfill.py`) embeds cards
+  with no vector, or one of the wrong length. It is idempotent and prints
+  `embedded/skipped/failed`.
+- `DynamoCardRetriever` in `src/chat/` (`retriever.py`, `config.py`): a paginated `Query`
+  on `feed-by-score`, with brute-force cosine top-k over the stored vectors.
+- `Retriever` protocol and `RagChat(retriever, k)` in `src/shared/chat.py`.
+- `CARD_STORE_BACKEND` switch in `run_chat.py` (`json` default, Phase 0 behavior;
+  `dynamo` reads from DynamoDB).
+- `InvokeTitanEmbed` statement in `infra/lib/agent_runtime.py`: `bedrock:InvokeModel` on
+  the Titan v2 foundation model only. The Haiku statement stays Haiku-only.
+
+### Changed
+- `build_graph(store, discoverer, embedding_writer=None)`: the writer is optional, so
+  existing callers and the no-writer graph are unchanged.
+- `runtime_app.py` and `run_curation.py` pass their `DynamoCardStore` as the embedding writer.
+- `src/shared/retrieval.py` imports `embed` and `card_text` from `src/shared/embeddings.py`
+  and no longer re-exports `EMBED_MODEL_ID`.
+- Test edits, all deliberate: the `_fake_build_graph` helper in
+  `tests/test_runtime_app.py` gained `embedding_writer`; the "no titan" assertion in
+  `tests/test_infra_agent_runtime.py` now covers the Haiku statement only; one assertion
+  line in `tests/test_config.py` was removed for audit finding F3 (human-approved).
+- Test suite: 406 passed (baseline 350); ruff and mypy clean.
+
+### Known limitations
+- A card whose upsert fails still gets a Titan call (about $0.00002 per card, the
+  auditor's estimate). Its vector write is then rejected and it is counted in
+  `embed_failed`, so the run is unaffected (audit F11, accepted).
+- Not verified live: no `run_chat.py` run against real DynamoDB and Bedrock; CI on the
+  unpushed branch; evidence that the Stop hook fired (audit F7, open).
+- Brute-force retrieval is to be revisited at about 2,000 embedded cards, or a measured
+  p95 above about 1 s.
+
 ## 2026-10-03 — feed-structure-refactor
 
 Spec: `apps/web/specs/archived/feed-structure-refactor/`. Audit: APPROVED WITH

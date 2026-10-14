@@ -133,7 +133,7 @@ def _run_curation_pipeline(run_id: str) -> RunSummary:
     `searches()` / `credits_used()`."""
     store = _build_store()
     discoverer = _build_discoverer()
-    graph = build_graph(store, discoverer)
+    graph = build_graph(store, discoverer, embedding_writer=store)
 
     started = time.monotonic()
     final = graph.invoke({"max_items": config.MAX_ITEMS, "run_id": run_id})
