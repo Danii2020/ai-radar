@@ -15,23 +15,33 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 from rich.console import Console
 from rich.markdown import Markdown
 
-from shared.chat import RagChat
+from chat import config as chat_config
+from shared.chat import RagChat, Retriever
 from shared.config import CARDS_PATH
+from shared.retrieval import CardIndex
 
 
 def main() -> None:
     console = Console()
-    if not CARDS_PATH.exists():
-        console.print(
-            f"[red]No cards found at {CARDS_PATH}.[/red] "
-            "Run [bold]uv run run_curation.py[/bold] first."
-        )
-        sys.exit(1)
-
-    cards = json.loads(CARDS_PATH.read_text())
     console.rule("[bold]AI Radar — mini RAG chat")
-    console.print(f"[dim]Grounded in {len(cards)} curated cards. Embedding…[/dim]")
-    chat = RagChat(cards)
+    retriever: Retriever
+    if chat_config.CARD_STORE_BACKEND == "dynamo":
+        # Plane B retrieval straight from DynamoDB (vectors written by curation).
+        from chat.retriever import DynamoCardRetriever
+
+        retriever = DynamoCardRetriever()
+        console.print("[dim]Grounded in cards retrieved from DynamoDB.[/dim]")
+    else:
+        if not CARDS_PATH.exists():
+            console.print(
+                f"[red]No cards found at {CARDS_PATH}.[/red] "
+                "Run [bold]uv run run_curation.py[/bold] first."
+            )
+            sys.exit(1)
+        cards = json.loads(CARDS_PATH.read_text())
+        console.print(f"[dim]Grounded in {len(cards)} curated cards. Embedding…[/dim]")
+        retriever = CardIndex(cards)
+    chat = RagChat(retriever)
     console.print("[dim]Ready. Ask about the collected AI news. ('exit' to quit)[/dim]\n")
 
     while True:

@@ -43,3 +43,22 @@ class CardStore(Protocol):
         must be excluded by a subsequent dedup_filter (idempotency guarantee).
         """
         ...
+
+
+@runtime_checkable
+class EmbeddingWriter(Protocol):
+    """Optional second capability of a store: attach vectors to persisted cards.
+
+    Kept apart from `CardStore` so stores without vectors (the JSON backend)
+    need not implement it; `build_graph` adds the embed step only when one is
+    passed.
+    """
+
+    def set_embeddings(self, vectors: dict[str, list[float]]) -> int:
+        """Attach each vector (keyed by card URL) to its already-persisted card.
+        Returns how many vectors were actually written.
+
+        Must not create items for unknown cards and must not raise for a
+        single bad card.
+        """
+        ...

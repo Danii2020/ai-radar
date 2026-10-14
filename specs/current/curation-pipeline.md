@@ -1,8 +1,9 @@
 # Curation Pipeline Specification
 
-> Last synced: 2026-09-17. Owned artifacts: `src/curation/graph.py`,
+> Last synced: 2026-10-13. Owned artifacts: `src/curation/graph.py`,
 > `src/curation/nodes.py`, `src/curation/state.py`, `src/curation/interfaces.py`,
-> `src/curation/composite.py`, `src/curation/tavily.py`, `src/shared/feeds.py`.
+> `src/curation/composite.py`, `src/curation/tavily.py`, `src/curation/backfill.py`,
+> `run_backfill_embeddings.py`, `src/shared/feeds.py`.
 
 ## Purpose
 
@@ -23,9 +24,11 @@ The system SHALL compile a `StateGraph` whose node set is exactly
 `{discover, dedup, summarize, rank, persist}`, wired linearly
 `START → discover → dedup → summarize → rank → persist → END`, constructed
 by injecting a `Discoverer` and a `CardStore` — never by editing
-`graph.py`/`nodes.py`/`state.py` to swap infrastructure.
+`graph.py`/`nodes.py`/`state.py` to swap infrastructure. The sole exception is
+the optional `embed` node of CP-6, which is added only when an `embedding_writer`
+is passed; without one the graph is exactly the five-node graph above.
 
-**Source:** curation-graph · contract.md § Behavior Guarantees 1, 9
+**Source:** curation-graph · contract.md § Behavior Guarantees 1, 9; amended by chat-retrieval · execution-plan.md § Proposed approach (`build_graph(..., embedding_writer=None)`)
 
 #### Scenario: Swapping the discoverer or store
 - **WHEN** `build_graph(store, discoverer)` is called with a different
@@ -78,6 +81,25 @@ that source.
 
 **Source:** tavily-discovery · contract.md § Behavior Guarantees 1
 
+### Requirement: CP-6 — Optional, best-effort embed step after persist
+
+The system SHALL, when built with an `embedding_writer`, run an `embed` node after
+`persist`. The node SHALL embed each persisted card's `card_text` with Titan v2 and write
+the vectors through that writer. A Titan failure on one card, or a failed write, SHALL be
+counted and logged. It SHALL NOT fail the run or unpersist a card. The node SHALL NOT run
+before `persist`.
+
+**Source:** chat-retrieval · intent.md § AC1, AC2; execution-plan.md § Proposed approach (embed node after persist, per-card try/except)
+
+#### Scenario: Titan fails on one of six cards
+- **WHEN** a run with a writer persists 6 cards and Titan raises for one
+- **THEN** all 6 cards are persisted, 5 are embedded, the run completes, and the embed
+  step's log record reports `embed_failed=1`
+
+#### Scenario: No writer
+- **WHEN** the graph is built without an `embedding_writer`
+- **THEN** no embed node exists and Titan is never called
+
 ## Invariants
 
 1. Dedup key derivation is a single rule everywhere: `sha256(url.encode()).hexdigest()[:16]`,
@@ -89,6 +111,14 @@ that source.
    `boto3` or the `tavily` SDK directly — infra access is confined to the
    `Discoverer`/`CardStore` Protocol implementations (curation-graph BG6,
    tavily-discovery BG8).
+3. Embedding is an optional step after `persist`, never before it, and it never fails a
+   run (CP-6, ADR 0010). Card persistence does not wait on Titan.
+
+## Open reservations
+
+| ID | Reservation | Severity | Source |
+|---|---|---|---|
+| F11 | Accepted limitation: a card whose `upsert` failed still gets a Titan call (about $0.00002 per card by the auditor's estimate, not checked against current pricing). Its conditional vector write is then rejected and it is counted in `embed_failed`, so CP-6 holds. | LOW | `specs/archived/chat-retrieval/audit.md` (F11) |
 
 ## Contributing features
 
@@ -96,9 +126,13 @@ that source.
 |---|---|---|
 | curation-graph | 2026-07-10 | The five-node `StateGraph`, `Discoverer`/`CardStore` Protocols, local JSON-file defaults, dedup-before-summarize ordering, per-item resilience. |
 | tavily-discovery | 2026-07-15 | `TavilyDiscoverer` + `CompositeDiscoverer`, cross-source dedup, per-run result cap, graceful degradation on source failure. |
+| chat-retrieval | 2026-10-13 | CP-6: the optional `embed` node after `persist` and its `EmbeddingWriter` seam, the embed counts in state and the log record, and the backfill (`src/curation/backfill.py`, `run_backfill_embeddings.py`). Nothing deployed. |
 
 ## Related ADRs
 
-None yet — both contributing features shipped before `harny-adr` existed in
-this project; per that skill's own guardrail, shipped-before-the-skill
-features get no retroactive ADRs.
+| ADR | Title | Status |
+|---|---|---|
+| [0010](../archived/chat-retrieval/decisions/0010-embedding-as-an-optional-post-persist-writer.md) | Embedding is an optional, best-effort step after persist, injected as a writer | Accepted |
+| [0015](../archived/chat-retrieval/decisions/0015-backfill-as-a-local-one-shot-command.md) | The embedding backfill is a local, idempotent one-shot command | Accepted |
+
+(`curation-graph` and `tavily-discovery` shipped before `harny-adr` existed in this project; per that skill's own guardrail, they get no retroactive ADRs.)

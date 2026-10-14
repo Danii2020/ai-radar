@@ -7,24 +7,8 @@ from __future__ import annotations
 
 import json
 
-from .bedrock import bedrock_client
-from .config import EMBED_DIM, EMBED_MODEL_ID, EMBED_PATH
-
-
-def embed(text: str) -> list[float]:
-    """Return a normalized embedding vector for `text` (cosine == dot product)."""
-    body = json.dumps(
-        {"inputText": text[:8000], "dimensions": EMBED_DIM, "normalize": True}
-    )
-    resp = bedrock_client().invoke_model(modelId=EMBED_MODEL_ID, body=body)
-    return json.loads(resp["body"].read())["embedding"]
-
-
-def _card_text(card: dict) -> str:
-    parts = [card.get("title", ""), card.get("summary", "")]
-    parts += card.get("takeaways", [])
-    parts += card.get("tags", [])
-    return "\n".join(p for p in parts if p)
+from .config import EMBED_DIM, EMBED_PATH
+from .embeddings import card_text, embed
 
 
 def _dot(a: list[float], b: list[float]) -> float:
@@ -49,7 +33,7 @@ class CardIndex:
             url = card["url"]
             vec = cache.get(url)
             if vec is None or len(vec) != EMBED_DIM:
-                vec = embed(_card_text(card))
+                vec = embed(card_text(card))
                 cache[url] = vec
                 dirty = True
             self.vectors[url] = vec

@@ -61,6 +61,7 @@ class AgentRuntime(Construct):
         haiku_inference_profile_id: str = "us.anthropic.claude-haiku-4-5-20251001-v1:0",
         haiku_foundation_model_id: str = "anthropic.claude-haiku-4-5-20251001-v1:0",
         haiku_regions: list[str] | None = None,
+        titan_embed_model_id: str = "amazon.titan-embed-text-v2:0",
     ) -> None:
         super().__init__(scope, construct_id)
         haiku_regions = haiku_regions if haiku_regions is not None else [
@@ -118,6 +119,19 @@ class AgentRuntime(Construct):
                 effect=iam.Effect.ALLOW,
                 actions=["bedrock:InvokeModel"],
                 resources=bedrock_resources,
+            )
+        )
+
+        # Titan v2 embeddings (chat-retrieval): invoked by plain model id, so
+        # the one foundation-model ARN only; the Haiku statement stays Haiku-only.
+        self.role.add_to_policy(
+            iam.PolicyStatement(
+                sid="InvokeTitanEmbed",
+                effect=iam.Effect.ALLOW,
+                actions=["bedrock:InvokeModel"],
+                resources=[
+                    f"arn:aws:bedrock:{region}::foundation-model/{titan_embed_model_id}"
+                ],
             )
         )
 

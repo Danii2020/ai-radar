@@ -79,6 +79,14 @@ See the "Phase 2 — Web Feed" section
 in [`README.md`](README.md) for the full status table, the Docker-packaging
 gotcha `feed-api` surfaced, and the live-deploy verification detail.
 
+**Phase 3 ("chatbot") has begun.** Its first spec, `chat-retrieval`, is implemented and
+audit-approved with reservations (round 3, 2026-10-13; `uv run pytest tests/` → 406 passed,
+ruff and mypy clean). It adds curation-time Titan v2 embeddings on the DynamoDB `embedding`
+attribute, a backfill (`uv run run_backfill_embeddings.py`), a brute-force `DynamoCardRetriever`
+in `src/chat/`, and a `CARD_STORE_BACKEND=dynamo` switch in `run_chat.py`. **Not deployed:**
+the agent image needs a rebuild, `AiRadarRuntimeRole` needs a redeploy for the Titan grant,
+and the backfill has not been run. See "Phase 3 — Chatbot" in [`README.md`](README.md).
+
 ## SDD harness: two roots
 
 [harny](../harny) is installed twice, once per stack, until harny supports
@@ -115,15 +123,19 @@ uv run python -c "..."     # ad-hoc python in the env
 ## Layout
 
 ```
-run_chat.py             # Plane B entrypoint (RAG REPL)
+run_chat.py             # Plane B entrypoint (RAG REPL; CARD_STORE_BACKEND=json | dynamo)
+run_backfill_embeddings.py  # one-time, idempotent Titan backfill for cards without an embedding
 pyproject.toml          # deps (uv); uv.lock is the source of truth
 src/shared/
   config.py             # region, model IDs, feeds, tuning, cache paths (env-overridable)
   feeds.py              # RSS/Atom discovery → RawItem
   bedrock.py            # shared bedrock-runtime client + Haiku summarize (forced tool call)
-  retrieval.py          # Titan embeddings + CardIndex (cosine search, disk-cached)
-  chat.py               # RagChat: retrieve + Sonnet grounded answer + multi-turn history
+  embeddings.py         # Titan v2 embed() + card_text() — shared by both planes
+  retrieval.py          # CardIndex: in-memory cosine search (local path, disk-cached)
+  chat.py               # RagChat(retriever, k): retrieve + Sonnet grounded answer + multi-turn history
   cards.py              # Card model + rich console rendering
+src/curation/backfill.py  # backfill_embeddings(): embeds cards lacking an EMBED_DIM vector
+src/chat/               # Plane B DynamoDB retriever: config.py, retriever.py (DynamoCardRetriever)
 docs/                   # design + research + architecture principles
 ```
 
@@ -198,5 +210,6 @@ docs/                   # design + research + architecture principles
 
 ## Deferred (later phases)
 
-Real vector store for RAG (DynamoDB reserves an `embedding` attribute for it) ·
+Real vector store for RAG (Phase 3 brute-forces the DynamoDB `embedding` attribute;
+revisit at ~2,000 embedded cards or p95 retrieval above ~1 s — see README "Phase 3") ·
 AgentCore Memory (STM/LTM) · Next.js feed.

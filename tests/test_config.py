@@ -816,5 +816,4 @@ def test_shared_retrieval_from_imported_values_match_config_constants():
     import shared.retrieval as retrieval_module
 
     assert retrieval_module.EMBED_DIM == config_module.EMBED_DIM
-    assert retrieval_module.EMBED_MODEL_ID == config_module.EMBED_MODEL_ID
     assert retrieval_module.EMBED_PATH == config_module.EMBED_PATH

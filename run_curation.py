@@ -59,7 +59,11 @@ if __name__ == "__main__":
     force = "--force" in sys.argv
     store = _build_store(force)
     discoverer = _build_discoverer()
-    graph = build_graph(store, discoverer)
+    # Only the DynamoDB backend can hold vectors; the JSON store is not an
+    # EmbeddingWriter, so the embed step is skipped locally by default.
+    graph = build_graph(
+        store, discoverer, embedding_writer=store if isinstance(store, DynamoCardStore) else None
+    )
 
     run_id = uuid.uuid4().hex
     started = time.monotonic()

@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import hashlib
 from datetime import UTC, datetime
+from decimal import Decimal
 
 import boto3
+from boto3.dynamodb.conditions import Key
 
 from shared import config as shared_config
 from shared.cards import Card
@@ -144,3 +146,53 @@ class DynamoCardStore:
         """Count of cards that raised during the last upsert() (0 if clean).
         Lets a caller/observer surface a partially-failed persist (Spec 06)."""
         return self._failures
+
+    def set_embeddings(self, vectors: dict[str, list[float]]) -> int:
+        """Attach each vector (keyed by card URL) to its existing item. This is
+        the sanctioned separate writer of `embedding` (`upsert` never writes
+        it). The condition makes an unknown card a no-op instead of a phantom
+        item; per-card try/except so one failure doesn't sink the rest. Returns
+        the number of vectors actually written (unknown cards and failures do
+        not count). Floats are stored as `Decimal` (the resource API rejects
+        Python floats)."""
+        written = 0
+        for url, vector in vectors.items():
+            try:
+                self.set_embedding(_card_id(url), vector)
+                written += 1
+            except Exception as exc:  # noqa: BLE001 - per-card failure: skip, continue
+                print(f"! failed to embed {url}: {exc}")
+        return written
+
+    def set_embedding(self, card_id: str, vector: list[float]) -> None:
+        """Attach one vector to the item with this `card_id` (raises on failure,
+        including when the item does not exist). Backfill writes by the
+        `card_id` it listed, so it never has to re-derive the key from a URL."""
+        self._table.update_item(
+            Key={"card_id": card_id},
+            UpdateExpression="SET embedding=:e",
+            ConditionExpression="attribute_exists(card_id)",
+            ExpressionAttributeValues={":e": [Decimal(str(x)) for x in vector]},
+        )
+
+    def list_unembedded(self) -> tuple[list[dict], int]:
+        """`(items lacking a usable embedding, total item count)`. Reads every
+        item through `Query` on `feed-by-score` (paginated to exhaustion); an
+        embedding whose length differs from `EMBED_DIM` counts as missing, so a
+        dimension change heals via backfill."""
+        unembedded: list[dict] = []
+        total = 0
+        kwargs: dict = {
+            "IndexName": config.FEED_GSI_NAME,
+            "KeyConditionExpression": Key("gsi_pk").eq(config.FEED_GSI_PARTITION),
+        }
+        while True:
+            resp = self._table.query(**kwargs)
+            for item in resp.get("Items", []):
+                total += 1
+                if len(item.get("embedding", [])) != shared_config.EMBED_DIM:
+                    unembedded.append(item)
+            last_key = resp.get("LastEvaluatedKey")
+            if not last_key:
+                return unembedded, total
+            kwargs["ExclusiveStartKey"] = last_key
