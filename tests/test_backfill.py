@@ -23,10 +23,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import curation.backfill as backfill_module
-from shared.embeddings import card_text
-
 from curation.dynamo import DynamoCardStore
 from shared.config import EMBED_DIM
+from shared.embeddings import card_text
 
 CARD_TABLE_NAME = "ai-radar-cards"
 
