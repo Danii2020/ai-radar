@@ -79,13 +79,20 @@ See the "Phase 2 — Web Feed" section
 in [`README.md`](README.md) for the full status table, the Docker-packaging
 gotcha `feed-api` surfaced, and the live-deploy verification detail.
 
-**Phase 3 ("chatbot") has begun.** Its first spec, `chat-retrieval`, is implemented and
-audit-approved with reservations (round 3, 2026-10-13; `uv run pytest tests/` → 406 passed,
-ruff and mypy clean). It adds curation-time Titan v2 embeddings on the DynamoDB `embedding`
-attribute, a backfill (`uv run run_backfill_embeddings.py`), a brute-force `DynamoCardRetriever`
-in `src/chat/`, and a `CARD_STORE_BACKEND=dynamo` switch in `run_chat.py`. **Not deployed:**
-the agent image needs a rebuild, `AiRadarRuntimeRole` needs a redeploy for the Titan grant,
-and the backfill has not been run. See "Phase 3 — Chatbot" in [`README.md`](README.md).
+**Phase 3 ("chatbot") has begun.** Two specs are shipped.
+`chat-retrieval` (audit-approved with reservations, round 3, 2026-10-13) adds curation-time
+Titan v2 embeddings on the DynamoDB `embedding` attribute, a backfill
+(`uv run run_backfill_embeddings.py`), a brute-force `DynamoCardRetriever` in `src/chat/`,
+and a `CARD_STORE_BACKEND=dynamo` switch in `run_chat.py`. Its deploy steps ran on
+2026-10-18: the Titan grant is live, the curation image is rebuilt, and all 16 live cards
+are embedded. `chat-agent-runtime` (audit-approved with reservations, round 3, 2026-10-18;
+`uv run pytest tests/` → 487 passed, ruff and mypy clean) runs the RAG chat as a second,
+stateless AgentCore Runtime agent: `chat_app.py` takes `{question, history}` and returns
+`{answer, sources}`, using Sonnet 4.6, and it is **deployed** as `ai_radar_chat` in the
+`AiRadarChatRuntime` stack (runtime `ai_radar_chat-JFCO0R9lkT`). The live AC10 runbook ran
+on 2026-10-18 with one latency sample, which is a recorded reservation. The chat API,
+public URL, throttling and web chat UI are later specs. See "Phase 3 — Chatbot" in
+[`README.md`](README.md).
 
 ## SDD harness: two roots
 
@@ -101,7 +108,8 @@ several stacks in one install:
   `apps/web/`** so `CLAUDE_PROJECT_DIR` points there and its hooks, agents,
   and skills load.
 
-ADR numbers are monotonic across both roots (next: 0009). When you change
+ADR numbers are monotonic across both roots (used through 0021 as of 2026-10-18; check
+`specs/current/_index.md` for the next free number). When you change
 `.sdd/feedback/run-feedback.mjs` or a shared role or skill in one root, make
 the same change in the other.
 
@@ -125,6 +133,8 @@ uv run python -c "..."     # ad-hoc python in the env
 ```
 run_chat.py             # Plane B entrypoint (RAG REPL; CARD_STORE_BACKEND=json | dynamo)
 run_backfill_embeddings.py  # one-time, idempotent Titan backfill for cards without an embedding
+chat_app.py            # Plane B AgentCore Runtime entrypoint (chat agent; AGENT_ENTRYPOINT=chat_app.py)
+runtime_app.py          # Plane A AgentCore Runtime entrypoint (curation agent; the Dockerfile default)
 pyproject.toml          # deps (uv); uv.lock is the source of truth
 src/shared/
   config.py             # region, model IDs, feeds, tuning, cache paths (env-overridable)
@@ -132,10 +142,10 @@ src/shared/
   bedrock.py            # shared bedrock-runtime client + Haiku summarize (forced tool call)
   embeddings.py         # Titan v2 embed() + card_text() — shared by both planes
   retrieval.py          # CardIndex: in-memory cosine search (local path, disk-cached)
-  chat.py               # RagChat(retriever, k): retrieve + Sonnet grounded answer + multi-turn history
+  chat.py               # answer_question() (stateless Sonnet answer) + RagChat(retriever, k) on top of it
   cards.py              # Card model + rich console rendering
 src/curation/backfill.py  # backfill_embeddings(): embeds cards lacking an EMBED_DIM vector
-src/chat/               # Plane B DynamoDB retriever: config.py, retriever.py (DynamoCardRetriever)
+src/chat/               # Plane B: config.py, retriever.py (DynamoCardRetriever), request.py (validate/cap), graph.py (LangGraph retrieve→answer)
 docs/                   # design + research + architecture principles
 ```
 
@@ -149,8 +159,8 @@ docs/                   # design + research + architecture principles
 | Role | Model ID | Access |
 |---|---|---|
 | Summarize (Haiku 4.5) | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | ✅ enabled |
-| Chat (Sonnet 4.5) | `us.anthropic.claude-sonnet-4-5-20250929-v1:0` | ✅ enabled (current default) |
-| Chat (Sonnet 4.6, design target) | `us.anthropic.claude-sonnet-4-6` | ❌ not subscribed — enable in Bedrock console, then set `SONNET_MODEL_ID` |
+| Chat (Sonnet 4.6, current default) | `us.anthropic.claude-sonnet-4-6` | ✅ enabled (the `SONNET_MODEL_ID` default; used by the deployed chat agent) |
+| Chat (Sonnet 4.5, legacy) | `us.anthropic.claude-sonnet-4-5-20250929-v1:0` | ⚠️ `LEGACY` in Bedrock, no longer the default |
 | Embeddings (Titan v2) | `amazon.titan-embed-text-v2:0` | ✅ enabled (256-dim, normalized) |
 
 - Structured LLM output uses the **Converse API with a forced tool call**

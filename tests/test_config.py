@@ -31,7 +31,7 @@ regardless of this developer machine's local `.env` contents (this repo's own
 `.env` sets `TAVILY_API_KEY` and `CARD_STORE_BACKEND` to non-default values,
 which would otherwise leak into "clean environment" default assertions).
 """
-from __future__ import annotations
+from __future__ import annotations  # noqa: I001, RUF100  (`ruff --isolated` in CI sorts tomllib as third-party)
 
 import importlib
 import os
@@ -85,7 +85,7 @@ SHARED_ENV_CASES = [
         "SONNET_MODEL_ID",
         "custom-sonnet-id",
         "custom-sonnet-id",
-        "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        "us.anthropic.claude-sonnet-4-6",
     ),
     (
         "EMBED_MODEL_ID",

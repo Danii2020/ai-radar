@@ -25,11 +25,25 @@ class _ChatSettings(BaseSettings):
     # imports Plane A.
     card_store_backend: str = Field("json", validation_alias="CARD_STORE_BACKEND")
 
+    # Request caps for the chat agent (spec `chat-agent-runtime`, AC3).
+    chat_max_question_chars: int = Field(
+        1000, ge=1, validation_alias="CHAT_MAX_QUESTION_CHARS"
+    )
+    chat_max_history_turns: int = Field(
+        10, ge=0, validation_alias="CHAT_MAX_HISTORY_TURNS"
+    )
+    chat_max_history_item_chars: int = Field(
+        4000, ge=1, validation_alias="CHAT_MAX_HISTORY_ITEM_CHARS"
+    )
+
 
 _settings = _ChatSettings()
 
 CARD_TABLE_NAME: str = _settings.card_table_name
 CARD_STORE_BACKEND: str = _settings.card_store_backend
+CHAT_MAX_QUESTION_CHARS: int = _settings.chat_max_question_chars
+CHAT_MAX_HISTORY_TURNS: int = _settings.chat_max_history_turns
+CHAT_MAX_HISTORY_ITEM_CHARS: int = _settings.chat_max_history_item_chars
 
 # Fixed constants — NOT env-overridable. DUPLICATED from curation/config.py
 # (architecture-principles boundary 1); tests/test_chat_contract.py asserts

@@ -18,6 +18,10 @@ one of the declared env vars, so any future edit that drops it fails loudly.
 """
 from __future__ import annotations
 
+import json
+import os
+import stat
+import subprocess
 from pathlib import Path
 
 DOCKERFILE_PATH = Path(__file__).parent.parent / "Dockerfile"
@@ -69,4 +73,44 @@ def test_dockerfile_sets_docker_container_env_for_agentcore_host_binding():
         "Dockerfile must set ENV DOCKER_CONTAINER=1 so BedrockAgentCoreApp.run() "
         "binds 0.0.0.0 (AgentCore's /.dockerenv fallback check is not reliable "
         "inside the Runtime microVM)"
+    )
+
+
+def _cmd_instruction() -> list[str]:
+    """The Dockerfile's exec-form `CMD [...]` as a list."""
+    for line in DOCKERFILE_PATH.read_text().splitlines():
+        if line.startswith("CMD "):
+            return json.loads(line[len("CMD "):])
+    raise AssertionError("Dockerfile has no CMD instruction")
+
+
+def _resolved_command(tmp_path: Path, agent_entrypoint: str | None) -> str:
+    """Run the CMD with a stub `python` first on PATH that echoes its arguments,
+    so the test sees which entrypoint file the container would start."""
+    stub = tmp_path / "python"
+    stub.write_text("#!/bin/sh\necho \"$@\"\n")
+    stub.chmod(stub.stat().st_mode | stat.S_IEXEC)
+    env = {"PATH": f"{tmp_path}:{os.environ['PATH']}"}
+    if agent_entrypoint is not None:
+        env["AGENT_ENTRYPOINT"] = agent_entrypoint
+    result = subprocess.run(
+        _cmd_instruction(), capture_output=True, text=True, env=env, check=True
+    )
+    return result.stdout.strip()
+
+
+def test_cmd_defaults_to_the_curation_entrypoint(tmp_path):
+    """chat-agent-runtime AC8: one shared Dockerfile; the curation agent keeps
+    working with no setting."""
+    assert _resolved_command(tmp_path, None) == "runtime_app.py"
+
+
+def test_cmd_honors_agent_entrypoint_for_the_chat_agent(tmp_path):
+    assert _resolved_command(tmp_path, "chat_app.py") == "chat_app.py"
+
+
+def test_dockerfile_still_exposes_the_agentcore_port():
+    assert any(
+        line.strip() == "EXPOSE 8080"
+        for line in DOCKERFILE_PATH.read_text().splitlines()
     )

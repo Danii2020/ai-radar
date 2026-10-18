@@ -18,6 +18,9 @@ for the original design. The only type shared between them is `Card`.
 run_curation.py, runtime_app.py   Plane A entrypoints (local script / AgentCore
                                    Runtime async handler)
 run_chat.py                       Plane B entrypoint (RAG REPL)
+chat_app.py                       Plane B AgentCore Runtime entrypoint (stateless chat
+                                   agent; selected in the shared Dockerfile by
+                                   AGENT_ENTRYPOINT=chat_app.py)
 run_backfill_embeddings.py        one-time, idempotent Titan backfill for cards lacking an embedding
 export_api_schema.py              Exports the versioned API contract
 
@@ -44,26 +47,33 @@ src/api/                          Phase 2 — read-only feed HTTP API (Lambda be
 src/contracts/                    Versioned Pydantic contracts shared across planes
                                    and the API boundary (CardOut, FeedResponse)
 
-src/chat/                         Plane B — DynamoDB retriever for the RAG chat:
+src/chat/                         Plane B — the chat agent's logic and DynamoDB retriever:
   retriever.py                      DynamoCardRetriever: paginated feed-by-score Query,
                                      brute-force cosine top-k over stored vectors
+  request.py                        parse_request(): pure validation and caps of
+                                     {question, history}, before any AWS call
+  graph.py                          build_chat_graph(retriever, k): LangGraph
+                                     retrieve → answer; sources builder; no-context path
   config.py                         table name, backend switch, GSI constants (duplicated
-                                     from curation/config.py, equality-tested)
+                                     from curation/config.py, equality-tested), and the
+                                     CHAT_MAX_* request caps
 
 src/shared/                       Plane B — RAG chat + infra shared by both planes:
   bedrock.py                        bedrock-runtime client, Haiku summarize (forced
                                      tool call)
   embeddings.py                     Titan v2 embed() + card_text(), used by both planes
   retrieval.py                      CardIndex: in-memory cosine search (local path)
-  chat.py                           RagChat(retriever, k): retrieve + Sonnet grounded answer
+  chat.py                           answer_question() (stateless Sonnet answer step) and
+                                     RagChat(retriever, k), which delegates to it
   feeds.py                          RSS/Atom discovery → RawItem
   cards.py                          Card model + console rendering
   config.py                         region, model IDs, feeds, tuning (pydantic-settings)
 
 infra/                            AWS CDK app (Python), one stack per deployable unit:
-  app.py                            CDK app entrypoint, wires all 5 stacks
+  app.py                            CDK app entrypoint, wires all 6 stacks
   stacks/card_store_stack.py          AiRadarCardStore   — DynamoDB card table
-  stacks/agent_runtime_stack.py       AiRadarRuntimeRole — AgentCore Runtime execution role
+  stacks/agent_runtime_stack.py       AiRadarRuntimeRole — curation AgentCore Runtime execution role
+  stacks/chat_runtime_stack.py        AiRadarChatRuntime — chat AgentCore Runtime execution role
   stacks/curation_schedule_stack.py   AiRadarSchedule    — EventBridge Scheduler trigger
   stacks/cost_budget_stack.py         AiRadarBudget      — AWS Budget + SNS alerts
   stacks/feed_api_stack.py            AiRadarFeedApi     — API Gateway + feed Lambda
@@ -110,14 +120,21 @@ Scheduler's synchronous-target timeout can't double-fire it (see
 
 Two surfaces, both read-only over what Plane A persisted:
 
-- **RAG chat** (`run_chat.py` -> `shared/chat.py`) — cosine retrieval over Titan
+- **RAG chat, local** (`run_chat.py` -> `shared/chat.py`) — cosine retrieval over Titan
   v2 card vectors, grounding a Sonnet answer with citations, over a Bedrock
   prompt-cache point on the stable system prompt. The retriever is either the
   in-memory `CardIndex` (`shared/retrieval.py`, the default local path) or
   `DynamoCardRetriever` (`src/chat/retriever.py`, `CARD_STORE_BACKEND=dynamo`), which
   reads the vectors that the curation pipeline stored in the `embedding` attribute. Both
-  satisfy the `Retriever` protocol in `shared/chat.py`. Nothing in the chat path is
-  deployed yet (Phase 3, `chat-retrieval`); see `README.md`.
+  satisfy the `Retriever` protocol in `shared/chat.py`.
+- **RAG chat agent, deployed** (`chat_app.py`, AgentCore Runtime agent `ai_radar_chat`,
+  `chat-agent-runtime`) — a stateless `{question, history}` → `{answer, sources}` turn.
+  `src/chat/request.py` validates and caps the request before any AWS call. The
+  LangGraph graph in `src/chat/graph.py` runs `retrieve` (the same
+  `DynamoCardRetriever`) and then `answer`, which calls `shared/chat.py`'s
+  `answer_question()` on Sonnet 4.6. With no hits it answers without a model call. Its
+  execution role is `AiRadarChatRuntime`, separate from the curation role. The chat API,
+  public URL and throttling are not built yet (`chat-api`); see `README.md`.
 - **Feed API** (`src/api/`) — `GET /v1/cards` via API Gateway HTTP API ->
   Lambda (`api/handler.py`) -> `dynamodb:Query` on a `feed-by-score` index
   (`api/dynamo.py`), paginated (`api/cursor.py`), returning the versioned
@@ -136,8 +153,10 @@ replacement for the Plane A/B `Card` dataclass.
 ## Infrastructure
 
 Deployed via AWS CDK (Python, `infra/`), one stack per deployable unit (see
-`infra/app.py`): `AiRadarCardStore`, `AiRadarRuntimeRole`, `AiRadarSchedule`,
-`AiRadarBudget`, `AiRadarFeedApi`. Current live-deploy status, exact deploy/
+`infra/app.py`): `AiRadarCardStore`, `AiRadarRuntimeRole`, `AiRadarChatRuntime`,
+`AiRadarSchedule`, `AiRadarBudget`, `AiRadarFeedApi`. Both agents share one root
+`Dockerfile`, and the chat agent selects its entrypoint with `AGENT_ENTRYPOINT`. Current
+live-deploy status, exact deploy/
 verify commands, and known operational gotchas are tracked in `README.md`,
 not here — that table is the source of truth for what's actually deployed at
 any given time.

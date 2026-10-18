@@ -13,7 +13,7 @@ from decimal import Decimal
 import boto3
 from boto3.dynamodb.conditions import Key
 
-from shared.config import EMBED_DIM
+from shared.config import AWS_REGION, EMBED_DIM
 from shared.embeddings import embed
 
 from .config import CARD_TABLE_NAME, FEED_GSI_NAME, FEED_GSI_PARTITION
@@ -29,7 +29,7 @@ _resource = None  # lazy singleton boto3 DynamoDB ServiceResource
 def _dynamo_resource():
     global _resource
     if _resource is None:
-        _resource = boto3.resource("dynamodb")
+        _resource = boto3.resource("dynamodb", region_name=AWS_REGION)
     return _resource
 
 

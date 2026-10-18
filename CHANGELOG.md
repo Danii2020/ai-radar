@@ -20,6 +20,48 @@ a version number. Each entry links to its archived SDD spec
 Nothing pending beyond `apps/web/specs/archived/web-feed-ui/` (Phase 2 spec 02, the Next.js
 frontend — still in progress, not yet archived).
 
+## 2026-10-18 — chat-agent-runtime
+
+Spec: `specs/archived/chat-agent-runtime/`. Audit: APPROVED WITH RESERVATIONS (round 3).
+The live AC10 runbook ran in account `626259825216`, together with the
+`chat-retrieval` deploy steps that had been pending (Titan grant, curation image
+rebuild, backfill). Reservation F11: retrieval latency has one sample (330 ms) and no
+p95, against the ADR 0009 ceiling.
+
+### Added
+- The chat agent, `chat_app.py`: a stateless AgentCore Runtime entrypoint.
+  `{question, history}` in, `{answer, sources}` out, with `invalid_request` and
+  `upstream_failure` errors. The handler is synchronous.
+- `src/chat/request.py` (`parse_request`, pure): validates and caps the request before any
+  AWS call. Caps are `CHAT_MAX_QUESTION_CHARS` (1000), `CHAT_MAX_HISTORY_TURNS` (10) and
+  `CHAT_MAX_HISTORY_ITEM_CHARS` (4000), in `src/chat/config.py`.
+- `src/chat/graph.py` (`build_chat_graph`): a LangGraph `retrieve` → `answer` graph. With
+  no hits it returns the fixed no-context answer and makes no model call.
+- `answer_question()` in `src/shared/chat.py`: the stateless Sonnet answer step, shared by
+  `RagChat.ask` and the agent.
+- One `chat_turn` log record per invocation (child logger `bedrock_agentcore.app.chat`).
+  It holds lengths, counts, timings and the outcome, and no question, history or answer
+  text.
+- `AiRadarChatRuntime` CDK stack (`infra/stacks/chat_runtime_stack.py`, construct in
+  `infra/lib/chat_runtime.py`): a separate chat execution role with seven statements,
+  `dynamodb:Query` on the `feed-by-score` index only, no secret and no write grant.
+- Live: AgentCore Runtime agent `ai_radar_chat` (`ai_radar_chat-JFCO0R9lkT`).
+
+### Changed
+- `SONNET_MODEL_ID` default is now `us.anthropic.claude-sonnet-4-6` (was Sonnet 4.5, now
+  `LEGACY` in Bedrock). An env override still wins. `.env.example` follows. The Haiku default
+  and the curation graph are unchanged.
+- `Dockerfile` CMD selects the entrypoint with `AGENT_ENTRYPOINT` (default
+  `runtime_app.py`, so the curation agent is unchanged). The chat agent deploys with
+  `AGENT_ENTRYPOINT=chat_app.py`.
+- `RagChat.ask` delegates to `answer_question()`, with identical model requests.
+- Live: the `AiRadarRuntimeRole` redeploy (Titan grant), the curation image rebuild and one
+  curation pass (16 cards, all embedded after the backfill).
+
+### Fixed
+- `DynamoCardRetriever` binds its DynamoDB resource to `shared.config.AWS_REGION`, so
+  importing the chat agent does not depend on a region environment variable.
+
 ## 2026-10-13 — chat-retrieval
 
 Spec: `specs/archived/chat-retrieval/`. Audit: APPROVED WITH RESERVATIONS (round 3).

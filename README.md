@@ -897,23 +897,26 @@ produce. Record the real values here (and in
 `http://localhost:3000` with the same `cdk deploy -c feed_api_allowed_origins=...`
 pattern above.
 
-## Phase 3 — Chatbot (1 spec started: `chat-retrieval`, not deployed)
+## Phase 3 — Chatbot (2 specs shipped: `chat-retrieval`, `chat-agent-runtime`; chat agent deployed)
 
 Phase 3 turns the curated cards into a RAG chatbot. Its first spec,
 [`chat-retrieval`](specs/archived/chat-retrieval/), is the **retrieval half**: every
 card gets a stored embedding, and Plane B can rank those vectors against a question.
-The chat agent on AgentCore Runtime, the chat API and the web chat UI are later Phase 3
-specs and are not started.
+Its second, [`chat-agent-runtime`](specs/archived/chat-agent-runtime/), runs that chat as
+its own stateless agent on AgentCore Runtime (live since 2026-10-18). The chat API
+(throttling, public URL) and the web chat UI are later Phase 3 specs and are not started.
 
 | Spec | Status | What it added |
 |---|---|---|
-| [`chat-retrieval`](specs/archived/chat-retrieval/) | ✅ Implemented, audit APPROVED WITH RESERVATIONS (round 3) — **nothing deployed** | Curation-time Titan v2 embeddings on the DynamoDB `embedding` attribute, a backfill command, a DynamoDB retriever in `src/chat/`, and a `run_chat.py` backend switch. Shipped 2026-10-13. Details below. |
+| [`chat-retrieval`](specs/archived/chat-retrieval/) | ✅ Implemented, audit APPROVED WITH RESERVATIONS (round 3); **deployed 2026-10-18** (runbook steps 2–4) | Curation-time Titan v2 embeddings on the DynamoDB `embedding` attribute, a backfill command, a DynamoDB retriever in `src/chat/`, and a `run_chat.py` backend switch. Shipped 2026-10-13. Details below. |
+| [`chat-agent-runtime`](specs/archived/chat-agent-runtime/) | ✅ Shipped & live-verified (AC10 human-run 2026-10-18); audit APPROVED WITH RESERVATIONS (round 3) | The RAG chat as a second AgentCore Runtime agent (`ai_radar_chat`): a stateless `{question, history}` → `{answer, sources}` entrypoint (`chat_app.py`), a LangGraph retrieve-then-answer graph, request validation and caps, its own least-privilege role (`AiRadarChatRuntime`), and the default chat model moved to Sonnet 4.6. Details in "chat-agent-runtime" below. |
 
-> **Nothing for this spec is deployed.** The embed step runs only once the curation
-> agent image is rebuilt, the execution role gains the Titan grant only once
-> `AiRadarRuntimeRole` is redeployed, and cards persisted before the backfill runs have no
-> vector until it does. The local `run_chat.py` path is unchanged, so nothing above affects
-> the live feed.
+> **What is deployed now.** The curation agent image was rebuilt, so new cards carry an
+> embedding. The backfill has run, and all 16 live cards have one. `AiRadarRuntimeRole`
+> carries the Titan grant. The chat agent runs as `ai_radar_chat-JFCO0R9lkT`, and its role
+> is the `AiRadarChatRuntime` stack. The chat path is not yet reachable from the public
+> feed. The curation schedule stays `DISABLED`. The local `run_chat.py` path is unchanged.
+> See "Account migration (2026-10-05)" for the live state.
 
 ### What shipped
 
@@ -942,10 +945,10 @@ specs and are not started.
 - **`run_chat.py` switch (AC7, offline).** The default is `CARD_STORE_BACKEND=json`, which
   is the Phase 0 behavior. `CARD_STORE_BACKEND=dynamo` answers from DynamoDB-retrieved
   cards with `[n]` citations.
-- **Infra (not deployed).** `infra/lib/agent_runtime.py` adds an `InvokeTitanEmbed`
+- **Infra (deployed 2026-10-18).** `infra/lib/agent_runtime.py` adds an `InvokeTitanEmbed`
   statement, `bedrock:InvokeModel` on the Titan v2 foundation-model ARN only. The Haiku
-  statement stays Haiku-only. The retriever's `dynamodb:Query` grant belongs to the later
-  chat-runtime spec.
+  statement stays Haiku-only. The retriever's `dynamodb:Query` grant lives in the chat
+  agent's own role (`AiRadarChatRuntime`, see `chat-agent-runtime`), not the curation role.
 
 Test status (offline, Bedrock stubbed, DynamoDB via moto): `uv run pytest tests/` →
 406 passed (baseline 350); `uv run ruff check` clean; `uv run mypy .` clean (78 files).
@@ -955,28 +958,142 @@ Two existing tests were edited: the `_fake_build_graph` helper gained an
 line in `tests/test_config.py` was removed for audit finding F3 (the `EMBED_MODEL_ID`
 re-export), with human approval.
 
-### Pending deploy (in this order)
+### Deploy record (done 2026-10-18, in this order)
 
-1. **Redeploy the `AiRadarRuntimeRole` stack.** This adds the Titan v2 `InvokeModel`
-   grant (`InvokeTitanEmbed`).
-2. **Rebuild and redeploy the curation agent image.** The embed step lives in `src/`,
-   and the image copies all of `src/`. The audit ran an arm64 build and an in-image
-   import and graph probe, which passed, but the image was never pushed or deployed.
-3. **Run the backfill once against the live table** with local credentials:
-   `uv run run_backfill_embeddings.py`. Expect `embedded` equal to the number of cards
-   without vectors, and a second run to print `embedded=0`.
+1. **Redeployed the `AiRadarRuntimeRole` stack.** Added the Titan v2 `InvokeModel`
+   grant (`InvokeTitanEmbed`). Account `626259825216`, `UPDATE_COMPLETE`.
+2. **Rebuilt and redeployed the curation agent image** (`agentcore deploy -a ai_radar_curation`).
+   One curation pass embedded its cards (`embed_complete`: embedded 8, embed_failed 0).
+3. **Ran the backfill once against the live table.** First run `embedded=8 skipped=8
+   failed=0`; second run `embedded=0 skipped=16 failed=0`. The live table has 16 of 16
+   cards with an `embedding`.
 
-After these, a live check is still needed (see "Not verified live" below): a
-`CARD_STORE_BACKEND=dynamo uv run run_chat.py` run against real DynamoDB and Bedrock.
+The chat agent's live turns (steps 6 and 7 below) exercise the same `DynamoCardRetriever`
+against the live table. The `CARD_STORE_BACKEND=dynamo uv run run_chat.py` check from
+"Not verified live" below has still not been run.
+
+### chat-agent-runtime — what shipped
+
+- **Entrypoint.** `chat_app.py` at the repo root, the only file that imports
+  `bedrock_agentcore` for chat. Its `@app.entrypoint` handler is synchronous: it takes
+  `{"question": str, "history": [...]}` and returns `{"answer": str, "sources": [...]}`.
+  Each source has `n`, `title`, `url`, `source`, `published` (may be `null`) and `score`
+  (rounded to 4 places), and never a vector. Failures return `{"error": "invalid_request",
+  "detail": "<rule>"}` or `{"error": "upstream_failure"}`.
+- **Stateless.** The caller holds the history. The graph is compiled without a checkpointer,
+  and nothing from one invocation reaches the next.
+- **Validation before any AWS call** (`src/chat/request.py`, pure). The caps are typed
+  pydantic-settings fields in `src/chat/config.py`: `CHAT_MAX_QUESTION_CHARS` (1000),
+  `CHAT_MAX_HISTORY_TURNS` (10, so at most 20 items), and `CHAT_MAX_HISTORY_ITEM_CHARS`
+  (4000). History roles must alternate and end with `assistant`.
+- **Graph** (`src/chat/graph.py`, portable and infra-free): `retrieve` (through the
+  existing `Retriever` Protocol, which `DynamoCardRetriever` satisfies), then `answer`.
+  With no hits, `answer` returns a fixed "not in the collected news" message with
+  `sources: []` and makes **no model call**.
+- **Shared answer step.** `answer_question` in `src/shared/chat.py` holds the Phase 0 prompt,
+  context block, `[n]` numbering and Sonnet call. `RagChat.ask` delegates to it, so
+  `run_chat.py` and the agent produce identical model requests.
+- **Chat model: Sonnet 4.6.** The `SONNET_MODEL_ID` default is now
+  `us.anthropic.claude-sonnet-4-6` (it was Sonnet 4.5, now `LEGACY` in Bedrock). An env
+  override still wins. The Haiku default and the curation graph are unchanged.
+- **Logs.** One `chat_turn` record per invocation, from the child logger
+  `bedrock_agentcore.app.chat`, with `question_chars`, `history_items`, `hits`,
+  `retrieval_ms`, `model_ms` and `outcome` (`ok`, `no_context`, `invalid_request`,
+  `upstream_failure`). It never carries question, history or answer text.
+- **Infra.** `AiRadarChatRuntime` (`infra/stacks/chat_runtime_stack.py`, construct in
+  `infra/lib/chat_runtime.py`) creates a separate execution role with exactly seven
+  statements: Sonnet 4.6 invoke (profile plus three foundation-model ARNs), Titan v2
+  invoke, `dynamodb:Query` on the `feed-by-score` index only, AgentCore logs, and ECR
+  pull. The trust policy allows only `bedrock-agentcore.amazonaws.com`, conditioned on
+  `aws:SourceAccount` and `aws:SourceArn`. The curation role is not widened, and the
+  chat role has no secret grant.
+- **Packaging.** There is still one root `Dockerfile`, with
+  `CMD ["sh", "-c", "exec python \"${AGENT_ENTRYPOINT:-runtime_app.py}\""]`. The default
+  keeps the curation agent unchanged. The chat agent sets `AGENT_ENTRYPOINT=chat_app.py`
+  at deploy time, which gives each agent its own image and Runtime. The toolkit builds only
+  the `Dockerfile` at the agent's `source_path`, which is why there is one shared file.
+  The ARM64 image builds, and `import chat_app` succeeds inside it with no region env.
+- **Test status (offline, 2026-10-18):** `uv run pytest tests/` gives 487 passed;
+  `uv run ruff check`, `uv run ruff check --isolated` and `uv run mypy .` are clean (87
+  files). Audit: APPROVED WITH RESERVATIONS (round 3). Reservations: F11 (one latency sample,
+  see Live results). Open LOW findings: F5 (a mislabeled test param), F6 (plan `-k`
+  selectors that miss tests), F7 (partial timings lost on `upstream_failure`) and F8 (CI
+  not yet run on a PR). None of them hides an unmet AC.
+
+### Chat agent runbook (`chat-agent-runtime`, AC10 — human-run, one step at a time)
+
+All eight steps were human-run on 2026-10-18 in account `626259825216` (table
+`ai-radar-cards`). The results are recorded under "Live results" below. The steps stay
+here as the procedure for a redeploy. Each writes to the real account, so run them one
+at a time and print the account first (`aws sts get-caller-identity`).
+
+1. **Smoke call on Sonnet 4.6** with the real request shape (`cachePoint` +
+   `temperature`): `aws sts get-caller-identity && SONNET_MODEL_ID=us.anthropic.claude-sonnet-4-6 PYTHONPATH=src uv run python -c "from shared.config import SONNET_MODEL_ID; print('model:', SONNET_MODEL_ID); from shared.chat import answer_question; print(answer_question('ping', [], [({'title':'t','source':'s','summary':'x','url':'u'}, 1.0)]))"`
+   (the account prints first; `PYTHONPATH=src` puts `shared` on the path; the explicit `SONNET_MODEL_ID` plus the printed `model:` line guard against a local `.env` still pinning Sonnet 4.5, which `load_dotenv()` would otherwise honor, so confirm it prints `us.anthropic.claude-sonnet-4-6`).
+   If Bedrock rejects the `cachePoint`, record it as an audit finding.
+2. `cd infra && cdk deploy AiRadarRuntimeRole` (adds the Titan grant).
+3. Rebuild/redeploy the curation image (`agentcore deploy -a ai_radar_curation`),
+   run one curation pass, confirm new cards carry an `embedding`.
+4. `uv run run_backfill_embeddings.py` once (second run prints `embedded=0`).
+5. Deploy the chat role and agent. **The `--env AGENT_ENTRYPOINT=chat_app.py`
+   flag is mandatory**, otherwise the shared image starts the curation entrypoint:
+
+   ```bash
+   cd infra && cdk deploy AiRadarChatRuntime      # note ExecutionRoleArn
+   agentcore configure --create -n ai_radar_chat -e chat_app.py \
+     -er <ChatExecutionRoleArn> -r us-east-1 -ecr auto --disable-memory --non-interactive
+   agentcore deploy -a ai_radar_chat --env AGENT_ENTRYPOINT=chat_app.py
+   ```
+
+   Configuring a second agent can change `default_agent` in
+   `.bedrock_agentcore.yaml` (gitignored local state), so always pass
+   `-a <agent>` to `deploy`, `invoke`, `status` and `destroy`.
+6. Invoke with a real question; expect `answer` plus `sources` that exist in
+   `ai-radar-cards`:
+   `agentcore invoke -a ai_radar_chat '{"question": "What shipped this week?", "history": []}'`
+7. Invoke with an invalid request; expect `{"error": "invalid_request", "detail": ...}`:
+   `agentcore invoke -a ai_radar_chat '{"question": ""}'`
+8. Record `retrieval_ms` (from the `chat_turn` log records) and the live card
+   count against the ADR 0009 ceiling (~2,000 cards / p95 ~1 s).
+
+#### Live results (2026-10-18)
+
+| Step | Result |
+|---|---|
+| 1. Sonnet 4.6 smoke call | Printed `model: us.anthropic.claude-sonnet-4-6`. Bedrock accepted the `cachePoint` and `temperature` request shape and returned a normal answer. The open question in the intent is closed, with no rejection. |
+| 2. `AiRadarRuntimeRole` redeploy | `cdk diff` showed one added statement (`InvokeTitanEmbed`). `UPDATE_COMPLETE` in 23.6 s. |
+| 3. Curation image redeploy and pass | Run `a6168787ff1c4165a223d4e6ef26c91c`: discovered 40, summarized 8, persisted 8, store_failures 0, 30.6 s, est. cost $0.06. `embed_complete`: embedded 8, embed_failed 0. Cards went from 8 to 16. |
+| 4. Backfill | Account and table printed first. `embedded=8 skipped=8 failed=0`, then `embedded=0 skipped=16 failed=0`. 16 of 16 cards carry an `embedding`. |
+| 5. Chat role and agent | `AiRadarChatRuntime` `CREATE_COMPLETE` in 39 s. The role has the seven AC7 statements and nothing else. The agent runtime is `ai_radar_chat-JFCO0R9lkT`. Its `chat_turn` records are in the `/aws/bedrock-agentcore/runtimes/ai_radar_chat-JFCO0R9lkT-DEFAULT` log group. |
+| 6. Real question | `What are the latest developments in open-weight models?` returned a cited answer with `[1]`–`[3]` and 4 sources numbered 1–4 (`n,title,url,source,published,score` only). All 4 source URLs exist in `ai-radar-cards`. The `chat_turn` record shows `question_chars 55, history_items 0, hits 4, retrieval_ms 330, model_ms 3304, outcome ok`. The record has no question or answer text. |
+| 7. Invalid request | `{"error": "invalid_request", "detail": "question_empty"}`. The `chat_turn` record shows `question_chars 0, hits 0, retrieval_ms 0, model_ms 0, outcome invalid_request`, so no retrieval or model call was made. The chat log group has zero `chat_turn_failed` records. |
+| 8. Latency and card count | **16 live cards** (0.8% of the ~2,000-card ceiling) and **one** measured `retrieval_ms` sample, 330 ms (this includes the Titan embed call). No p95 can be computed from one sample. The human closed the step on this provisional evidence. It is a recorded reservation, not a failure. See "Known limitation (F11, accepted)" below. |
+
+**`default_agent` note.** Configuring the second agent changed `default_agent` in
+`.bedrock_agentcore.yaml` (gitignored local state) to `ai_radar_chat`. A bare
+`agentcore deploy`, `invoke`, `status` or `destroy` now targets the chat agent. Always
+pass `-a ai_radar_curation` or `-a ai_radar_chat` explicitly.
+
+**Still open after this spec:** a p95 retrieval latency over enough real turns, recorded
+against the ADR 0009 ceiling, once the corpus or traffic grows. The chat turn latency
+(`model_ms`) is about 3.3 s on one sample, which is not a p95 either. Also open, all LOW
+and non-blocking: `upstream_failure` records report `hits=0` and `retrieval_ms=0` even
+when retrieval succeeded (the partial timing is lost, audit F7). CI on the PR (`harny-feedback.yml`)
+runs only after this branch is pushed (audit F8).
+
+**Teardown gotcha:** `agentcore destroy` deletes any role in the config's
+`aws.execution_role`, including the CDK-owned one. Null that field in
+`.bedrock_agentcore.yaml` for the chat agent before `agentcore destroy -a ai_radar_chat`.
 
 ### Not verified live
 
-Nothing here was run against AWS. The audit had no live access, so these are
-**not** verified:
+These are **not** verified live:
 
-- A live `run_chat.py` run against real DynamoDB and Bedrock (AC7 is verified offline only).
+- A live `CARD_STORE_BACKEND=dynamo uv run run_chat.py` run against real DynamoDB and
+  Bedrock. The chat agent's live turns use the same retriever, but the local script was
+  not run.
 - CI on this branch: the branch is unpushed, so no `harny-feedback.yml` run exists.
-- Evidence that the Stop hook fired (audit finding F7, open, LOW).
+- Evidence that the Stop hook fired (audit finding F7, open, LOW, from `chat-retrieval`).
 
 ### Known limitation (F11, accepted)
 
@@ -989,10 +1106,13 @@ Titan call per failed upsert, which the auditor estimated at about $0.00002 per 
 
 The retriever is brute force on purpose: no vector database, roughly $0 extra. Revisit
 this choice at about **2,000 embedded cards**, or when a measured p95 retrieval latency
-rises above about **1 s**. No retrieval latency has been measured yet. The first remedy
-is an in-process TTL cache in the long-lived chat runtime (planned for the
-chat-agent-runtime spec). The second is pgvector or Aurora, per the design doc's §7. At
-the current cap of 8 new cards per run, 2,000 cards is about eight months of daily runs.
+rises above about **1 s**. As of 2026-10-18 the live corpus is 16 embedded cards, and one
+live chat turn measured `retrieval_ms=330`. That is a single sample, not a p95 (see
+"chat-agent-runtime" above). The first remedy is an in-process TTL cache in the
+long-lived chat runtime. It is **not** implemented; `chat-agent-runtime` did not add it,
+and the measurement informs a later decision without triggering one. The second is
+pgvector or Aurora, per the design doc's §7. At the current cap of 8 new cards per run,
+2,000 cards is about eight months of daily runs.
 
 ## Account migration (2026-10-05)
 
@@ -1010,6 +1130,24 @@ immediately and the `curation_run_complete` record showed `discovered: 30`,
 `persisted: 8` in 26.9s; the table went 0 → 8. `GET /v1/cards` returned those
 cards, an out-of-range `limit` returned 400, and CORS allowed only
 `http://localhost:3000`. New feed API URL: `https://25p45q6m6f.execute-api.us-east-1.amazonaws.com`.
+
+**Changed since, 2026-10-18 (`chat-retrieval` and `chat-agent-runtime` deploys, account
+`626259825216`):**
+
+- `AiRadarRuntimeRole` was redeployed for the Titan v2 grant (`InvokeTitanEmbed`).
+- The `ai_radar_curation` agent image was rebuilt and redeployed, and its runtime embeds
+  each persisted card. The backfill then embedded the 8 older cards, so all 16 live cards
+  carry an `embedding`.
+- New stack **`AiRadarChatRuntime`** (`CREATE_COMPLETE`): the chat execution role
+  (`ChatRuntimeExecutionRole…`, seven statements, see "chat-agent-runtime" above).
+- New agent runtime **`ai_radar_chat-JFCO0R9lkT`** (`ai_radar_chat`, `-DEFAULT` endpoint),
+  deployed with `--env AGENT_ENTRYPOINT=chat_app.py`, from the same root `Dockerfile` as the
+  curation agent.
+- `default_agent` in the local `.bedrock_agentcore.yaml` now points at `ai_radar_chat`
+  (see the `default_agent` note under the chat runbook's live results).
+- The curation schedule stays **`DISABLED`**, and no teardown happened.
+- Nothing from the Phase 3 chat path is exposed publicly yet. There is no chat API or
+  throttling until `chat-api`. Invocation needs IAM credentials.
 
 **What had to change for a new account**
 
