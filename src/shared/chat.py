@@ -39,6 +39,32 @@ def _context_block(hits: list[tuple[dict, float]]) -> str:
     return "\n\n".join(lines)
 
 
+def answer_question(
+    question: str,
+    prior_messages: list[dict],
+    hits: list[tuple[dict, float]],
+) -> str:
+    """Stateless answer step shared by `RagChat` and the chat agent.
+
+    `prior_messages` are earlier turns in Converse form; they are sent verbatim
+    before this turn's context-augmented question. Holds no state.
+    """
+    augmented = (
+        f"Context cards:\n\n{_context_block(hits)}\n\n"
+        f"User question: {question}"
+    )
+    messages = list(prior_messages) + [
+        {"role": "user", "content": [{"text": augmented}]}
+    ]
+    resp = bedrock_client().converse(
+        modelId=SONNET_MODEL_ID,
+        system=[{"text": SYSTEM}, {"cachePoint": {"type": "default"}}],
+        messages=messages,
+        inferenceConfig={"maxTokens": 800, "temperature": 0.3},
+    )
+    return resp["output"]["message"]["content"][0]["text"]
+
+
 class RagChat:
     """Stateful RAG chat over a `Retriever`."""
 
@@ -49,23 +75,7 @@ class RagChat:
 
     def ask(self, question: str) -> tuple[str, list[tuple[dict, float]]]:
         hits = self.retriever.search(question, self.k)
-        augmented = (
-            f"Context cards:\n\n{_context_block(hits)}\n\n"
-            f"User question: {question}"
-        )
-
-        # Rebuild the request: prior turns verbatim + this turn's augmented question.
-        messages = self.history + [
-            {"role": "user", "content": [{"text": augmented}]}
-        ]
-
-        resp = bedrock_client().converse(
-            modelId=SONNET_MODEL_ID,
-            system=[{"text": SYSTEM}, {"cachePoint": {"type": "default"}}],
-            messages=messages,
-            inferenceConfig={"maxTokens": 800, "temperature": 0.3},
-        )
-        answer = resp["output"]["message"]["content"][0]["text"]
+        answer = answer_question(question, self.history, hits)
 
         # Store the *original* question (not the augmented one) to keep history lean.
         self.history.append({"role": "user", "content": [{"text": question}]})

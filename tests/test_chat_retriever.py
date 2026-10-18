@@ -214,3 +214,25 @@ def test_retrieval_only_considers_the_card_partition_of_the_index(
     hits = _retriever(dynamo_resource).search("q", 10)
 
     assert [c["url"].rsplit("/", 1)[1] for c, _ in hits] == ["card"]
+
+
+def test_dynamo_resource_is_bound_to_the_shared_region_without_env(monkeypatch):
+    """No AWS_DEFAULT_REGION/AWS_REGION in the environment must not raise
+    NoRegionError: the resource gets `shared.config.AWS_REGION` explicitly."""
+    import boto3
+
+    from chat import retriever
+    from shared.config import AWS_REGION
+
+    for var in ("AWS_DEFAULT_REGION", "AWS_REGION"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setattr(retriever, "_resource", None)
+    seen: dict = {}
+
+    def fake_resource(name, **kwargs):
+        seen.update(name=name, **kwargs)
+        return object()
+
+    monkeypatch.setattr(boto3, "resource", fake_resource)
+    retriever._dynamo_resource()
+    assert seen == {"name": "dynamodb", "region_name": AWS_REGION}

@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 import aws_cdk as cdk
 from stacks.agent_runtime_stack import AgentRuntimeStack
 from stacks.card_store_stack import CardStoreStack
+from stacks.chat_runtime_stack import ChatRuntimeStack
 from stacks.cost_budget_stack import CostBudgetStack
 from stacks.curation_schedule_stack import CurationScheduleStack
 from stacks.feed_api_stack import FeedApiStack
@@ -29,4 +30,5 @@ AgentRuntimeStack(app, "AiRadarRuntimeRole")
 CurationScheduleStack(app, "AiRadarSchedule")
 CostBudgetStack(app, "AiRadarBudget")  # NEW (Spec 06)
 FeedApiStack(app, "AiRadarFeedApi")  # NEW (Phase 2, spec 01)
+ChatRuntimeStack(app, "AiRadarChatRuntime")  # chat-agent-runtime
 app.synth()

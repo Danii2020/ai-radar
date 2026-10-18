@@ -41,10 +41,13 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # runtime_app.py inserts it onto sys.path itself (same pattern as
 # run_curation.py), so it is copied alongside the entrypoint verbatim.
 COPY src/ ./src/
-COPY runtime_app.py ./
+COPY runtime_app.py chat_app.py ./
 
 # AgentCore Runtime HTTP contract: BedrockAgentCoreApp.run() serves
 # `/invocations` + `/ping` on port 8080.
 EXPOSE 8080
 
-CMD ["python", "runtime_app.py"]
+# One shared Dockerfile, separate image per agent: AGENT_ENTRYPOINT selects the
+# entrypoint (default: the curation agent). The chat agent is deployed with
+# `--env AGENT_ENTRYPOINT=chat_app.py`.
+CMD ["sh", "-c", "exec python \"${AGENT_ENTRYPOINT:-runtime_app.py}\""]

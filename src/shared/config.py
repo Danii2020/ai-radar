@@ -62,7 +62,7 @@ class _SharedSettings(BaseSettings):
         5.0, validation_alias="HAIKU_OUTPUT_USD_PER_1M"
     )
     sonnet_model_id: str = Field(
-        "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        "us.anthropic.claude-sonnet-4-6",
         validation_alias="SONNET_MODEL_ID",
     )
 
@@ -100,9 +100,9 @@ HAIKU_MODEL_ID: str = _settings.haiku_model_id
 HAIKU_INPUT_USD_PER_1M: float = _settings.haiku_input_usd_per_1m
 HAIKU_OUTPUT_USD_PER_1M: float = _settings.haiku_output_usd_per_1m
 
-# Chat model. Default is Sonnet 4.5 (enabled in this account). The design targets
-# Sonnet 4.6 — enable its model access in the Bedrock console, then set
-# SONNET_MODEL_ID=us.anthropic.claude-sonnet-4-6 to upgrade.
+# Chat model. Default is Sonnet 4.6 (the design target; enabled in this account).
+# Set SONNET_MODEL_ID to override, e.g. the Sonnet 4.5 profile
+# us.anthropic.claude-sonnet-4-5-20250929-v1:0.
 SONNET_MODEL_ID: str = _settings.sonnet_model_id
 
 # Titan Text Embeddings v2 for RAG retrieval. normalize=True → cosine == dot product.

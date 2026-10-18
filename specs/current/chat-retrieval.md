@@ -1,8 +1,10 @@
 # Chat Retrieval Specification
 
-> Last synced: 2026-10-13. Owned artifacts: `src/shared/embeddings.py`,
+> Last synced: 2026-10-18. Owned artifacts: `src/shared/embeddings.py`,
 > `src/shared/retrieval.py`, `src/shared/chat.py`, `src/chat/` (`config.py`,
-> `retriever.py`), `run_chat.py`. Nothing here is deployed.
+> `retriever.py`), `run_chat.py`. Deployed 2026-10-18: the backfill ran against the live
+> table (16 of 16 cards embedded), and the chat agent reads it through `DynamoCardRetriever`
+> (see `chat-agent`). The local `run_chat.py` path is not run live.
 
 ## Purpose
 
@@ -143,12 +145,14 @@ plane-separation and constant-equality guards SHALL run in the test suite.
 | ID | Reservation | Severity | Source |
 |---|---|---|---|
 | F7 | Not verified in CI or live. The branch is unpushed, so no `harny-feedback.yml` run exists, and there is no evidence that the Stop hook fired. AC7 is verified offline only: no live `run_chat.py` run against real DynamoDB and Bedrock. | LOW | `specs/archived/chat-retrieval/audit.md` (F7, Final verdict) |
+| CAR-F11 | Retrieval latency and the ADR 0009 ceiling have one measured sample: `retrieval_ms=330` on one live chat turn, against 16 live cards. There is no p95, so the scale ceiling is unmeasured. Accepted by the human on 2026-10-18. | LOW | `specs/archived/chat-agent-runtime/audit.md` (F11, AC10 step 8) |
 
 ## Contributing features
 
 | Feature | Shipped | What it established |
 |---|---|---|
-| chat-retrieval | 2026-10-13 | Curation-time embeddings and the sanctioned embedding writer (CR-1..3, PS-5 in `card-persistence`), the backfill (CR-4), `DynamoCardRetriever` with paginated `Query` (CR-5, CR-6), the `RagChat(retriever, k)` seam and the `CARD_STORE_BACKEND` switch (CR-7), the feed-contract guard (CR-8) and the plane-separation guard (CR-9). Nothing deployed. |
+| chat-retrieval | 2026-10-13 | Curation-time embeddings and the sanctioned embedding writer (CR-1..3, PS-5 in `card-persistence`), the backfill (CR-4), `DynamoCardRetriever` with paginated `Query` (CR-5, CR-6), the `RagChat(retriever, k)` seam and the `CARD_STORE_BACKEND` switch (CR-7), the feed-contract guard (CR-8) and the plane-separation guard (CR-9). Not deployed at ship time. |
+| chat-agent-runtime | 2026-10-18 | No requirement change. The chat agent consumes CR-5..CR-7 unchanged: `DynamoCardRetriever` for retrieval, and `RagChat` calling the same `answer_question()` step that the agent uses. The 2026-10-18 deploy ran the backfill (CR-4) against the live table, 16 of 16 cards embedded. |
 
 ## Related ADRs
 

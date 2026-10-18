@@ -179,3 +179,50 @@ def test_run_chat_script_imports_nothing_from_curation():
     assert "curation" not in _imported_roots(REPO_ROOT / "run_chat.py"), (
         "run_chat.py (Plane B composition root) must not import curation"
     )
+
+
+# --- chat-agent-runtime: import confinement and AWS-client-free logic ----------
+
+
+def _called_attribute_names(path: Path) -> set[str]:
+    tree = ast.parse(path.read_text(), filename=str(path))
+    return {
+        node.func.attr
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+    }
+
+
+def test_bedrock_agentcore_is_imported_only_by_files_at_the_repo_root():
+    for path in _py_files(SRC):
+        assert "bedrock_agentcore" not in _imported_roots(path), (
+            f"{path} must not import bedrock_agentcore (composition roots only)"
+        )
+
+
+def test_chat_app_is_a_root_composition_root_that_stays_in_plane_b():
+    path = REPO_ROOT / "chat_app.py"
+    assert path.is_file(), "chat_app.py must exist at the repo root"
+
+    roots = _imported_roots(path)
+    assert "bedrock_agentcore" in roots
+    assert "curation" not in roots, "chat_app.py (Plane B) must not import curation"
+    assert "api" not in roots, "chat_app.py must not import api"
+
+
+def test_the_chat_graph_and_request_modules_build_no_aws_client():
+    for name in ("graph.py", "request.py"):
+        path = SRC / "chat" / name
+        assert path.is_file(), f"src/chat/{name} must exist"
+        assert "boto3" not in _imported_roots(path)
+        assert not {"client", "resource"} & _called_attribute_names(path), (
+            f"{path} must not construct an AWS client"
+        )
+        tree = ast.parse(path.read_text())
+        imported_names = {
+            alias.name
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom)
+            for alias in node.names
+        }
+        assert "bedrock_client" not in imported_names

@@ -1,8 +1,10 @@
 # Current-State Specifications
 
 > Current truth for this repo. Maintained by `harny-sync`; do not hand-edit.
-> Last synced: 2026-10-13 (`chat-retrieval` archived: new `chat-retrieval`
-> capability, ADRs 0009–0015, reservation F7 and F11; nothing deployed — see Notes).
+> Last synced: 2026-10-18 (`chat-agent-runtime` archived: new `chat-agent`
+> capability, ADRs 0016–0021, runtime-deployment RD-7/RD-8, reservations CAR-F5..F11 — see Notes).
+> Earlier: 2026-10-13 (`chat-retrieval` archived: new `chat-retrieval`
+> capability, ADRs 0009–0015, reservation F7 and F11; nothing deployed at ship time — see Notes).
 > Earlier: 2026-09-20 component split: the frontend `web-feed`
 > capability, its `web-feed-ui` archive, ADRs 0001–0007, and WEB-R1..R3 moved
 > to [`apps/web/specs/`](../../apps/web/specs/current/_index.md) — see Notes)
@@ -18,12 +20,13 @@
 |---|---|---|
 | curation-pipeline | [curation-pipeline.md](./curation-pipeline.md) | [curation-graph](../archived/curation-graph/), [tavily-discovery](../archived/tavily-discovery/), [chat-retrieval](../archived/chat-retrieval/) |
 | card-persistence | [card-persistence.md](./card-persistence.md) | [dynamodb-card-store](../archived/dynamodb-card-store/), [chat-retrieval](../archived/chat-retrieval/) |
-| runtime-deployment | [runtime-deployment.md](./runtime-deployment.md) | [runtime-packaging](../archived/runtime-packaging/), [async-invocation-ack](../archived/async-invocation-ack/), [chat-retrieval](../archived/chat-retrieval/) |
+| runtime-deployment | [runtime-deployment.md](./runtime-deployment.md) | [runtime-packaging](../archived/runtime-packaging/), [async-invocation-ack](../archived/async-invocation-ack/), [chat-retrieval](../archived/chat-retrieval/), [chat-agent-runtime](../archived/chat-agent-runtime/) |
 | scheduling | [scheduling.md](./scheduling.md) | [eventbridge-schedule](../archived/eventbridge-schedule/) |
 | observability | [observability.md](./observability.md) | [run-observability](../archived/run-observability/) |
 | config-loading | [config-loading.md](./config-loading.md) | [pydantic-settings-config](../archived/pydantic-settings-config/), [rename-spike-to-shared](../archived/rename-spike-to-shared/) |
 | feed-api | [feed-api.md](./feed-api.md) | [feed-api](../archived/feed-api/) |
-| chat-retrieval | [chat-retrieval.md](./chat-retrieval.md) | [chat-retrieval](../archived/chat-retrieval/) |
+| chat-retrieval | [chat-retrieval.md](./chat-retrieval.md) | [chat-retrieval](../archived/chat-retrieval/), [chat-agent-runtime](../archived/chat-agent-runtime/) (no requirement change) |
+| chat-agent | [chat-agent.md](./chat-agent.md) | [chat-agent-runtime](../archived/chat-agent-runtime/) |
 
 ## Keyword lookup
 
@@ -83,6 +86,18 @@
 | CORS (feed-api) | feed-api |
 | CardOut / FeedResponse | feed-api |
 | tag filter | feed-api (see also apps/web: web-feed) |
+| chat_app.py / chat agent | chat-agent |
+| ai_radar_chat / AiRadarChatRuntime | chat-agent, runtime-deployment |
+| stateless turn / history (chat) | chat-agent |
+| parse_request / InvalidRequest | chat-agent |
+| build_chat_graph / no-context answer | chat-agent |
+| invalid_request / upstream_failure | chat-agent |
+| chat_turn (log record) | chat-agent |
+| CHAT_MAX_* caps | chat-agent |
+| answer_question (shared answer step) | chat-agent, chat-retrieval |
+| SONNET_MODEL_ID / Sonnet 4.6 | chat-agent, config-loading |
+| AGENT_ENTRYPOINT / shared Dockerfile | runtime-deployment |
+| RD-7 chat role | runtime-deployment |
 
 ## Synchronized Changes
 
@@ -99,10 +114,11 @@
 | pydantic-settings-config | [specs/archived/pydantic-settings-config/](../archived/pydantic-settings-config/) | [config-loading.md](./config-loading.md) |
 | feed-api | [specs/archived/feed-api/](../archived/feed-api/) | [feed-api.md](./feed-api.md) |
 | chat-retrieval | [specs/archived/chat-retrieval/](../archived/chat-retrieval/) | [chat-retrieval.md](./chat-retrieval.md), [card-persistence.md](./card-persistence.md), [curation-pipeline.md](./curation-pipeline.md), [runtime-deployment.md](./runtime-deployment.md) |
+| chat-agent-runtime | [specs/archived/chat-agent-runtime/](../archived/chat-agent-runtime/) | [chat-agent.md](./chat-agent.md) (new), [runtime-deployment.md](./runtime-deployment.md) (RD-7, RD-8), [chat-retrieval.md](./chat-retrieval.md) (contributing row only) |
 
 ## Decisions (ADR registry)
 
-ADR numbers are **repo-wide monotonic** across both harness roots: 0001–0007 belong to `web-feed-ui` and 0008 to `feed-structure-refactor`, both registered in [`apps/web/specs/current/_index.md`](../../apps/web/specs/current/_index.md) (the frontend index still names 0008 as next, and is not edited here). The next ADR written in either harness is **0016**.
+ADR numbers are **repo-wide monotonic** across both harness roots: 0001–0007 belong to `web-feed-ui` and 0008 to `feed-structure-refactor`, both registered in [`apps/web/specs/current/_index.md`](../../apps/web/specs/current/_index.md) (the frontend index still names 0008 as next, and is not edited here). The next ADR written in either harness is **0022**.
 
 | ADR | Title | Status | Capability | Path |
 |---|---|---|---|---|
@@ -113,6 +129,12 @@ ADR numbers are **repo-wide monotonic** across both harness roots: 0001–0007 b
 | 0013 | Plane B duplicates Plane A's table, index and store constants instead of importing them | Accepted | chat-retrieval | [specs/archived/chat-retrieval/decisions/0013-plane-b-duplicates-plane-a-constants.md](../archived/chat-retrieval/decisions/0013-plane-b-duplicates-plane-a-constants.md) |
 | 0014 | The Titan embedding grant is a separate statement, scoped to the one foundation-model ARN | Accepted | runtime-deployment | [specs/archived/chat-retrieval/decisions/0014-titan-grant-scoped-to-the-foundation-model.md](../archived/chat-retrieval/decisions/0014-titan-grant-scoped-to-the-foundation-model.md) |
 | 0015 | The embedding backfill is a local, idempotent one-shot command | Accepted | curation-pipeline | [specs/archived/chat-retrieval/decisions/0015-backfill-as-a-local-one-shot-command.md](../archived/chat-retrieval/decisions/0015-backfill-as-a-local-one-shot-command.md) |
+| 0016 | The chat agent is one stateless, synchronous request-response entrypoint | Accepted | chat-agent | [specs/archived/chat-agent-runtime/decisions/0016-one-stateless-synchronous-chat-entrypoint.md](../archived/chat-agent-runtime/decisions/0016-one-stateless-synchronous-chat-entrypoint.md) |
+| 0017 | One root Dockerfile serves both agents, with the entrypoint selected by AGENT_ENTRYPOINT | Accepted | runtime-deployment | [specs/archived/chat-agent-runtime/decisions/0017-one-shared-dockerfile-with-entrypoint-selected-by-environment.md](../archived/chat-agent-runtime/decisions/0017-one-shared-dockerfile-with-entrypoint-selected-by-environment.md) |
+| 0018 | When retrieval returns nothing, the chat answers with a fixed message and makes no model call | Accepted | chat-agent | [specs/archived/chat-agent-runtime/decisions/0018-empty-retrieval-answers-without-a-model-call.md](../archived/chat-agent-runtime/decisions/0018-empty-retrieval-answers-without-a-model-call.md) |
+| 0019 | The request rules and caps are pinned values, validated before any AWS call, with rule names as the error detail | Accepted | chat-agent | [specs/archived/chat-agent-runtime/decisions/0019-request-rules-and-caps-pinned-as-typed-settings.md](../archived/chat-agent-runtime/decisions/0019-request-rules-and-caps-pinned-as-typed-settings.md) |
+| 0020 | The chat agent gets its own execution role, in its own CDK construct and stack, and the curation role is not widened | Accepted | runtime-deployment | [specs/archived/chat-agent-runtime/decisions/0020-chat-execution-role-is-a-separate-least-privilege-construct.md](../archived/chat-agent-runtime/decisions/0020-chat-execution-role-is-a-separate-least-privilege-construct.md) |
+| 0021 | The default chat model moves from Sonnet 4.5 to Sonnet 4.6, and the Sonnet 4.6 end-of-life date is unconfirmed | Accepted | chat-agent | [specs/archived/chat-agent-runtime/decisions/0021-default-chat-model-moves-to-sonnet-4-6.md](../archived/chat-agent-runtime/decisions/0021-default-chat-model-moves-to-sonnet-4-6.md) |
 
 All 10 features archived in the 2026-09-17 bootstrap pass shipped before
 `harny-adr` existed in this project; per that skill's own no-backfill
@@ -133,6 +155,11 @@ first feature archived here with ADRs (0009–0015, from its approved execution 
 | FA-R1 | Deployed feed-api Lambda's `ReservedConcurrentExecutions` is unreserved (`null`), not the contract's intended `5`, bridged by an account-quota workaround. | LOW (operational) | `specs/archived/feed-api/audit.md` AD-7 | feed-api |
 | F7 | Not verified in CI or live: the branch is unpushed, so no `harny-feedback.yml` run and no Stop-hook evidence exist; AC7 is verified offline only (no live `run_chat.py` against DynamoDB and Bedrock). | LOW | `specs/archived/chat-retrieval/audit.md` (F7) | chat-retrieval |
 | F11 | Accepted limitation: a card whose `upsert` failed still gets a Titan call (about $0.00002 per card, auditor's estimate); counted in `embed_failed`, AC2 holds. | LOW | `specs/archived/chat-retrieval/audit.md` (F11) | curation-pipeline |
+| CAR-F5 | `tests/test_chat_app.py` `empty-text` param is a bare list (exercises `payload_not_object`); empty text is covered elsewhere. | LOW | `specs/archived/chat-agent-runtime/audit.md` (F5) | chat-agent |
+| CAR-F6 | Plan `-k` selectors miss some tests; the broad command is the reliable gate. | LOW | `specs/archived/chat-agent-runtime/audit.md` (F6) | chat-agent |
+| CAR-F7 | `upstream_failure` `chat_turn` records report `hits=0` and `retrieval_ms=0`, losing the partial latency. | LOW | `specs/archived/chat-agent-runtime/audit.md` (F7) | chat-agent |
+| CAR-F8 | CI (`harny-feedback.yml`) has not run on a PR for the chat-agent-runtime change; the branch is unpushed. | LOW | `specs/archived/chat-agent-runtime/audit.md` (F8) | chat-agent |
+| CAR-F11 | Retrieval latency and the ADR 0009 ceiling rest on one live sample (`retrieval_ms=330`, 16 live cards). No p95 yet; accepted by the human on 2026-10-18. | LOW | `specs/archived/chat-agent-runtime/audit.md` (F11) | chat-agent, chat-retrieval |
 
 ## Notes
 
@@ -191,3 +218,15 @@ the optional embed step) and `runtime-deployment` (RD-3 names the Titan grant).
 **Nothing from it is deployed:** the runtime role needs a redeploy, the agent image
 needs a rebuild, and the backfill has not been run. The live checks in F7 are open.
 Its ADRs (0009–0015) are the first in this root to be written by `harny-adr`.
+
+**2026-10-18 chat-agent-runtime.** The RAG chat runs as its own stateless agent (`chat_app.py`,
+AgentCore Runtime agent `ai_radar_chat`, deployed 2026-10-18). It creates the `chat-agent`
+capability (CA-1..CA-6, new `chat-agent.md`) and amends `runtime-deployment` with RD-7 (a
+separate chat execution role, in `AiRadarChatRuntime`, with the curation role not widened)
+and RD-8 (one shared Dockerfile whose entrypoint is selected by `AGENT_ENTRYPOINT`). That
+selector narrows the intent's "separate Dockerfile": the toolkit builds only the root
+Dockerfile. `chat-retrieval` gets a contributing row and no requirement change. Its ADRs are
+0016–0021. `harny-adr` wrote them. Its own open reservations are CAR-F5..F8 and CAR-F11, all
+LOW. The live AC10 steps ran on 2026-10-18. The deployed Sonnet 4.6 default is recorded in
+ADR 0021 (its end-of-life date is unconfirmed). The chat-retrieval reservations F7 and F11 are
+unchanged.
