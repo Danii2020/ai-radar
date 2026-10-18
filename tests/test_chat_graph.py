@@ -17,9 +17,9 @@ import re
 from decimal import Decimal
 
 import pytest
-from chat.graph import build_chat_graph
 
 import shared.chat as shared_chat
+from chat.graph import build_chat_graph
 from chat.retriever import DynamoCardRetriever
 from shared.config import EMBED_DIM, SONNET_MODEL_ID
 
