@@ -525,3 +525,34 @@ def test_chat_api_package_imports_no_first_party_package_first_party():
                 continue
             offenders += [f"{path.name}: {n}" for n in names if n.split(".")[0] in FIRST_PARTY]
     assert offenders == []
+
+
+# --- chat-api-auth (AC5) -------------------------------------------------
+
+def test_iam_authorizer_context_is_not_logged(env, caplog):
+    """A request that API Gateway authorized with IAM carries the caller's identity in
+    `requestContext`; the record keeps exactly its seven keys and none of that text."""
+    caplog.set_level(logging.DEBUG)
+    planted = ("AKIAPLANTEDKEY7Q2", "arn:aws:iam::626259825216:user/planted-caller-user", "PLANTEDUSERID9Z")
+    event = _event(_valid_body("hello"))
+    event["requestContext"]["authorizer"] = {
+        "iam": {
+            "accessKey": planted[0],
+            "accountId": "626259825216",
+            "callerId": planted[2],
+            "userArn": planted[1],
+            "userId": planted[2],
+        }
+    }
+
+    response = env.module.handler(event, None)
+
+    assert response["statusCode"] == 200
+    (record,) = _chat_api_records(caplog)
+    assert set(record) == {
+        "event", "status", "outcome", "question_chars", "history_items", "duration_ms", "session_id",
+    }
+    for rec in caplog.records:
+        text = " ".join([rec.getMessage(), rec.exc_text or "", str(rec.args)])
+        for secret in planted:
+            assert secret not in text
