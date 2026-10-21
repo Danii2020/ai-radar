@@ -20,6 +20,51 @@ a version number. Each entry links to its archived SDD spec
 Nothing pending beyond `apps/web/specs/archived/web-feed-ui/` (Phase 2 spec 02, the Next.js
 frontend — still in progress, not yet archived).
 
+## 2026-10-21 — chat-api
+
+Spec: `specs/archived/chat-api/`. Audit: APPROVED WITH RESERVATIONS (round 3). Deployed as
+`AiRadarChatApi` in account `626259825216` and live-verified: runbook steps 1–9 ran, and
+step 10 (the agent-side invocation count for one slow request) did not. Open reservations
+F11 (MEDIUM), F13, F5, F7 and F8 (LOW), listed below and in README "Phase 3 — Chat API".
+
+### Added
+- `src/chat_api/` (`handler.py`, `config.py`, `AGENTS.md`): the Lambda behind `POST /v1/chat`.
+  It checks the JSON shape and a 512 KiB byte cap, then makes one `InvokeAgentRuntime` call on
+  `ai_radar_chat` with a fresh session id per request. There are no retries (connect 3 s, read
+  22 s, Lambda timeout 28 s). It returns the agent's `{answer, sources}` (200), `invalid_request`
+  (400), `upstream_failure` (502), `upstream_timeout` (504) or `internal_error` (500).
+- `Dockerfile.chat_api` and the `chat_api` dependency group in `pyproject.toml` and `uv.lock`
+  (`boto3`, `pydantic-settings`). Image build and in-container import were checked live.
+- CDK construct `infra/lib/chat_api.py` and stack `AiRadarChatApi`
+  (`infra/stacks/chat_api_stack.py`), registered in `infra/app.py`. It is an API Gateway HTTP API
+  with one route, `POST /v1/chat`, and no `$default` route. CORS allows the explicit origin list
+  (default `http://localhost:3000`, never `*`). The stage throttle is 5 req/s with a burst of 10.
+  The Lambda role can invoke only the chat runtime ARNs and write its own logs. Its context
+  overrides are `chat_api_allowed_origins` and `chat_api_reserved_concurrency`.
+- One text-free `chat_api_request` log record per request: status, outcome, sizes, `duration_ms`
+  and the session id. A 500 record logs the exception class and stack frames only.
+- Tests: `tests/test_chat_api_handler.py` (43), `tests/test_infra_chat_api.py` (11) and
+  `tests/test_chat_api_dockerfile.py` (4). The suite is at 545 passed.
+- README "Phase 3 — Chat API" runbook, with the recorded live results.
+
+### Changed
+- Side changes outside the plan's ownership, awaiting the human's confirmation (audit F8):
+  `.gitignore` now ignores `.env*` except `!.env.example`, and `pyproject.toml` gains a mypy
+  override for `botocore.*`.
+
+### Open reservations
+- **F11 (MEDIUM).** The function is unreserved, because this account's Lambda concurrency quota
+  is 10. A parallel burst exhausted the 10-slot pool (Lambda 503s), and `ai-radar-feed-api`
+  shares that pool. The quota increase to 1000 was requested on 2026-10-21 (request
+  `cf8be0f0ceba4cf787e8e329efd718e0i3872UpR`, status `CASE_OPENED`, support case
+  `179259663100438`). Once approved, redeploy `AiRadarChatApi` and `AiRadarFeedApi` without the
+  `none` flag, then re-run the burst.
+- **F13 (LOW).** The stage throttle is lenient, about 2× nominal under a burst. The budget alert
+  is the backstop.
+- **F5 (LOW).** Runbook step 10 is not run.
+- **F7 and F8 (LOW).** CI has not run on the branch, because it is unpushed. The `.gitignore`
+  and `botocore.*` side changes are awaiting the human's confirmation.
+
 ## 2026-10-18 — chat-agent-runtime
 
 Spec: `specs/archived/chat-agent-runtime/`. Audit: APPROVED WITH RESERVATIONS (round 3).

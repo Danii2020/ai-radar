@@ -23,6 +23,10 @@ api = [
     "pydantic>=2.13.4",
     "pydantic-settings>=2.14.2",
 ]
+chat-api = [
+    "boto3>=1.43.56",
+    "pydantic-settings>=2.14.2",
+]
 dev = [
     "bedrock-agentcore-starter-toolkit>=0.3.10",
     "moto>=5.2.2",
@@ -45,5 +49,5 @@ plugins = ["pydantic.mypy"]
 
 # These ship no type stubs / py.typed marker.
 [[tool.mypy.overrides]]
-module = ["boto3.*", "feedparser.*", "tavily.*"]
+module = ["boto3.*", "botocore.*", "feedparser.*", "tavily.*"]
 ignore_missing_imports = true
