@@ -1,0 +1,21 @@
+# Chat API Lambda image (spec `chat-api`). Build context is the repo root;
+# `.dockerignore` (shared with the other images) already excludes `.env`,
+# `.venv/`, `cdk.out/`, `tests/`, `infra/`, `docs/`.
+FROM --platform=linux/arm64 public.ecr.aws/lambda/python:3.12
+
+# uv is the ONLY installer — no pip, no requirements.txt in the repo.
+COPY --from=ghcr.io/astral-sh/uv:0.7.17 /uv /usr/local/bin/uv
+
+# Dependency layer: pyproject.toml + uv.lock only, resolved from the lockfile.
+# `--only-group chat_api` installs boto3 and pydantic-settings. boto3 is
+# bundled on purpose: the base image's built-in boto3 may predate the
+# `bedrock-agentcore` client.
+COPY pyproject.toml uv.lock ./
+RUN uv export --frozen --no-emit-project --only-group chat_api -o /tmp/requirements.txt \
+ && uv pip install --no-cache --target "${LAMBDA_TASK_ROOT}" -r /tmp/requirements.txt \
+ && rm /tmp/requirements.txt
+
+# App code only. Every other package under src/ is deliberately NOT copied.
+COPY src/chat_api/ ${LAMBDA_TASK_ROOT}/chat_api/
+
+CMD ["chat_api.handler.handler"]

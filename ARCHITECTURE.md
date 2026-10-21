@@ -58,6 +58,12 @@ src/chat/                         Plane B — the chat agent's logic and DynamoD
                                      from curation/config.py, equality-tested), and the
                                      CHAT_MAX_* request caps
 
+src/chat_api/                     Plane B — public edge: Lambda behind API Gateway HTTP API
+                                   (`POST /v1/chat`, chat-api):
+  handler.py                        body checks (512 KiB cap), one InvokeAgentRuntime call
+                                     on ai_radar_chat, reply mapping to a typed response
+  config.py                         CHAT_RUNTIME_ARN (pydantic-settings), byte cap, timeouts
+
 src/shared/                       Plane B — RAG chat + infra shared by both planes:
   bedrock.py                        bedrock-runtime client, Haiku summarize (forced
                                      tool call)
@@ -70,13 +76,14 @@ src/shared/                       Plane B — RAG chat + infra shared by both pl
   config.py                         region, model IDs, feeds, tuning (pydantic-settings)
 
 infra/                            AWS CDK app (Python), one stack per deployable unit:
-  app.py                            CDK app entrypoint, wires all 6 stacks
+  app.py                            CDK app entrypoint, wires all 7 stacks
   stacks/card_store_stack.py          AiRadarCardStore   — DynamoDB card table
   stacks/agent_runtime_stack.py       AiRadarRuntimeRole — curation AgentCore Runtime execution role
   stacks/chat_runtime_stack.py        AiRadarChatRuntime — chat AgentCore Runtime execution role
   stacks/curation_schedule_stack.py   AiRadarSchedule    — EventBridge Scheduler trigger
   stacks/cost_budget_stack.py         AiRadarBudget      — AWS Budget + SNS alerts
   stacks/feed_api_stack.py            AiRadarFeedApi     — API Gateway + feed Lambda
+  stacks/chat_api_stack.py            AiRadarChatApi     — public chat API (API Gateway + Lambda)
   lib/                                 constructs backing each stack
 
 docs/                              design docs, research notes, architecture
@@ -133,8 +140,13 @@ Two surfaces, both read-only over what Plane A persisted:
   LangGraph graph in `src/chat/graph.py` runs `retrieve` (the same
   `DynamoCardRetriever`) and then `answer`, which calls `shared/chat.py`'s
   `answer_question()` on Sonnet 4.6. With no hits it answers without a model call. Its
-  execution role is `AiRadarChatRuntime`, separate from the curation role. The chat API,
-  public URL and throttling are not built yet (`chat-api`); see `README.md`.
+  execution role is `AiRadarChatRuntime`, separate from the curation role.
+- **Chat API** (`src/chat_api/`, `chat-api`) — `POST /v1/chat` via API Gateway HTTP API ->
+  Lambda (`chat_api/handler.py`, image `Dockerfile.chat_api`) -> one `InvokeAgentRuntime`
+  call on `ai_radar_chat`, with a fresh session id per request. It adds no authentication and
+  no retries; the stage throttle (5 req/s, burst 10) is the cost guard. It returns the agent's
+  `{answer, sources}` unchanged, or a typed `invalid_request`, `upstream_failure`,
+  `upstream_timeout` or `internal_error`. API Gateway owns CORS. Deployed as `AiRadarChatApi`.
 - **Feed API** (`src/api/`) — `GET /v1/cards` via API Gateway HTTP API ->
   Lambda (`api/handler.py`) -> `dynamodb:Query` on a `feed-by-score` index
   (`api/dynamo.py`), paginated (`api/cursor.py`), returning the versioned
@@ -154,8 +166,9 @@ replacement for the Plane A/B `Card` dataclass.
 
 Deployed via AWS CDK (Python, `infra/`), one stack per deployable unit (see
 `infra/app.py`): `AiRadarCardStore`, `AiRadarRuntimeRole`, `AiRadarChatRuntime`,
-`AiRadarSchedule`, `AiRadarBudget`, `AiRadarFeedApi`. Both agents share one root
-`Dockerfile`, and the chat agent selects its entrypoint with `AGENT_ENTRYPOINT`. Current
+`AiRadarSchedule`, `AiRadarBudget`, `AiRadarFeedApi`, `AiRadarChatApi`. Both agents share one root
+`Dockerfile`, and the chat agent selects its entrypoint with `AGENT_ENTRYPOINT`. The chat API Lambda has its own image,
+`Dockerfile.chat_api`. Current
 live-deploy status, exact deploy/
 verify commands, and known operational gotchas are tracked in `README.md`,
 not here — that table is the source of truth for what's actually deployed at

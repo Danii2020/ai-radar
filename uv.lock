@@ -26,6 +26,10 @@ api = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
 ]
+chat-api = [
+    { name = "boto3" },
+    { name = "pydantic-settings" },
+]
 dev = [
     { name = "bedrock-agentcore-starter-toolkit" },
     { name = "moto" },
@@ -53,6 +57,10 @@ requires-dist = [
 [package.metadata.requires-dev]
 api = [
     { name = "pydantic", specifier = ">=2.13.4" },
+    { name = "pydantic-settings", specifier = ">=2.14.2" },
+]
+chat-api = [
+    { name = "boto3", specifier = ">=1.43.56" },
     { name = "pydantic-settings", specifier = ">=2.14.2" },
 ]
 dev = [

@@ -79,7 +79,7 @@ See the "Phase 2 — Web Feed" section
 in [`README.md`](README.md) for the full status table, the Docker-packaging
 gotcha `feed-api` surfaced, and the live-deploy verification detail.
 
-**Phase 3 ("chatbot") has begun.** Two specs are shipped.
+**Phase 3 ("chatbot") has begun.** Three specs are shipped.
 `chat-retrieval` (audit-approved with reservations, round 3, 2026-10-13) adds curation-time
 Titan v2 embeddings on the DynamoDB `embedding` attribute, a backfill
 (`uv run run_backfill_embeddings.py`), a brute-force `DynamoCardRetriever` in `src/chat/`,
@@ -90,8 +90,14 @@ are embedded. `chat-agent-runtime` (audit-approved with reservations, round 3, 2
 stateless AgentCore Runtime agent: `chat_app.py` takes `{question, history}` and returns
 `{answer, sources}`, using Sonnet 4.6, and it is **deployed** as `ai_radar_chat` in the
 `AiRadarChatRuntime` stack (runtime `ai_radar_chat-JFCO0R9lkT`). The live AC10 runbook ran
-on 2026-10-18 with one latency sample, which is a recorded reservation. The chat API,
-public URL, throttling and web chat UI are later specs. See "Phase 3 — Chatbot" in
+on 2026-10-18 with one latency sample, which is a recorded reservation. `chat-api`
+(audit-approved with reservations, round 3, 2026-10-21) is the public edge: API Gateway HTTP
+API `POST /v1/chat` → Lambda (`src/chat_api/`, image `Dockerfile.chat_api`), CDK stack
+`AiRadarChatApi` (`infra/stacks/chat_api_stack.py`, construct `infra/lib/chat_api.py`). It is
+**deployed** and live-verified at `https://<api-id>.execute-api.us-east-1.amazonaws.com`,
+unauthenticated and throttled (5 req/s, burst 10). Deploy it with
+`-c chat_api_reserved_concurrency=none` while the account Lambda quota is 10 (open: F11). The
+web chat UI is the later spec. See "Phase 3 — Chatbot" in
 [`README.md`](README.md).
 
 ## SDD harness: two roots
@@ -108,7 +114,7 @@ several stacks in one install:
   `apps/web/`** so `CLAUDE_PROJECT_DIR` points there and its hooks, agents,
   and skills load.
 
-ADR numbers are monotonic across both roots (used through 0021 as of 2026-10-18; check
+ADR numbers are monotonic across both roots (used through 0027 as of 2026-10-21; check
 `specs/current/_index.md` for the next free number). When you change
 `.sdd/feedback/run-feedback.mjs` or a shared role or skill in one root, make
 the same change in the other.
@@ -136,6 +142,8 @@ run_backfill_embeddings.py  # one-time, idempotent Titan backfill for cards with
 chat_app.py            # Plane B AgentCore Runtime entrypoint (chat agent; AGENT_ENTRYPOINT=chat_app.py)
 runtime_app.py          # Plane A AgentCore Runtime entrypoint (curation agent; the Dockerfile default)
 pyproject.toml          # deps (uv); uv.lock is the source of truth
+Dockerfile.chat_api     # chat API Lambda image (uv --only-group chat_api; copies only src/chat_api/)
+src/chat_api/           # Plane B public edge: Lambda behind POST /v1/chat (handler.py, config.py)
 src/shared/
   config.py             # region, model IDs, feeds, tuning, cache paths (env-overridable)
   feeds.py              # RSS/Atom discovery → RawItem
@@ -151,7 +159,7 @@ docs/                   # design + research + architecture principles
 
 ## AWS / Bedrock — verified facts
 
-- Region **us-east-1**; credentials in `~/.aws` (account `626259825216` since the 2026-10-05 migration, IAM user `daniele`; the old account was `536697225154`).
+- Region **us-east-1**; credentials in `~/.aws` (account `626259825216` since the 2026-10-05 migration, IAM user `[username]`; the old account was `536697225154`).
   A `.env` can override region/models and is also how deploys will get creds.
 - **Use cross-region inference profiles** (`us.` / `global.` prefix), not bare model
   IDs — bare Anthropic 4.x IDs are not on-demand invocable.

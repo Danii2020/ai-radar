@@ -897,25 +897,28 @@ produce. Record the real values here (and in
 `http://localhost:3000` with the same `cdk deploy -c feed_api_allowed_origins=...`
 pattern above.
 
-## Phase 3 — Chatbot (2 specs shipped: `chat-retrieval`, `chat-agent-runtime`; chat agent deployed)
+## Phase 3 — Chatbot (3 specs shipped: `chat-retrieval`, `chat-agent-runtime`, `chat-api`; chat agent and chat API deployed)
 
 Phase 3 turns the curated cards into a RAG chatbot. Its first spec,
 [`chat-retrieval`](specs/archived/chat-retrieval/), is the **retrieval half**: every
 card gets a stored embedding, and Plane B can rank those vectors against a question.
 Its second, [`chat-agent-runtime`](specs/archived/chat-agent-runtime/), runs that chat as
-its own stateless agent on AgentCore Runtime (live since 2026-10-18). The chat API
-(throttling, public URL) and the web chat UI are later Phase 3 specs and are not started.
+its own stateless agent on AgentCore Runtime (live since 2026-10-18). Its third,
+[`chat-api`](specs/archived/chat-api/), is the public front door: a throttled, unauthenticated
+`POST /v1/chat`, deployed and live-verified on 2026-10-21 (see "Phase 3 — Chat API" below).
+The web chat UI is a later Phase 3 spec and is not started.
 
 | Spec | Status | What it added |
 |---|---|---|
 | [`chat-retrieval`](specs/archived/chat-retrieval/) | ✅ Implemented, audit APPROVED WITH RESERVATIONS (round 3); **deployed 2026-10-18** (runbook steps 2–4) | Curation-time Titan v2 embeddings on the DynamoDB `embedding` attribute, a backfill command, a DynamoDB retriever in `src/chat/`, and a `run_chat.py` backend switch. Shipped 2026-10-13. Details below. |
 | [`chat-agent-runtime`](specs/archived/chat-agent-runtime/) | ✅ Shipped & live-verified (AC10 human-run 2026-10-18); audit APPROVED WITH RESERVATIONS (round 3) | The RAG chat as a second AgentCore Runtime agent (`ai_radar_chat`): a stateless `{question, history}` → `{answer, sources}` entrypoint (`chat_app.py`), a LangGraph retrieve-then-answer graph, request validation and caps, its own least-privilege role (`AiRadarChatRuntime`), and the default chat model moved to Sonnet 4.6. Details in "chat-agent-runtime" below. |
+| [`chat-api`](specs/archived/chat-api/) | ✅ Shipped & deployed 2026-10-21; live-verified (O9 steps 1–9, step 10 not run); audit APPROVED WITH RESERVATIONS (round 3) | A throttled, unauthenticated public `POST /v1/chat` in front of `ai_radar_chat`: an API Gateway HTTP API, a Docker-image Lambda, and the CDK stack `AiRadarChatApi`. Details in "Phase 3 — Chat API" below. |
 
 > **What is deployed now.** The curation agent image was rebuilt, so new cards carry an
 > embedding. The backfill has run, and all 16 live cards have one. `AiRadarRuntimeRole`
 > carries the Titan grant. The chat agent runs as `ai_radar_chat-JFCO0R9lkT`, and its role
 > is the `AiRadarChatRuntime` stack. The chat path is not yet reachable from the public
-> feed. The curation schedule stays `DISABLED`. The local `run_chat.py` path is unchanged.
+> feed. The chat API (`AiRadarChatApi`) is deployed with a public URL, as described under "Phase 3 — Chat API". The curation schedule stays `DISABLED`. The local `run_chat.py` path is unchanged.
 > See "Account migration (2026-10-05)" for the live state.
 
 ### What shipped
@@ -1085,6 +1088,121 @@ runs only after this branch is pushed (audit F8).
 `aws.execution_role`, including the CDK-owned one. Null that field in
 `.bedrock_agentcore.yaml` for the chat agent before `agentcore destroy -a ai_radar_chat`.
 
+### Phase 3 — Chat API (`chat-api`: deployed and live-verified 2026-10-21)
+
+Spec: [`specs/archived/chat-api/`](specs/archived/chat-api/). The `AiRadarChatApi` stack puts a throttled
+public edge in front of the `ai_radar_chat` agent: an API Gateway HTTP API with one route,
+`POST /v1/chat` (no authorizer, no `$default` route), backed by a Docker-image Lambda
+(`Dockerfile.chat_api`, `uv --only-group chat_api`, code in `src/chat_api/`). The Lambda
+checks the JSON shape and a 512 KiB byte cap, makes exactly one `InvokeAgentRuntime` call
+(fresh uuid4 session id per request, botocore `total_max_attempts: 1` so a slow turn is
+never retried or paid twice, connect 3 s, read 22 s, Lambda timeout 28 s), and returns
+`{answer, sources}` (200), `{error: "invalid_request", detail}` (400), `upstream_failure`
+(502), `upstream_timeout` (504) or `internal_error` (500). Stage throttle is 5 req/s,
+burst 10. The role can only invoke the chat runtime ARNs and write its own logs. CORS is
+owned by API Gateway (default origin `http://localhost:3000`, `POST`, `content-type`).
+One text-free `chat_api_request` record per request carries status, outcome, sizes,
+`duration_ms` and `session_id`, never question, history, answer or caller IP; the 500
+record logs the exception class name and stack frames only, never the exception message.
+
+**Status: deployed to account `626259825216` on 2026-10-21 and live-verified for steps 1–9. Step 10 was not run (open finding F5). The audit verdict is APPROVED WITH RESERVATIONS (round 3).** Public URL: `https://<api-id>.execute-api.us-east-1.amazonaws.com` (`POST /v1/chat`). It is unauthenticated and protected only by throttling.
+
+Each step writes to the real account, so run them one at a time and only on the human's
+go-ahead. Print the account first.
+
+1. `aws sts get-caller-identity` (expect `626259825216`). Run 2026-10-21: account `626259825216`, IAM user `[username]`.
+2. Deploy. The account's Lambda concurrency quota is 10, so the reserved-concurrency
+   flag is mandatory, same as `AiRadarFeedApi`:
+
+   ```bash
+   # From the repo root: infra/cdk.json's app path is relative to the repo root, so
+   # `cd infra && cdk ...` fails with a doubled infra/infra path.
+   uv run cdk deploy AiRadarChatApi --app "uv run python infra/app.py" \
+     -c chat_api_reserved_concurrency=none \
+     -c chat_api_allowed_origins=http://localhost:3000     # comma-separate to add origins; never "*"
+   # Non-interactive shells (no TTY) also need --require-approval never; review `cdk diff` first.
+   ```
+
+   Note the outputs `ChatApiUrl` (this is `$API_URL` below), `ChatApiFunctionName`,
+   `ChatApiLogGroupName` and `ChatApiAllowedOrigins`. Run 2026-10-21: `CREATE_COMPLETE` in 66 s.
+   Outputs: `ChatApiUrl=https://<api-id>.execute-api.us-east-1.amazonaws.com`; function
+   `ai-radar-chat-api` (arm64, 28 s timeout, 256 MB, `CHAT_RUNTIME_ARN` set); log group
+   `/aws/lambda/ai-radar-chat-api`. A `cdk diff` before the deploy showed only additions and
+   the four AC6 IAM statements. Two earlier attempts did not deploy (a wrapped `-c` argument,
+   and a non-TTY abort at the IAM prompt).
+3. Real image build and in-container import (the offline tests cannot catch a missing
+   dependency-group member): `docker build --platform linux/arm64 -f Dockerfile.chat_api -t chat-api-check . && docker run --rm --entrypoint python3 -e CHAT_RUNTIME_ARN=arn:aws:bedrock-agentcore:us-east-1:626259825216:runtime/ai_radar_chat-JFCO0R9lkT chat-api-check -c "import chat_api.handler; import boto3; boto3.client('bedrock-agentcore', region_name='us-east-1'); print('ok')"`. `python3` is the form to use. Run 2026-10-21 (built with `--platform linux/arm64`): the in-container import printed `ok 1.43.56`, so the bundled boto3 has the `bedrock-agentcore` client. The probe image was removed afterwards.
+4. Grounded question, expect 200 with `answer` and `sources`:
+   `curl -s -X POST "$API_URL/v1/chat" -H 'content-type: application/json' -d '{"question":"What are the latest developments in open-weight models?","history":[]}'`. Run 2026-10-21: 200 in 7.0 s, keys exactly `answer` and `sources` (4 sources, cited as `[1]` to `[3]`). A follow-up with two history items returned 200 in 3.7 s.
+5. Bad body, expect 400 `invalid_request`: `curl -s -i -X POST "$API_URL/v1/chat" -H 'content-type: application/json' -d '{"question":""}'`. This body passes the local checks, so it DOES invoke the agent (which returns its own `question_empty` 400): one agent invocation, no model call. Run 2026-10-21: `400 {"error":"invalid_request","detail":"question_empty"}` (the agent's body, unchanged) in 0.9 s. A non-JSON body returned `400 body_not_json` from the Lambda, with no agent call.
+6. CORS preflight, expect 204 with the allowed origin echoed:
+   `curl -s -i -X OPTIONS "$API_URL/v1/chat" -H 'Origin: http://localhost:3000' -H 'Access-Control-Request-Method: POST' -H 'Access-Control-Request-Headers: content-type'`. Run 2026-10-21: the preflight from `http://localhost:3000` returned 204 with `access-control-allow-origin: http://localhost:3000`, `allow-methods: POST` and `allow-headers: content-type`. A disallowed origin (`https://evil.example`) returned 204 with no `access-control-*` header.
+7. `GET` on the route, expect 404: `curl -s -i "$API_URL/v1/chat"`. Run 2026-10-21: `GET /v1/chat` returned 404, and so did `POST /v1/other`.
+8. Burst above the limit (stage throttle 5 req/s, burst 10). The body is
+   `not json`, which fails the local pre-check, so the agent and Sonnet are never invoked
+   (only a body failing the local checks avoids the spend; step 5's body does not):
+
+   ```bash
+   seq 40 | xargs -P40 -I{} curl -s -o /dev/null -w '%{http_code}\n' -X POST "$API_URL/v1/chat" \
+     -H 'content-type: application/json' -d 'not json' | sort | uniq -c
+   ```
+
+   Results recorded 2026-10-21 (the function is unreserved, so the account's Lambda pool is the
+   binding limit):
+
+   - **The 40-way parallel cold burst above (two runs) returned Lambda 503s, not 429s.** Lambda
+     metrics showed `Throttles` 27 and `ConcurrentExecutions` max 10, so the account's 10-slot
+     concurrency pool was exhausted. That pool is shared with `ai-radar-feed-api`, so a chat
+     burst can throttle the public feed (open reservation F11). The closure check is a re-run
+     after the quota increase, once both APIs are redeployed without the `none` flag, that shows
+     only 400 and 429 and zero Lambda `Throttles`.
+   - **A steady rate of about 20 req/s for about 4 s (80 non-JSON requests)** returned 64 × `400`
+     and 16 × `429`. A normal request after 10 s of quiet returned `400`. The limit engages, but
+     more leniently than nominal, because API Gateway throttling is best-effort (F13). The
+     `AiRadarBudget` alert is the backstop.
+9. Read the `chat_api_request` records (status, outcome, sizes, `duration_ms`) and confirm no
+   question or answer text appears:
+
+   ```bash
+   aws logs filter-log-events --region us-east-1 --log-group-name /aws/lambda/ai-radar-chat-api \
+     --filter-pattern chat_api_request --query 'events[].message' --output text
+   # or live: aws logs tail /aws/lambda/ai-radar-chat-api --region us-east-1 --filter-pattern chat_api_request --since 15m
+   ```
+
+   Cold vs warm: the first record after a deploy or idle gap (compare with the Lambda `REPORT`
+   line showing `Init Duration`) is cold; later records with no `Init Duration` are warm.
+   Compare their `duration_ms`. Every request also cold-starts an agent microVM (new session
+   id), so both will be slow. Run 2026-10-21: the log held `chat_api_request` records with exactly the keys `event`, `status`, `outcome`, `question_chars`, `history_items`, `duration_ms` and `session_id`, and no question, history, answer or address text. Measured: Lambda init (cold) 2996 ms; agent turns `duration_ms` 6570 (first) and 3345 (second, with a new session id); peak memory 110 MB of 256 MB. The record reached CloudWatch at Lambda's default log level, which confirms F2 live. The step-9 count was four records. The audit round 3 read counted 123 (2 with status 200, 121 with 400, most from the step-8 burst), and the key-set and no-text claims hold for all 123.
+10. For one deliberately slow request, check the agent-side invocation count in the chat
+    runtime log group (`/aws/bedrock-agentcore/runtimes/ai_radar_chat-JFCO0R9lkT-DEFAULT`)
+    is exactly 1 (no retry). **Not run (2026-10-21):** a slow turn cannot be triggered on demand. The no-retry property is covered offline: the audit round 2 socket probe, against the handler's real client config, showed one hit and a 504 after 22.07 s. This is the explicit exception F5 (LOW, non-blocking).
+
+**Known risks.** Every request uses a new session id, so every call is a cold microVM start
+on the agent; expect a slow first byte (record it in step 9). There are no retries by
+design: a transient upstream error surfaces as 502 and the client decides whether to retry
+(each retry is a new Sonnet turn). A turn longer than the 22 s read timeout returns 504,
+but the agent may still finish and bill that turn. The API is unauthenticated and protected
+only by throttling, so keep an eye on the budget alert.
+
+**Open reservations (2026-10-21).**
+
+- **F11 (MEDIUM).** The function is unreserved, because this account's Lambda concurrency quota
+  is 10 and the deploy uses `-c chat_api_reserved_concurrency=none`. A parallel burst can take
+  the whole pool, which `ai-radar-feed-api` also draws from. A quota increase from 10 to 1000
+  (`L-B99A9384`, us-east-1) was requested on 2026-10-21, with request id
+  `cf8be0f0ceba4cf787e8e329efd718e0i3872UpR`. Its status is `CASE_OPENED`, under support case
+  `179259663100438`. Once it is approved, redeploy `AiRadarChatApi` and `AiRadarFeedApi` without
+  the `none` flag (default reservation 5 each), then re-run step 8.
+- **F13 (LOW).** The stage throttle is lenient, at about 2× nominal under a burst (step 8). The
+  budget alert is the cost backstop.
+- **F5 (LOW).** Step 10 is not run.
+- **F7 and F8 (LOW).** CI has not run on the branch, because it is unpushed. The `.gitignore`
+  edit (`.env*`, `!.env.example`) and the `pyproject.toml` `botocore.*` mypy override are waiting
+  for the human to confirm them.
+- **Known doc defect, out of scope.** The `cd infra && cdk deploy AiRadarRuntimeRole` and
+  `cd infra && cdk deploy AiRadarChatRuntime` lines in the earlier runbooks (about lines 1035
+  and 1043) use the broken `cd infra && cdk` form. They are the same on `main`.
+
 ### Not verified live
 
 These are **not** verified live:
@@ -1117,7 +1235,7 @@ pgvector or Aurora, per the design doc's §7. At the current cap of 8 new cards 
 ## Account migration (2026-10-05)
 
 The whole backend was redeployed into a second AWS account, **`626259825216`**
-(IAM user `daniele`, `us-east-1`), from scratch — no data was migrated, so
+(IAM user `[username]`, `us-east-1`), from scratch — no data was migrated, so
 `ai-radar-cards` started empty. This is the **current live state**; the
 original account (`536697225154`) is no longer the deploy target.
 
@@ -1146,8 +1264,10 @@ cards, an out-of-range `limit` returned 400, and CORS allowed only
 - `default_agent` in the local `.bedrock_agentcore.yaml` now points at `ai_radar_chat`
   (see the `default_agent` note under the chat runbook's live results).
 - The curation schedule stays **`DISABLED`**, and no teardown happened.
-- Nothing from the Phase 3 chat path is exposed publicly yet. There is no chat API or
-  throttling until `chat-api`. Invocation needs IAM credentials.
+- The chat API is public since 2026-10-21. The `AiRadarChatApi` stack (`chat-api`) serves an
+  unauthenticated `POST /v1/chat` at `https://<api-id>.execute-api.us-east-1.amazonaws.com`,
+  throttled at 5 req/s with burst 10. Its Lambda is unreserved (open reservation F11). The
+  web app does not call it yet. The chat agent runtime itself still needs IAM credentials.
 
 **What had to change for a new account**
 
