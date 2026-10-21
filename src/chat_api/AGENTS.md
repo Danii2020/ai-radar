@@ -2,8 +2,10 @@
 
 Purpose: the Lambda behind `POST /v1/chat` (API Gateway HTTP API). It forwards the request
 body to the deployed `ai_radar_chat` AgentCore runtime with a fresh session id per request
-and maps the reply to a typed HTTP response. It adds no authentication; the stage throttle
-(5 rps, burst 10) is the cost guard. Root guidance: [`CLAUDE.md`](../../CLAUDE.md).
+and maps the reply to a typed HTTP response. Authentication is at the gateway, not here: the
+route is `AWS_IAM` (SigV4), so only the caller `ai-radar-chat-api-caller` reaches the handler, and
+an unsigned request never does. The stage throttle (5 rps, burst 10) is a second, best-effort
+layer, not the cost guard. Root guidance: [`CLAUDE.md`](../../CLAUDE.md).
 
 ## Key files
 
@@ -28,7 +30,7 @@ uv run pytest tests/test_infra_chat_api.py    # CDK synth, no Docker daemon or c
 
 - This package imports no other first-party package (`curation`, `api`, `chat`, `shared`,
   `contracts`). The request rules stay in the agent; the byte cap is duplicated here on purpose.
-- No CORS headers are emitted: API Gateway owns CORS.
+- No CORS headers are emitted, and the API has no CORS configuration: the route is `AWS_IAM` and is called server-to-server only.
 - Logs never contain the question, history, answer or caller IP, only sizes, status, outcome,
   latency and the generated session id.
 - The image installs only the `chat_api` dependency group (`Dockerfile.chat_api`), which

@@ -1,6 +1,6 @@
 # ADR 0027: The unauthenticated chat endpoint is guarded by throttling and the budget alert alone
 
-- **Status**: Accepted
+- **Status**: Superseded by ADR 0028
 - **Date**: 2026-10-21
 - **Feature**: chat-api
 - **Capability**: chat-api

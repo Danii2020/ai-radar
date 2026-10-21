@@ -94,10 +94,13 @@ on 2026-10-18 with one latency sample, which is a recorded reservation. `chat-ap
 (audit-approved with reservations, round 3, 2026-10-21) is the public edge: API Gateway HTTP
 API `POST /v1/chat` → Lambda (`src/chat_api/`, image `Dockerfile.chat_api`), CDK stack
 `AiRadarChatApi` (`infra/stacks/chat_api_stack.py`, construct `infra/lib/chat_api.py`). It is
-**deployed** and live-verified at `https://<api-id>.execute-api.us-east-1.amazonaws.com`,
-unauthenticated and throttled (5 req/s, burst 10). Deploy it with
-`-c chat_api_reserved_concurrency=none` while the account Lambda quota is 10 (open: F11). The
-web chat UI is the later spec. See "Phase 3 — Chatbot" in
+**deployed** at `https://<api-id>.execute-api.us-east-1.amazonaws.com`, and throttled (5 req/s,
+burst 10). Since `chat-api-auth` (2026-10-21, live-verified) the route requires AWS SigV4
+(`AWS_IAM`) from the dedicated IAM caller `ai-radar-chat-api-caller`, and an unsigned call gets 403.
+The API has no CORS configuration, so the web server is the only caller and holds the caller's
+key. Deploy with `-c chat_api_reserved_concurrency=none` while the account Lambda quota is 10
+(open: F11). The deploy has no allowed-origins option. The web chat UI and its server-side signing
+are the later `apps/web` spec. See "Phase 3 — Chatbot" in
 [`README.md`](README.md).
 
 ## SDD harness: two roots

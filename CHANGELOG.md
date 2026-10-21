@@ -20,6 +20,54 @@ a version number. Each entry links to its archived SDD spec
 Nothing pending beyond `apps/web/specs/archived/web-feed-ui/` (Phase 2 spec 02, the Next.js
 frontend — still in progress, not yet archived).
 
+## 2026-10-21 — chat-api-auth
+
+Spec: `specs/archived/chat-api-auth/`. Audit: APPROVED WITH RESERVATIONS (round 2). Deployed in
+place to `AiRadarChatApi` in account `626259825216` and live-verified (tasks O7). The route now
+requires an AWS SigV4 signature from one dedicated IAM caller. Two signed unrouted probes were not
+run (F9), and the human accepted the unsigned 404 evidence for that sub-case. Supersedes ADR 0027
+with ADR 0028. Decisions: ADRs 0028–0031.
+
+### Changed
+- `POST /v1/chat` uses `AWS_IAM` (SigV4, service `execute-api`, `us-east-1`) in
+  `infra/lib/chat_api.py`. The unauthenticated route is gone. Unsigned, tampered and
+  fabricated-header requests get 403 and do not reach the Lambda (live: `Invocations` stayed at 1.0).
+- The API has no CORS configuration, and the `chat_api_allowed_origins` context option and the
+  `ChatApiAllowedOrigins` output are removed. Browsers are not a supported caller: the web server
+  signs the call.
+- The API id, URL and `HttpApi` logical id are unchanged, so the deploy updated the API in place.
+  The Lambda code changed in place (new image), and its role, throttle, timeout and reservation
+  are unchanged.
+- `src/chat_api/AGENTS.md`: the auth wording replaces "the stage throttle is the cost guard".
+- The README "Phase 3 — Chat API" runbook: the deploy has no origins flag, the outputs include
+  `ChatApiCallerUserName`, the CORS check is replaced, and the unsigned curl steps are superseded
+  with the signed script.
+
+### Added
+- IAM user `ai-radar-chat-api-caller` (stack-created, no access key, no login profile, no managed
+  policy) with one inline statement: `execute-api:Invoke` on this API's `POST /v1/chat`. Output:
+  `ChatApiCallerUserName`.
+- `run_chat_api_smoke.py`, a developer script that signs one `POST /v1/chat` with botocore SigV4
+  (`--unsigned` and `--tamper` probes). It prints the caller identity first and never prints the
+  secret or the `Authorization` header. Offline tests: `tests/test_chat_api_smoke.py`.
+- Tests: `tests/test_infra_chat_api.py` (route `AWS_IAM`, no CORS, the ignored context key, the
+  caller user and policy, no access key) and `tests/test_chat_api_handler.py::test_iam_authorizer_context_is_not_logged`.
+
+### Removed
+- The CORS configuration (default `http://localhost:3000`), and its two synth tests.
+
+### Open reservations
+- **Caller key (long-lived).** It stays `Active` in the local profile until the `apps/web`
+  server-side signing spec ships. Rotation steps are in the README runbook.
+- **Admins and other granted identities** can also call the route, because HTTP APIs have no
+  resource policy.
+- **F9 (LOW).** The signed `GET /v1/chat` and `POST /v1/other` probes were not run.
+- **Expired signature (LOW).** Not exercised live; `--tamper` was accepted instead.
+- **F11 re-check (open work).** A signed burst is needed, because unsigned floods now stop at the
+  gateway. No code was written for it.
+- **F5 and F6 (LOW).** An import-side-effect test is not added, and CI has not run (the branch is
+  unpushed).
+
 ## 2026-10-21 — chat-api
 
 Spec: `specs/archived/chat-api/`. Audit: APPROVED WITH RESERVATIONS (round 3). Deployed as
@@ -37,10 +85,11 @@ F11 (MEDIUM), F13, F5, F7 and F8 (LOW), listed below and in README "Phase 3 — 
   (`boto3`, `pydantic-settings`). Image build and in-container import were checked live.
 - CDK construct `infra/lib/chat_api.py` and stack `AiRadarChatApi`
   (`infra/stacks/chat_api_stack.py`), registered in `infra/app.py`. It is an API Gateway HTTP API
-  with one route, `POST /v1/chat`, and no `$default` route. CORS allows the explicit origin list
-  (default `http://localhost:3000`, never `*`). The stage throttle is 5 req/s with a burst of 10.
-  The Lambda role can invoke only the chat runtime ARNs and write its own logs. Its context
-  overrides are `chat_api_allowed_origins` and `chat_api_reserved_concurrency`.
+  with one route, `POST /v1/chat`, and no `$default` route. CORS allowed the explicit origin list
+  (default `http://localhost:3000`, never `*`). *Superseded 2026-10-21 by `chat-api-auth`: the route
+  is `AWS_IAM`, the API has no CORS configuration, and `chat_api_allowed_origins` is removed.* The
+  stage throttle is 5 req/s with a burst of 10. The Lambda role can invoke only the chat runtime
+  ARNs and write its own logs. Its context override is `chat_api_reserved_concurrency`.
 - One text-free `chat_api_request` log record per request: status, outcome, sizes, `duration_ms`
   and the session id. A 500 record logs the exception class and stack frames only.
 - Tests: `tests/test_chat_api_handler.py` (43), `tests/test_infra_chat_api.py` (11) and

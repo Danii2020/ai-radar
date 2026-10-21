@@ -11,6 +11,7 @@ from typing import cast
 
 from aws_cdk import Duration, RemovalPolicy
 from aws_cdk import aws_apigatewayv2 as apigwv2
+from aws_cdk import aws_apigatewayv2_authorizers as apigwv2_authorizers
 from aws_cdk import aws_apigatewayv2_integrations as apigwv2_integrations
 from aws_cdk import aws_ecr_assets as ecr_assets
 from aws_cdk import aws_iam as iam
@@ -18,9 +19,6 @@ from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_logs as logs
 from constructs import Construct
 
-# Override per-deploy with `cdk deploy -c chat_api_allowed_origins=...`
-# (see ChatApiStack). NEVER "*" — a synth test asserts that.
-DEFAULT_ALLOWED_ORIGINS = ["http://localhost:3000"]
 # Lower than feed-api's 20/40: every call spends Sonnet tokens.
 THROTTLE_RATE_LIMIT = 5      # req/s, steady state
 THROTTLE_BURST_LIMIT = 10
@@ -39,13 +37,15 @@ DEFAULT_LOG_RETENTION = logs.RetentionDays.ONE_MONTH
 # these plus tests/test_infra_chat_api.py when moving accounts).
 CHAT_RUNTIME_ID = "ai_radar_chat-JFCO0R9lkT"
 ROUTE_PATH = "/v1/chat"
+CALLER_USER_NAME = "ai-radar-chat-api-caller"
 
 _REPO_ROOT = Path(__file__).parents[2]
 
 
 class ChatApi(Construct):
-    """Exposes `.http_api`, `.function`, `.log_group`, `.role`,
-    `.allowed_origins` and `.runtime_arn`."""
+    """Exposes `.http_api`, `.function`, `.log_group`, `.role`, `.caller_user`
+    and `.runtime_arn`. The route uses IAM (SigV4) auth; the stack creates the
+    caller user but never an access key (the human creates it with the AWS CLI)."""
 
     def __init__(
         self,
@@ -55,16 +55,12 @@ class ChatApi(Construct):
         account: str = "626259825216",
         region: str = "us-east-1",
         runtime_id: str = CHAT_RUNTIME_ID,
-        allowed_origins: list[str] | None = None,
         reserved_concurrent_executions: int | None = DEFAULT_RESERVED_CONCURRENCY,
         # ^ None omits the kwarg entirely (the only way to leave concurrency
         # unreserved through CDK); see ChatApiStack.
     ) -> None:
         super().__init__(scope, construct_id)
 
-        self.allowed_origins = (
-            allowed_origins if allowed_origins is not None else list(DEFAULT_ALLOWED_ORIGINS)
-        )
         self.runtime_arn = f"arn:aws:bedrock-agentcore:{region}:{account}:runtime/{runtime_id}"
 
         self.log_group = logs.LogGroup(
@@ -127,12 +123,6 @@ class ChatApi(Construct):
             self,
             "ChatHttpApi",
             api_name="ai-radar-chat-api",
-            cors_preflight=apigwv2.CorsPreflightOptions(
-                allow_origins=self.allowed_origins,
-                allow_methods=[apigwv2.CorsHttpMethod.POST],
-                allow_headers=["content-type"],
-                max_age=Duration.hours(1),
-            ),
         )
         self.http_api.add_routes(
             path=ROUTE_PATH,
@@ -140,6 +130,19 @@ class ChatApi(Construct):
             integration=apigwv2_integrations.HttpLambdaIntegration(
                 "ChatIntegration", self.function
             ),
+            authorizer=apigwv2_authorizers.HttpIamAuthorizer(),
+        )
+
+        # The one principal meant to call the route: no access key, no login
+        # profile, no managed policy. One statement, this route only.
+        self.caller_user = iam.User(self, "ChatApiCaller", user_name=CALLER_USER_NAME)
+        self.caller_user.add_to_policy(
+            iam.PolicyStatement(
+                sid="InvokeChatRoute",
+                effect=iam.Effect.ALLOW,
+                actions=["execute-api:Invoke"],
+                resources=[self.http_api.arn_for_execute_api("POST", ROUTE_PATH, "*")],
+            )
         )
 
         default_stage = self.http_api.default_stage

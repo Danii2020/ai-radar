@@ -1,7 +1,10 @@
 # Current-State Specifications
 
 > Current truth for this repo. Maintained by `harny-sync`; do not hand-edit.
-> Last synced: 2026-10-21 (`chat-api` archived: new `chat-api` capability, ADRs 0022–0027,
+> Last synced: 2026-10-21 (`chat-api-auth` archived: new `chat-api-auth` capability, amends
+> `chat-api` CAPI-4 and CAPI-6, ADRs 0028–0031, ADR 0027 superseded, reservations CAAUTH-F1, F3,
+> F5, F6, F9, F11 and the admin and key limits — see Notes).
+> Earlier: 2026-10-21 (`chat-api` archived: new `chat-api` capability, ADRs 0022–0027,
 > reservations CAPI-F5, F7, F8, F11, F13 — see Notes).
 > Earlier: 2026-10-18 (`chat-agent-runtime` archived: new `chat-agent`
 > capability, ADRs 0016–0021, runtime-deployment RD-7/RD-8, reservations CAR-F5..F11 — see Notes).
@@ -29,7 +32,8 @@
 | feed-api | [feed-api.md](./feed-api.md) | [feed-api](../archived/feed-api/) |
 | chat-retrieval | [chat-retrieval.md](./chat-retrieval.md) | [chat-retrieval](../archived/chat-retrieval/), [chat-agent-runtime](../archived/chat-agent-runtime/) (no requirement change) |
 | chat-agent | [chat-agent.md](./chat-agent.md) | [chat-agent-runtime](../archived/chat-agent-runtime/) |
-| chat-api | [chat-api.md](./chat-api.md) | [chat-api](../archived/chat-api/) |
+| chat-api | [chat-api.md](./chat-api.md) | [chat-api](../archived/chat-api/), [chat-api-auth](../archived/chat-api-auth/) (CAPI-4 amended, CAPI-6 note) |
+| chat-api-auth | [chat-api-auth.md](./chat-api-auth.md) | [chat-api-auth](../archived/chat-api-auth/) |
 
 ## Keyword lookup
 
@@ -104,11 +108,18 @@
 | POST /v1/chat / AiRadarChatApi | chat-api |
 | ai-radar-chat-api (Lambda) / chat_api group | chat-api |
 | chat_api_request (log record) | chat-api |
-| chat_api_reserved_concurrency / chat_api_allowed_origins | chat-api |
+| chat_api_reserved_concurrency | chat-api |
 | upstream_timeout / upstream_failure (chat API) | chat-api |
 | total_max_attempts / no retry (chat API) | chat-api |
 | runtimeSessionId / fresh session id (chat API) | chat-api |
-| stage throttle (chat API) | chat-api |
+| stage throttle (chat API, second layer) | chat-api, chat-api-auth |
+| SigV4 / AWS_IAM / execute-api (chat route) | chat-api-auth |
+| ai-radar-chat-api-caller / caller user | chat-api-auth |
+| caller access key / rotation / key storage | chat-api-auth |
+| ChatApiCallerUserName | chat-api-auth |
+| CORS (chat API) / no CORS configuration | chat-api-auth |
+| chat_api_allowed_origins (removed) | chat-api-auth |
+| unauthenticated chat / 403 at the gateway | chat-api-auth |
 
 ## Synchronized Changes
 
@@ -127,10 +138,11 @@
 | chat-retrieval | [specs/archived/chat-retrieval/](../archived/chat-retrieval/) | [chat-retrieval.md](./chat-retrieval.md), [card-persistence.md](./card-persistence.md), [curation-pipeline.md](./curation-pipeline.md), [runtime-deployment.md](./runtime-deployment.md) |
 | chat-agent-runtime | [specs/archived/chat-agent-runtime/](../archived/chat-agent-runtime/) | [chat-agent.md](./chat-agent.md) (new), [runtime-deployment.md](./runtime-deployment.md) (RD-7, RD-8), [chat-retrieval.md](./chat-retrieval.md) (contributing row only) |
 | chat-api | [specs/archived/chat-api/](../archived/chat-api/) | [chat-api.md](./chat-api.md) (new) |
+| chat-api-auth | [specs/archived/chat-api-auth/](../archived/chat-api-auth/) | [chat-api-auth.md](./chat-api-auth.md) (new), [chat-api.md](./chat-api.md) (CAPI-4 amended, CAPI-6 note, ADR 0027 superseded) |
 
 ## Decisions (ADR registry)
 
-ADR numbers are **repo-wide monotonic** across both harness roots: 0001–0007 belong to `web-feed-ui` and 0008 to `feed-structure-refactor`, both registered in [`apps/web/specs/current/_index.md`](../../apps/web/specs/current/_index.md) (the frontend index still names 0008 as next, and is not edited here). The next ADR written in either harness is **0028**.
+ADR numbers are **repo-wide monotonic** across both harness roots: 0001–0007 belong to `web-feed-ui` and 0008 to `feed-structure-refactor`, both registered in [`apps/web/specs/current/_index.md`](../../apps/web/specs/current/_index.md) (the frontend index still names 0008 as next, and is not edited here). The next ADR written in either harness is **0032**. ADRs 0028–0031 were written by `chat-api-auth` and supersede ADR 0027.
 
 | ADR | Title | Status | Capability | Path |
 |---|---|---|---|---|
@@ -152,7 +164,11 @@ ADR numbers are **repo-wide monotonic** across both harness roots: 0001–0007 b
 | 0024 | The agent invoke makes no retries, with a 22 s read timeout under a 28 s Lambda limit | Accepted | chat-api | [specs/archived/chat-api/decisions/0024-no-retries-and-a-read-timeout-under-the-lambda-limit.md](../archived/chat-api/decisions/0024-no-retries-and-a-read-timeout-under-the-lambda-limit.md) |
 | 0025 | Unexpected errors log the exception class and stack frames, never the message | Accepted | chat-api | [specs/archived/chat-api/decisions/0025-500-path-logs-exception-class-and-frames-only.md](../archived/chat-api/decisions/0025-500-path-logs-exception-class-and-frames-only.md) |
 | 0026 | The handler sets its own logger to INFO rather than relying on the runtime's log level | Accepted | chat-api | [specs/archived/chat-api/decisions/0026-handler-sets-its-own-info-log-level.md](../archived/chat-api/decisions/0026-handler-sets-its-own-info-log-level.md) |
-| 0027 | The unauthenticated chat endpoint is guarded by throttling and the budget alert alone | Accepted | chat-api | [specs/archived/chat-api/decisions/0027-throttling-is-the-only-abuse-guard-on-the-unauthenticated-endpoint.md](../archived/chat-api/decisions/0027-throttling-is-the-only-abuse-guard-on-the-unauthenticated-endpoint.md) |
+| 0027 | The unauthenticated chat endpoint is guarded by throttling and the budget alert alone | Superseded by ADR 0028 | chat-api | [specs/archived/chat-api/decisions/0027-throttling-is-the-only-abuse-guard-on-the-unauthenticated-endpoint.md](../archived/chat-api/decisions/0027-throttling-is-the-only-abuse-guard-on-the-unauthenticated-endpoint.md) |
+| 0028 | The chat route is authorized with AWS SigV4 for one dedicated caller, not by throttling | Accepted | chat-api-auth | [specs/archived/chat-api-auth/decisions/0028-chat-route-authorized-by-aws-iam-sigv4-for-one-caller.md](../archived/chat-api-auth/decisions/0028-chat-route-authorized-by-aws-iam-sigv4-for-one-caller.md) |
+| 0029 | Browsers are not a supported caller, so the chat API has no CORS configuration | Accepted | chat-api-auth | [specs/archived/chat-api-auth/decisions/0029-browsers-are-not-a-supported-caller-so-no-cors.md](../archived/chat-api-auth/decisions/0029-browsers-are-not-a-supported-caller-so-no-cors.md) |
+| 0030 | The caller's access key is long-lived and created by hand, outside CloudFormation | Accepted | chat-api-auth | [specs/archived/chat-api-auth/decisions/0030-caller-access-key-is-long-lived-and-created-outside-cloudformation.md](../archived/chat-api-auth/decisions/0030-caller-access-key-is-long-lived-and-created-outside-cloudformation.md) |
+| 0031 | The HTTP API construct keeps its logical id, so the deploy updates the API in place | Accepted | chat-api-auth | [specs/archived/chat-api-auth/decisions/0031-http-api-construct-id-kept-so-the-api-updates-in-place.md](../archived/chat-api-auth/decisions/0031-http-api-construct-id-kept-so-the-api-updates-in-place.md) |
 
 All 10 features archived in the 2026-09-17 bootstrap pass shipped before
 `harny-adr` existed in this project; per that skill's own no-backfill
@@ -180,9 +196,17 @@ first feature archived here with ADRs (0009–0015, from its approved execution 
 | CAPI-F5 | Runbook step 10 (the agent-side invocation count for one slow request) is not run. The live 502 and 504 paths were not triggered, so the no-retry property rests on the offline socket probe. | LOW | `specs/archived/chat-api/audit.md` (F5) | chat-api |
 | CAPI-F7 | CI has not run on the branch, because it is unpushed. The evidence is local. | LOW | `specs/archived/chat-api/audit.md` (F7) | chat-api |
 | CAPI-F8 | The `.gitignore` edit (`.env*`, `!.env.example`) and the `pyproject.toml` `botocore.*` mypy override are changes outside the plan's ownership, awaiting the human's confirmation. | LOW | `specs/archived/chat-api/audit.md` (F8) | chat-api |
-| CAPI-F11 | The function is unreserved, so it shares the account's 10-slot Lambda pool with `ai-radar-feed-api`, and a parallel burst returns 503s. Quota increase requested 2026-10-21 (support case 179259663100438, `CASE_OPENED`); once approved, redeploy both APIs without the `none` flag and re-run the burst. | MEDIUM | `specs/archived/chat-api/audit.md` (F11) | chat-api |
+| CAPI-F11 | The function is unreserved, so it shares the account's 10-slot Lambda pool with `ai-radar-feed-api`, and a parallel burst returns 503s. Quota increase requested 2026-10-21 (support case 179259663100438, `CASE_OPENED`); once approved, redeploy both APIs without the `none` flag and re-run the burst. Since `chat-api-auth`, the re-run must be signed (unsigned requests get 403 at the gateway). | MEDIUM | `specs/archived/chat-api/audit.md` (F11) | chat-api |
 | CAPI-F13 | Stage throttling is best-effort and lenient: 64 of 80 requests passed at about 20 req/s, where a strict bucket would pass about 30. The real ceiling under abuse is about twice nominal. The `AiRadarBudget` alert is the backstop. | LOW | `specs/archived/chat-api/audit.md` (F13) | chat-api |
 | CAR-F11 | Retrieval latency and the ADR 0009 ceiling rest on one live sample (`retrieval_ms=330`, 16 live cards). No p95 yet; accepted by the human on 2026-10-18. | LOW | `specs/archived/chat-agent-runtime/audit.md` (F11) | chat-agent, chat-retrieval |
+| CAAUTH-F1 | The expired-signature case is not exercised live. The human accepted `--tamper` as the bad-signature probe, but intent AC2 still says "expired". | LOW | `specs/archived/chat-api-auth/audit.md` (F1) | chat-api-auth |
+| CAAUTH-F3 | The Docker build context does not exclude caches such as `.mypy_cache`. Pre-existing debt. | LOW | `specs/archived/chat-api-auth/audit.md` (F3) | chat-api-auth |
+| CAAUTH-F5 | No test asserts that importing `run_chat_api_smoke.py` makes no network or STS call. | LOW | `specs/archived/chat-api-auth/audit.md` (F5) | chat-api-auth |
+| CAAUTH-F6 | CI (`harny-feedback.yml`) has not run, because the branch is unpushed. | LOW | `specs/archived/chat-api-auth/audit.md` (F6) | chat-api-auth |
+| CAAUTH-F9 | The signed `GET /v1/chat` and signed `POST /v1/other` probes were not run. The unsigned 404 evidence was accepted by the human on 2026-10-21. | LOW | `specs/archived/chat-api-auth/audit.md` (F9) | chat-api-auth |
+| CAAUTH-F11 | The `chat-api` F11 closure re-check must be a signed burst, because unsigned floods get 403 at the gateway. No signed burst tool exists. Open work. | MEDIUM | `specs/archived/chat-api-auth/audit.md` (round 2) | chat-api-auth, chat-api |
+| CAAUTH-ADMIN | An HTTP API has no resource policy, so any identity in the account with its own `execute-api:Invoke` grant (an administrator, for example) can also call the route. Accepted limitation. | LOW (accepted) | ADR 0028; `specs/archived/chat-api-auth/audit.md` (plan-flagged limits) | chat-api-auth |
+| CAAUTH-KEY | The caller access key is long-lived and stays `Active` in the local profile until the `apps/web` signing spec ships. | LOW (accepted) | ADR 0030; `specs/archived/chat-api-auth/audit.md` (round 2 note) | chat-api-auth |
 
 ## Notes
 
@@ -255,9 +279,20 @@ ADR 0021 (its end-of-life date is unconfirmed). The chat-retrieval reservations 
 unchanged.
 
 **2026-10-21 chat-api.** The public edge for the chat agent, `AiRadarChatApi`, deployed on
-2026-10-21 (the `POST /v1/chat` route, unauthenticated and throttled). It creates the `chat-api`
+2026-10-21 (the `POST /v1/chat` route, unauthenticated and throttled at that point; `chat-api-auth` made it SigV4-authenticated later the same day). It creates the `chat-api`
 capability (CAPI-1..CAPI-8, new `chat-api.md`) and amends no existing capability: `chat-agent`,
 `feed-api` and `runtime-deployment` are unchanged. Its ADRs are 0022–0027, written by `harny-adr`
 from the approved execution plan. Its open reservations are CAPI-F5, F7, F8, F11 and F13. F11 is
 MEDIUM: the function is unreserved while the account Lambda quota is 10, so it shares a pool with
 the feed API. The live runbook steps 1–9 ran; step 10 did not.
+
+**2026-10-21 chat-api-auth.** `POST /v1/chat` now requires AWS SigV4 (`AWS_IAM`) from one stack-created
+caller, `ai-radar-chat-api-caller`, with one `execute-api:Invoke` statement. The stack creates no
+access key, and the human created the key outside CloudFormation. The API has no CORS configuration,
+and the `chat_api_allowed_origins` option is removed. This is the same API, updated in place. The
+`chat-api-auth` capability (CAAUTH-1..CAAUTH-9, new `chat-api-auth.md`) amends `chat-api` CAPI-4
+(CORS retired) and CAPI-6 (a note), and supersedes ADR 0027 with ADR 0028. Its ADRs are 0028–0031,
+written by `harny-adr` from the approved execution plan. Its open reservations are CAAUTH-F1, F3, F5,
+F6, F9 and F11 (MEDIUM, the signed F11 re-check), plus the accepted admin and caller-key limits. The
+live O7 steps ran on 2026-10-21 with the F9 exception. The `apps/web` server-side signing is a
+follow-up spec.

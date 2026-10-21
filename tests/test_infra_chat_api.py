@@ -1,14 +1,17 @@
-"""CDK synth tests for the chat-API construct/stack (chat-api spec, AC4-AC6).
+"""CDK synth tests for the chat-API construct/stack (chat-api spec, AC4-AC6;
+chat-api-auth spec, AC2-AC6).
 
-Spec: specs/chat-api/execution-plan.md § Validation rows AC4, AC5, AC6.
+Spec: specs/chat-api/execution-plan.md § Validation rows AC4, AC5, AC6, and
+specs/chat-api-auth/execution-plan.md § Validation rows AC2-AC6 (IAM-authorized
+route, no CORS, one least-privilege caller user, no access key).
 
 Synth-only: no `cdk deploy`, no AWS credentials, no network, no Docker daemon.
 The pinned account (626259825216), region (us-east-1) and runtime id
 (ai_radar_chat-JFCO0R9lkT) are literals in `infra/lib/chat_api.py`; a change to
 any of them must update this file too.
 
-RED phase: `infra/lib/chat_api.py` and `infra/stacks/chat_api_stack.py` do not
-exist, so the file fails at collection with `ModuleNotFoundError`.
+chat-api-auth RED phase: the route is still `NONE`, CORS and the allowed-origins
+knob still exist, and there is no caller user, so the new assertions fail.
 """
 from __future__ import annotations
 
@@ -26,6 +29,10 @@ ACCOUNT = "626259825216"
 REGION = "us-east-1"
 RUNTIME_ARN = f"arn:aws:bedrock-agentcore:{REGION}:{ACCOUNT}:runtime/ai_radar_chat-JFCO0R9lkT"
 ENDPOINT_ARN = f"{RUNTIME_ARN}/runtime-endpoint/DEFAULT"
+CALLER_USER_NAME = "ai-radar-chat-api-caller"
+# Logical id of the HttpApi captured from the pre-auth template (6d19f14); it must not
+# change, or CloudFormation would replace the API and its URL would change (AC6).
+HTTP_API_LOGICAL_ID = "ChatApiChatHttpApi975E960D"
 
 
 def _template_json(context: dict | None = None) -> dict:
@@ -38,21 +45,40 @@ def _of_type(template_json: dict, resource_type: str) -> dict[str, dict]:
     return {k: r for k, r in template_json["Resources"].items() if r["Type"] == resource_type}
 
 
+def _refs(value) -> list[str]:
+    """Logical ids named by `{"Ref": ...}` entries in a Roles/Users list."""
+    return [v["Ref"] for v in _as_list(value) if isinstance(v, dict) and "Ref" in v]
+
+
 def _statements(template_json: dict) -> list[dict]:
+    """Statements of the policies attached to the Lambda role only."""
+    role_ids = {
+        k
+        for k, r in _of_type(template_json, "AWS::IAM::Role").items()
+        if "lambda.amazonaws.com" in json.dumps(r["Properties"]["AssumeRolePolicyDocument"])
+    }
     out: list[dict] = []
     for policy in _of_type(template_json, "AWS::IAM::Policy").values():
-        out.extend(policy["Properties"]["PolicyDocument"]["Statement"])
+        if set(_refs(policy["Properties"].get("Roles", []))) & role_ids:
+            out.extend(policy["Properties"]["PolicyDocument"]["Statement"])
+    return out
+
+
+def _caller_statements(template_json: dict) -> list[dict]:
+    """Every statement attached to the caller user, via policies' `Users` or its `Policies`."""
+    users = _of_type(template_json, "AWS::IAM::User")
+    out: list[dict] = []
+    for policy in _of_type(template_json, "AWS::IAM::Policy").values():
+        if set(_refs(policy["Properties"].get("Users", []))) & set(users):
+            out.extend(policy["Properties"]["PolicyDocument"]["Statement"])
+    for user in users.values():
+        for inline in user["Properties"].get("Policies", []):
+            out.extend(inline["PolicyDocument"]["Statement"])
     return out
 
 
 def _as_list(value) -> list:
     return value if isinstance(value, list) else [value]
-
-
-def _cors(context: dict | None = None) -> dict:
-    apis = list(_of_type(_template_json(context), "AWS::ApiGatewayV2::Api").values())
-    assert len(apis) == 1
-    return apis[0]["Properties"]["CorsConfiguration"]
 
 
 def _function(context: dict | None = None) -> dict:
@@ -61,25 +87,84 @@ def _function(context: dict | None = None) -> dict:
     return functions[0]["Properties"]
 
 
-# AC4
+# AC2 / AC3
 def test_route_is_exactly_post_v1_chat_with_no_default_route():
     routes = list(_of_type(_template_json(), "AWS::ApiGatewayV2::Route").values())
     assert [r["Properties"]["RouteKey"] for r in routes] == ["POST /v1/chat"]
-    assert routes[0]["Properties"]["AuthorizationType"] == "NONE"
+    assert routes[0]["Properties"]["AuthorizationType"] == "AWS_IAM"
 
 
-def test_cors_defaults_to_localhost_origin_post_and_content_type_only():
-    cors = _cors()
-    assert cors["AllowOrigins"] == ["http://localhost:3000"]
-    assert "*" not in cors["AllowOrigins"]
-    assert cors["AllowMethods"] == ["POST"]
-    assert cors["AllowHeaders"] == ["content-type"]
+def test_iam_auth_needs_no_authorizer_resource_and_one_integration_permission():
+    template_json = _template_json()
+    assert not _of_type(template_json, "AWS::ApiGatewayV2::Authorizer")
+    assert len(_of_type(template_json, "AWS::Lambda::Permission")) == 1
 
 
-def test_cors_origins_are_overridable_via_cdk_context_and_never_wildcard():
-    cors = _cors({"chat_api_allowed_origins": "https://a.example.com,https://b.example.com"})
-    assert cors["AllowOrigins"] == ["https://a.example.com", "https://b.example.com"]
-    assert "*" not in cors["AllowOrigins"]
+# AC3
+def test_api_has_no_cors_configuration():
+    apis = list(_of_type(_template_json(), "AWS::ApiGatewayV2::Api").values())
+    assert len(apis) == 1
+    assert "CorsConfiguration" not in apis[0]["Properties"]
+
+
+def test_allowed_origins_context_key_is_ignored():
+    assert _template_json({"chat_api_allowed_origins": "https://a.example.com"}) == _template_json()
+
+
+def test_outputs_drop_allowed_origins_and_add_caller_user_name():
+    outputs = _template_json()["Outputs"]
+    assert "ChatApiAllowedOrigins" not in outputs
+    assert {"ChatApiUrl", "ChatApiFunctionName", "ChatApiLogGroupName", "ChatApiCallerUserName"} <= set(outputs)
+
+
+# AC4
+def test_exactly_one_caller_user_with_no_login_profile_or_managed_policy():
+    users = list(_of_type(_template_json(), "AWS::IAM::User").values())
+    assert len(users) == 1
+    props = users[0]["Properties"]
+    assert props["UserName"] == CALLER_USER_NAME
+    for forbidden in ("LoginProfile", "ManagedPolicyArns", "Groups"):
+        assert forbidden not in props, forbidden
+
+
+def test_caller_has_exactly_one_statement_invoke_on_post_v1_chat_route_arn():
+    template_json = _template_json()
+    statements = _caller_statements(template_json)
+    assert len(statements) == 1
+    statement = statements[0]
+    assert statement["Effect"] == "Allow"
+    assert _as_list(statement["Action"]) == ["execute-api:Invoke"]
+    resources = _as_list(statement["Resource"])
+    assert len(resources) == 1
+    api_ids = list(_of_type(template_json, "AWS::ApiGatewayV2::Api"))
+    assert len(api_ids) == 1
+    rendered = json.dumps(resources[0])
+    assert api_ids[0] in rendered  # references this API
+    assert rendered.rstrip('"}]').endswith("/*/POST/v1/chat")
+    # pinned account and region, no bare wildcard anywhere before the stage segment
+    assert "execute-api" in rendered
+    assert "*" not in rendered.replace("/*/POST/v1/chat", "")
+    assert statement["Resource"] != "*"
+
+
+def test_caller_policy_resource_is_pinned_to_the_account_and_region():
+    template_json = _template_json()
+    (statement,) = _caller_statements(template_json)
+    resource = statement["Resource"]
+    rendered = json.dumps(resource)
+    assert (ACCOUNT in rendered) or ("AWS::AccountId" in rendered)
+    assert (REGION in rendered) or ("AWS::Region" in rendered)
+
+
+def test_template_has_no_access_key_and_no_managed_policy():
+    template_json = _template_json()
+    assert _of_type(template_json, "AWS::IAM::AccessKey") == {}
+    assert _of_type(template_json, "AWS::IAM::ManagedPolicy") == {}
+
+
+# AC6
+def test_http_api_logical_id_is_stable():
+    assert list(_of_type(_template_json(), "AWS::ApiGatewayV2::Api")) == [HTTP_API_LOGICAL_ID]
 
 
 # AC5
