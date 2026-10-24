@@ -907,7 +907,10 @@ its own stateless agent on AgentCore Runtime (live since 2026-10-18). Its third,
 [`chat-api`](specs/archived/chat-api/), is the front door for a server caller: `POST /v1/chat`,
 deployed and live-verified on 2026-10-21. The same day [`chat-api-auth`](specs/archived/chat-api-auth/)
 put that route behind AWS SigV4 (`AWS_IAM`), so only one dedicated caller principal can invoke it
-(see "Phase 3 — Chat API" below). The web chat UI is a later Phase 3 spec and is not started.
+(see "Phase 3 — Chat API" below). The web chat UI shipped on 2026-10-24 as two `apps/web` specs, `web-chat-ui` (the SigV4 `POST /api/chat`
+route and a floating widget) and `web-chat-ui-polish` (markdown answers, auto-scroll, a phone bottom sheet);
+both are audit-approved with reservations and verified locally against a stub only. The real-key live
+check and the Vercel deploy are still human steps. Setup is in [`apps/web/README.md`](apps/web/README.md).
 
 | Spec | Status | What it added |
 |---|---|---|

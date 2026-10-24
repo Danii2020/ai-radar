@@ -1,3 +1,4 @@
+import { ChatWidget } from '@/features/chat'
 import { FeedView, loadFeedState, parseFeedSearchParams } from '@/features/feed'
 
 export default async function Page({
@@ -7,5 +8,10 @@ export default async function Page({
 }) {
   const { tag, cursor } = parseFeedSearchParams(await searchParams)
   const state = await loadFeedState({ tag, cursor })
-  return <FeedView state={state} tag={tag} cursor={cursor} />
+  return (
+    <>
+      <FeedView state={state} tag={tag} cursor={cursor} />
+      <ChatWidget />
+    </>
+  )
 }

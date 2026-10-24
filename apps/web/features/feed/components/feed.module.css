@@ -100,7 +100,7 @@
 }
 .meta { font-family: var(--font-mono); font-size: 12.5px; line-height: 18px; font-weight: 500; color: var(--ink-muted); }
 .metaSep { padding: 0 var(--space-2); }
-.urlLine { display: block; margin-top: var(--space-2); font-family: var(--font-mono); font-size: 12.5px; color: var(--link); text-decoration: underline; }
+.urlLine { display: block; margin-top: var(--space-2); font-family: var(--font-mono); font-size: 12.5px; color: var(--link); text-decoration: underline; overflow-wrap: anywhere; }
 .urlLine:hover { color: var(--link-hover); }
 
 /* ---- pagination ---- */

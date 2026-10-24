@@ -100,7 +100,7 @@ burst 10). Since `chat-api-auth` (2026-10-21, live-verified) the route requires 
 The API has no CORS configuration, so the web server is the only caller and holds the caller's
 key. Deploy with `-c chat_api_reserved_concurrency=none` while the account Lambda quota is 10
 (open: F11). The deploy has no allowed-origins option. The web chat UI and its server-side signing
-are the later `apps/web` spec. See "Phase 3 — Chatbot" in
+shipped as the `apps/web` specs `web-chat-ui` and `web-chat-ui-polish` (2026-10-24; locally verified, live key check and Vercel deploy pending). See "Phase 3 — Chatbot" in
 [`README.md`](README.md).
 
 ## SDD harness: two roots
@@ -117,7 +117,7 @@ several stacks in one install:
   `apps/web/`** so `CLAUDE_PROJECT_DIR` points there and its hooks, agents,
   and skills load.
 
-ADR numbers are monotonic across both roots (used through 0027 as of 2026-10-21; check
+ADR numbers are monotonic across both roots (used through 0039 as of 2026-10-24; check
 `specs/current/_index.md` for the next free number). When you change
 `.sdd/feedback/run-feedback.mjs` or a shared role or skill in one root, make
 the same change in the other.
