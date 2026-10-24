@@ -20,6 +20,32 @@ a version number. Each entry links to its archived SDD spec
 Nothing pending beyond `apps/web/specs/archived/web-feed-ui/` (Phase 2 spec 02, the Next.js
 frontend — still in progress, not yet archived).
 
+## 2026-10-24 — web-chat-ui and web-chat-ui-polish
+
+Specs: `apps/web/specs/archived/web-chat-ui/` and `apps/web/specs/archived/web-chat-ui-polish/`. Audits:
+both APPROVED WITH RESERVATIONS (round 1; the polish had a fix round for F1, F3, F5 and F7). Verified
+locally only: `apps/web` unit, build and offline e2e green. Nothing is deployed, and the real-key
+live check and the Vercel setup are open human steps. Decisions: ADRs 0032–0039.
+
+### Added
+- Floating chat widget on the feed page and the same-origin `POST /api/chat` route in `apps/web`. The
+  route signs each turn with SigV4 (`aws4fetch` `sign()`, one call, no retry), caps the question and
+  history, and answers with six fixed error codes. New server-only env `CHAT_API_BASE_URL`,
+  `CHAT_API_ACCESS_KEY_ID`, `CHAT_API_SECRET_ACCESS_KEY`.
+- Assistant answers render as safe markdown (`react-markdown`), the conversation follows the latest
+  message (`use-stick-to-bottom`, "Jump to latest"), a phone bottom sheet, a branded header, collapsible
+  Sources, an animated loader, an empty state with three suggestions, and `e2e/layout.e2e.ts`.
+
+### Changed
+- `apps/web/features/feed/components/feed.module.css`: `.urlLine` gains `overflow-wrap: anywhere` so a
+  long URL stays inside a card on a phone (a revised design deliverable under the polish spec).
+- The `execute-api` guard in `features/feed/conventions.test.ts` forbids only the host form.
+- `apps/web/AGENTS.md`: layout, env, the dependency rule (four sanctioned extras), WEB-1 and WEB-9 wording.
+
+### Known reservations
+Blank history text reaches the backend (F1 of `web-chat-ui`), no per-visitor limit (WEBCHAT-R1), no CI
+run yet, Vercel `maxDuration` unchecked. See `apps/web/specs/current/web-chat.md`.
+
 ## 2026-10-21 — chat-api-auth
 
 Spec: `specs/archived/chat-api-auth/`. Audit: APPROVED WITH RESERVATIONS (round 2). Deployed in

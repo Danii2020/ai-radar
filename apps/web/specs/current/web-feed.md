@@ -1,6 +1,6 @@
 # Web Feed Specification
 
-> Last synced: 2026-10-03. Owned artifacts: `apps/web/` (Next.js 16 App Router
+> Last synced: 2026-10-24. Owned artifacts: `apps/web/` (Next.js 16 App Router
 > project — `app/`, `features/feed/`, `scripts/generate-api-types.mjs`).
 
 ## Purpose
@@ -143,16 +143,20 @@ attribute anywhere in application code, and SHALL NOT persist a theme choice
 
 The system SHALL treat `apps/web/app/globals.css` and
 `apps/web/features/feed/components/feed.module.css` as verbatim copies of the
-hand-authored design deliverables under `specs/archived/web-feed-ui/
-claude-design-outputs/`; no hand-authored colour, spacing, or radius value
+hand-authored design deliverables (the latest revision: `specs/archived/web-feed-ui/
+claude-design-outputs/` plus the feed CSS revision under
+`specs/archived/web-chat-ui-polish/design/`); no hand-authored colour, spacing, or radius value
 may exist outside those two files' custom properties.
 
-**Source:** web-feed-ui · contract.md AD-7 (revised 2026-09-18)
+**Source:** web-feed-ui · contract.md AD-7 (revised 2026-09-18); web-chat-ui-polish · execution-plan.md § Proposed approach 13 (ADR 0039)
 
 #### Scenario: A design value needs to change
 - **WHEN** a card accent color, spacing, or radius needs to change
 - **THEN** the change is made in the design deliverable first and the CSS
-  files re-copied verbatim — never hand-edited in place
+  files re-copied verbatim — never hand-edited in place. A revision is a copy
+  kept under the changing feature's `specs/<feature>/design/`; archived
+  revisions are never edited (the `.urlLine` `overflow-wrap: anywhere` fix is
+  the first such revision)
 
 ### Requirement: WEB-10 — One npm project, no workspaces, additive to the repo
 
@@ -193,9 +197,11 @@ one local dev-server browser check against the real `feed-api`.
    reconstruction (mirrors `feed-api.md`'s own FA-2/FA-3 framing).
 2. **Cursors are bytes.** No feature in this capability may parse, decode,
    log-decode, compare, or synthesize a cursor.
-3. **`app/page.tsx` stays a thin shell (11 lines since `feed-structure-refactor`).**
+3. **`app/page.tsx` stays a thin shell (a few lines longer since `web-chat-ui`).**
    It only awaits `searchParams`, calls `parseFeedSearchParams`, awaits
-   `loadFeedState` and renders `FeedView`, importing only `@/features/feed`; it
+   `loadFeedState` and renders `FeedView` and, as a sibling outside the feed root,
+   `ChatWidget`, importing only the two barrels `@/features/feed` and
+   `@/features/chat` (amended by `web-chat-ui`); it
    has no `try`/`catch`/`console`. All render-state branching lives in the
    synchronous `FeedView`, and the parsing and error-to-state mapping live in
    unit-tested `lib/search-params.ts` and `api/load-feed-state.ts`. The page
@@ -221,6 +227,8 @@ one local dev-server browser check against the real `feed-api`.
 |---|---|---|
 | web-feed-ui | 2026-09-18 | Created this capability from scratch: the Next.js app, generated-types drift guarantee, server-only fetch client, bounded drain, cursor-link pagination, four-state `FeedView`, page-local tag chips, and the byte-verbatim design-token CSS pipeline. |
 | feed-structure-refactor | 2026-10-03 | Zero-behavior-change split of `features/feed/` into `api/`, `components/`, `lib/` behind a three-export `index.ts`; `parseFeedSearchParams` and `loadFeedState` extracted from the page; barrel/deep-import/`"use client"` guards; Playwright e2e tier against a local stub and a pre-refactor baseline. Audit: APPROVED WITH RESERVATIONS. |
+| web-chat-ui | 2026-10-24 | Amended invariant 3 (the page also mounts the chat widget from `@/features/chat`) and the T29 guard to the `execute-api` host form (ADR 0034); the feed itself is unchanged. See [web-chat.md](./web-chat.md). |
+| web-chat-ui-polish | 2026-10-24 | Added `overflow-wrap: anywhere` to `.urlLine` so a long URL wraps inside a feed card on a phone, through a revised design deliverable (ADR 0039); moved WEB-9's deliverable pointer to the latest revision. |
 
 ## Related ADRs
 
@@ -234,3 +242,4 @@ one local dev-server browser check against the real `feed-api`.
 | [0006](../archived/web-feed-ui/decisions/0006-explicit-revalidate-and-abort-signal.md) | Explicit 300s revalidate on the feed fetch; keep the AbortSignal timeout | Accepted |
 | [0007](../archived/web-feed-ui/decisions/0007-deployment-is-a-human-step.md) | Deployment is a human-run step; the automated pipeline stops at local verification | Accepted |
 | [0008](../archived/feed-structure-refactor/decisions/0008-feed-feature-split-by-role-behind-one-entry-point.md) | Split the feed feature by role behind one public entry point, verified by an offline Playwright baseline | Accepted |
+| [0039](../archived/web-chat-ui-polish/decisions/0039-deliverable-revisions-live-with-the-feature.md) | Design deliverable revisions live with the feature that makes them | Accepted |

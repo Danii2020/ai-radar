@@ -142,7 +142,7 @@
 
 ## Decisions (ADR registry)
 
-ADR numbers are **repo-wide monotonic** across both harness roots: 0001–0007 belong to `web-feed-ui` and 0008 to `feed-structure-refactor`, both registered in [`apps/web/specs/current/_index.md`](../../apps/web/specs/current/_index.md) (the frontend index still names 0008 as next, and is not edited here). The next ADR written in either harness is **0032**. ADRs 0028–0031 were written by `chat-api-auth` and supersede ADR 0027.
+ADR numbers are **repo-wide monotonic** across both harness roots: 0001–0007 belong to `web-feed-ui` and 0008 to `feed-structure-refactor`, both registered in [`apps/web/specs/current/_index.md`](../../apps/web/specs/current/_index.md) (the frontend index still names 0008 as next, and is not edited here). The next ADR written in either harness is **0040** (ADRs 0032–0039 were written by `web-chat-ui` and `web-chat-ui-polish` in the frontend harness; see [`apps/web/specs/current/_index.md`](../../apps/web/specs/current/_index.md)). ADRs 0028–0031 were written by `chat-api-auth` and supersede ADR 0027.
 
 | ADR | Title | Status | Capability | Path |
 |---|---|---|---|---|

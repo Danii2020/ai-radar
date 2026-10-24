@@ -75,16 +75,26 @@ function isUseClientModule(source: string): boolean {
 const applicationFiles = [...walkTsFiles(FEATURES_DIR), ...walkTsFiles(APP_DIR)];
 
 describe("cross-cutting conventions", () => {
-  it("T29: no NEXT_PUBLIC_ or execute-api literal anywhere in application code", () => {
+  // web-chat-ui: SigV4 needs the service name `execute-api`, so the guard forbids the API
+  // host form (a real endpoint literal), not the bare word.
+  const EXECUTE_API_HOST = /execute-api\.[a-z0-9-]+\.amazonaws\.com/;
+
+  it("T29: no NEXT_PUBLIC_ literal or execute-api host anywhere in application code", () => {
     for (const file of applicationFiles) {
       const source = readFileSync(file, "utf-8");
       expect(source, `${file} contains a forbidden NEXT_PUBLIC_ literal`).not.toMatch(
         /NEXT_PUBLIC_/,
       );
-      expect(source, `${file} contains a forbidden execute-api literal`).not.toMatch(
-        /execute-api/,
+      expect(source, `${file} contains a forbidden execute-api host literal`).not.toMatch(
+        EXECUTE_API_HOST,
       );
     }
+  });
+
+  it("T29 guard: the execute-api pattern fires on a host literal and allows the signing service name", () => {
+    expect("https://abc123.execute-api.us-east-1.amazonaws.com/v1/chat").toMatch(EXECUTE_API_HOST);
+    expect("const url = `https://x.execute-api.eu-west-1.amazonaws.com`").toMatch(EXECUTE_API_HOST);
+    expect("{ service: 'execute-api', region: 'us-east-1' }").not.toMatch(EXECUTE_API_HOST);
   });
 
   it('T30: no "use client" module imports client.ts or load-feed.ts', () => {
