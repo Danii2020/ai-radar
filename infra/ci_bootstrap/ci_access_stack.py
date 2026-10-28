@@ -89,7 +89,9 @@ class CiAccessStack(cdk.Stack):
             self,
             logical_id,
             role_name=name,
-            assumed_by=principal,
+            # pyright-only false positive: CDK's generated stubs name a parameter `_statement`
+            # where the IPrincipal protocol says `statement`. mypy and the runtime accept it.
+            assumed_by=principal,  # pyright: ignore[reportArgumentType]
             max_session_duration=cdk.Duration.hours(1),
         )
 
@@ -133,6 +135,7 @@ class CiAccessStack(cdk.Stack):
                     "ecr:BatchCheckLayerAvailability",
                     "ecr:BatchGetImage",
                     "ecr:CompleteLayerUpload",
+                    "ecr:CreateRepository",  # the toolkit always calls it and catches "already exists"
                     "ecr:DescribeImages",
                     "ecr:DescribeRepositories",
                     "ecr:InitiateLayerUpload",
