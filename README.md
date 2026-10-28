@@ -2,6 +2,11 @@
 
 AI-news curation feed + RAG chatbot. See [`docs/app-design-on-agentcore.md`](docs/app-design-on-agentcore.md) for the full design.
 
+**Backend CI/CD** (`backend-cicd-pipeline`) is implemented and audit-approved with reservations
+(2026-10-28) but **not live yet**: nothing is deployed by CI and the workflows have not run on GitHub.
+The runbook is [Backend CI/CD](#backend-cicd-backend-cicd-pipeline) below. The repository is public, so
+nothing in it is secret.
+
 ## Phase 1 — Curation MVP (all 6 specs shipped)
 
 Refactors the Phase 0 loop into a **LangGraph `StateGraph`** with infra injected
@@ -865,7 +870,9 @@ produce. Record the real values here (and in
    for disjointness); `/?tag=zzz-no-such-tag` renders the no-match state, not
    a blank page.
 3. **Update `feed-api`'s CORS allow-list** (this is why it waits until now —
-   it needs the real origin):
+   it needs the real origin). Since backend-cicd-pipeline, put the origin in
+   `scripts/ci/deploy_context.json` by PR instead: the next CI deploy of AiRadarFeedApi
+   reverts a hand-passed value.
    ```bash
    uv sync --group infra
    uv run cdk deploy --app "python infra/app.py" AiRadarFeedApi \
@@ -1435,8 +1442,152 @@ cards, an out-of-range `limit` returned 400, and CORS allowed only
   (never via CDK or the image).
 
 **Still open:** point `apps/web`'s `FEED_API_BASE_URL` (Vercel env var) and the
-feed API's CORS allow-list at the new deployment; tear down or leave the old
+feed API's CORS allow-list at the new deployment (add the Vercel origin to
+`scripts/ci/deploy_context.json` in a PR, see "Backend CI/CD" below); tear down or leave the old
 account's stacks as you see fit (note the `agentcore destroy` role gotcha above).
+
+## Backend CI/CD (`backend-cicd-pipeline`)
+
+**Status (2026-10-28): implemented and audit-approved with reservations (round 2); not yet live.**
+The workflows, the CI access app, the pinned context file, the protection script and the offline tests
+are in the repository. Nothing is deployed, and nothing has run on GitHub. These steps are human-only
+and have **not** happened: the CI access stack deploy, the repository variables, the CDK re-bootstrap
+with the scoped execution policies, the protection script, and the first pipeline run (tasks O12 a–i).
+Until they are done, CI deploys nothing. The open live checks and reservations are in
+[`specs/current/ci-cd.md`](specs/current/ci-cd.md).
+
+Once the one-time bootstrap below is complete, every pull request is checked, and every merge to `main`
+deploys only what it changed. Specs: [`specs/archived/backend-cicd-pipeline/`](specs/archived/backend-cicd-pipeline/).
+**Every live step below is human-only**: no agent runs them. Nothing in the repository is secret: the repo is public, so
+workflow files, role names, ARNs and the account id are world-readable and no control relies on
+hiding them (see the risk register).
+
+Note for the runbooks above: once the bootstrap below is done, CI deploys on merge. A hand `cdk deploy` with other context (for
+example a CORS origin) is reverted by the next CI deploy of that stack unless
+`scripts/ci/deploy_context.json` is updated. Use that same file for local deploys (pass its four
+keys with `-c`, or run `uv run python -m scripts.ci.cdk deploy --exclusively <Stack>`).
+
+### What runs
+
+| Workflow | Trigger | Jobs |
+|---|---|---|
+| `backend-checks.yml` (reusable) | called by the two below | `pytest`, `lint` (ruff, mypy, actionlint), `synth` (context validation, `cdk synth` of all seven stacks with the pinned context, schedule guard). No AWS credentials. |
+| `backend-pr.yml` | `pull_request` | `checks`; `diff` (same-repo PRs only: `cdk diff --method=template` of all seven stacks to the job summary, through the read-only lookup role); `diff-skipped` (fork PRs: "diff skipped: fork PRs get no AWS credentials"). |
+| `backend-deploy.yml` | push to `main` (and `workflow_dispatch` with `deploy_all`) | `checks` -> `plan` -> `deploy` -> `smoke`. One fixed concurrency group, never cancelling. No approval gate. |
+
+**Pinned context** (`scripts/ci/deploy_context.json`): `feed_api_reserved_concurrency=none`,
+`chat_api_reserved_concurrency=none` (account Lambda quota is 10), `budget_limit_usd=500` and
+`feed_api_allowed_origins` (now `http://localhost:3000`, the live value). Every CI `cdk` call goes
+through `python -m scripts.ci.cdk`, which adds exactly these flags and refuses any `-c`. No
+`schedule_*` key exists, and the schedule guard fails the run unless the synthesized
+`AiRadarSchedule` is `DISABLED`. To change the context, edit the file in a PR: the PR diff shows
+the effect. Origins must be `http://localhost:<port>` or `https://<host>` with no path, and
+placeholder-shaped values (`<project>`) are rejected. **When the Vercel project exists**, put
+`http://localhost:3000,https://<real>.vercel.app` in the file by PR, then check the preflight:
+`curl -si -X OPTIONS -H "Origin: https://<real>.vercel.app" -H "Access-Control-Request-Method: GET" "$FEED_API_URL/v1/cards"`.
+
+**What deploys, in order** (only the targets whose files changed since the last *successful*
+deploy run; no base, or a base that is not an ancestor of `HEAD`, selects everything; the mapping
+is `scripts/ci/deploy_plan.py` and is unit-tested):
+`AiRadarCardStore` -> `AiRadarRuntimeRole` -> `AiRadarChatRuntime` -> agent `ai_radar_curation`
+-> agent `ai_radar_chat` -> `AiRadarSchedule` -> `AiRadarBudget` -> `AiRadarFeedApi` ->
+`AiRadarChatApi`. Stacks use `--exclusively` one at a time and stop at the first failure. The agents
+use `agentcore deploy -a <agent> --local-build --auto-update-on-conflict` on an arm64 runner from a
+config rendered in the runner (`scripts/ci/agentcore.template.yaml`, carrying the two existing
+runtime ids, so it only updates them); the chat agent always gets `--env AGENT_ENTRYPOINT=chat_app.py`.
+CI never runs `agentcore configure/destroy/invoke` or `cdk destroy`/`bootstrap`. A change that
+touches nothing deploy-relevant (`README.md`, `apps/web/**`, `specs/**`, `tests/**`) reports
+"Nothing to deploy" and makes no AWS call and no smoke.
+
+**Smoke** (after every run that deployed anything, whatever the target): feed `GET /v1/cards?limit=1`
+returns 200 with `cards`; an unsigned `POST /v1/chat` returns 403; one signed `POST /v1/chat` returns
+200 with `answer` and `sources` (one retry on 502/504); both runtimes are `READY`. The signed call
+signs as the smoke role (`execute-api:Invoke` on `POST /v1/chat` only); the
+`ai-radar-chat-api-caller` key never enters GitHub. **Cost:** one Titan embed plus at most one
+Sonnet 4.6 turn per deploying run; the `AiRadarBudget` alerts are the backstop. The curation agent is
+never invoked.
+
+**Reading a PR diff:** open the `backend pr` run, then the `diff` job summary. One collapsed section
+per stack; an empty section means no change. IAM, CORS and Lambda image changes are the lines to
+read closely. Fork PRs show the skip line instead.
+
+### One-time human bootstrap (do in this order)
+
+Use your own administrator credentials. Replace `<chat-api-id>` with the API id (it is redacted in
+this repo) and `<account-id>` with the account.
+
+1. **Deploy the CI access stack** (OIDC provider, three roles, the two scoped execution policies). It is
+   defined in `infra/ci_bootstrap/` and is never deployed by CI. If the account already has a
+   GitHub OIDC provider, the deploy fails: delete it first or ask for an import option.
+   ```bash
+   uv sync --group infra
+   uv run cdk deploy --app "python infra/ci_bootstrap/app.py" CiAccess -c chat_api_id=<chat-api-id>
+   ```
+   Record the outputs `DiffRoleArn`, `DeployRoleArn`, `SmokeRoleArn`, `ExecutionPolicyArn1`, `ExecutionPolicyArn2`.
+2. **Set repository variables** (variables, not secrets; ARNs are not credentials):
+   `AWS_DIFF_ROLE_ARN`, `AWS_DEPLOY_ROLE_ARN`, `AWS_SMOKE_ROLE_ARN`, `AWS_ACCOUNT_ID`, and
+   `CHAT_API_ID`. `CHAT_API_ID` is required, not optional: the deploy job masks the chat API id and
+   its URL from this variable, and it stops with an error when the variable is empty, so set it before
+   the first deploy (step 5). If the chat API id ever changes, update this variable as well: a stale
+   value would leave the new URL unmasked in the deploy log. The workflows reference no secret except
+   `GITHUB_TOKEN`.
+3. **Re-bootstrap CDK with the two scoped execution policies** (account-wide: it also governs your own
+   `cdk deploy`). Pin the CLI version the pipeline uses (`aws-cdk@2.1132.0`):
+   ```bash
+   npx aws-cdk@2.1132.0 bootstrap aws://<account-id>/us-east-1 \
+     --cloudformation-execution-policies "<ExecutionPolicyArn1>,<ExecutionPolicyArn2>"
+   ```
+   Verify: `uv run python -m scripts.ci.cdk synth --quiet` and `cdk diff` of all seven stacks with the
+   pinned context show no differences; then watch the first real deploy. An `AccessDenied` in the
+   CloudFormation events names the missing action: add it to `infra/ci_bootstrap/ci_access_stack.py` in
+   a PR, redeploy step 1. **Rollback:** re-run the bootstrap with
+   `--cloudformation-execution-policies arn:aws:iam::aws:policy/AdministratorAccess` (this one policy
+   replaces both scoped policies), then re-run the failed deploy.
+4. **Protect the repository** (needs `gh` authenticated as an admin):
+   ```bash
+   uv run python -m scripts.ci.repo_protection            # dry run: prints each method, endpoint and JSON
+   uv run python -m scripts.ci.repo_protection --apply    # writes only what differs; re-running changes nothing
+   gh api repos/Danii2020/ai-radar/rulesets               # read back
+   gh api repos/Danii2020/ai-radar --jq .security_and_analysis
+   ```
+   It sets a ruleset on `main` (PR required, the three check jobs required, branch up to date, no force
+   push, no deletion, no bypass), secret scanning and push protection, a read-only default workflow
+   token, and approval before workflows run for outside contributors. Required approvals are 0 and
+   code-owner review is off while there is one maintainer (GitHub does not let an author approve their
+   own PR); raise both when a second maintainer joins. Then confirm a direct `git push origin main` is
+   rejected. If an endpoint is rejected by GitHub, set that one setting by hand in the repository settings.
+5. **First live run** (watch it): open a same-repo PR (diff job shows the seven-stack diff), merge it, and
+   read the deploy run: caller account guard, schedule `DISABLED`, budget limit 500, both agents keep their
+   runtime ids, the chat URL appears as `***`, and the smoke is green. Confirm the deploy role's signed
+   `POST /v1/chat` gets 403 and the smoke role's gets 200. Then confirm the deploy role's allow-list
+   from CloudTrail and record any added actions here. A docs-only merge must report "Nothing to deploy".
+   Expect both Lambda functions to update once on the first CI deploy (new image asset hashes).
+
+### Rollback
+
+Revert the merge on a branch and merge the revert: the pipeline redeploys the previous state (the plan
+covers everything since the last success). Or deploy a known-good commit by hand: check it out and run
+the per-stack commands above with `scripts/ci/deploy_context.json`, and for an agent
+`agentcore deploy -a <agent> --image-tag <tag>` from the human config. A flaky smoke (502/504, cold
+start) is re-runnable: re-run the workflow before reverting. `workflow_dispatch` with `deploy_all` redeploys
+every target from `main`.
+
+### Public-repository risk register
+
+| Risk | What protects it |
+|---|---|
+| Workflows, role names, ARNs, account id are world-readable | Nothing relies on hiding them: trust policies pin `aud` and the exact `sub` (`StringEquals`) |
+| A fork PR tries to get AWS access | Fork PRs on `pull_request` get no OIDC token; no `pull_request_target`; the diff job's same-repo guard; deploy and smoke roles trust only `refs/heads/main` |
+| A non-`main` branch assumes the deploy role | Exact `sub` `repo:Danii2020/ai-radar:ref:refs/heads/main` |
+| A collaborator's PR or a workflow edit runs attacker code in PR checks | That code reaches only the diff role, which can only assume the read-only lookup role |
+| A merged workflow edit is a privilege path | Ruleset requires a PR and the checks; `CODEOWNERS`; the scoped execution policy; CI never deploys the access stack |
+| Residual: a merged change creates an `AiRadar*` role with broad permissions | Review of the PR diff; a permissions boundary is a recorded follow-up (it changes every role template) |
+| Logs leak ids, URLs or credentials | `::add-mask::` for the chat API id and URL; no env dumps, no shell tracing; masked account id |
+| Actions minutes and Bedrock cost abuse | Approval for outside contributors' runs; `timeout-minutes` on every job; PR runs cancel when superseded; deploys only on `main` |
+| Committed secrets | gitleaks in `harny-feedback.yml` (unchanged); secret scanning and push protection |
+| Caches and artifacts readable by fork runs | Only uv dependency caches; no `cdk.out`, config or credential in a cache or artifact |
+| Public chat API with real Bedrock cost | Unsigned calls get 403 at the gateway; throttle 5 rps; the smoke sends one signed call per deploy; budget alerts |
+| An administrator identity can call the route | Accepted limitation `CAAUTH-ADMIN`, unchanged. The CI smoke role is a second principal on the route (amends ADR 0028; see ADR 0043 in `specs/archived/backend-cicd-pipeline/decisions/`) |
 
 ## Phase 0 spike (reference baseline)
 

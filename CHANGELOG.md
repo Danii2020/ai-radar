@@ -20,6 +20,48 @@ a version number. Each entry links to its archived SDD spec
 Nothing pending beyond `apps/web/specs/archived/web-feed-ui/` (Phase 2 spec 02, the Next.js
 frontend — still in progress, not yet archived).
 
+## 2026-10-28 — backend-cicd-pipeline (not live yet)
+
+Specs: `specs/archived/backend-cicd-pipeline/`. Audit: APPROVED WITH RESERVATIONS (round 2, 2026-10-28;
+round 1 was REJECTED and its blockers were repaired). The suite passes (823 tests), ruff and mypy are
+clean, and actionlint with shellcheck is clean on the five workflows (reused evidence). **Nothing is
+live.** Nothing is deployed, and the workflows have not run on GitHub. The CI access stack deploy, the
+five repository variables, the CDK re-bootstrap with the two scoped execution policies, the repository
+protection script and the first pipeline run are human-only steps (tasks O12 a–i) and have not happened.
+Decisions: ADRs 0040 and 0042–0047 (ADR 0041 was not promoted, because of the seven-per-feature cap).
+
+### Added
+- `.github/workflows/backend-checks.yml` (reusable: pytest, ruff, mypy, actionlint, `cdk synth` of all
+  seven stacks with the pinned context), `backend-pr.yml` (same-repo PRs get a read-only
+  `cdk diff --method=template` through a lookup-only role; fork PRs get a skip line) and
+  `backend-deploy.yml` (push to `main`: checks, change-aware plan, ordered deploy, smoke). Actions are
+  pinned by SHA. `.github/CODEOWNERS`.
+- `scripts/ci/`: the pinned deploy context (`deploy_context.json`), the `cdk` wrapper, origin validation,
+  the schedule guard, the deploy planner, the agent config renderer, the smoke runner and the repository
+  protection script (dry run by default).
+- `infra/ci_bootstrap/`: a separate CDK app with the GitHub OIDC provider, the diff, deploy and smoke
+  roles, and two scoped CloudFormation execution policies. CI never deploys it, and it is not part of
+  `infra/app.py`.
+- A post-deploy smoke after every run that deployed a target: feed read, unsigned `POST /v1/chat` (403),
+  signed `POST /v1/chat` (200 with `answer` and `sources`), and both runtimes `READY`. The
+  `run_chat_api_smoke.py` exit-code options (`--expect-status`, `--expect-keys`) are opt-in; its default
+  behavior is unchanged.
+- README "Backend CI/CD" runbook, including the bootstrap, rollback and public-repository risk register.
+
+### Changed
+- `chat-api-auth`: a second principal, the CI smoke role, may call `POST /v1/chat`. This amends ADR 0028
+  (ADR 0043). The stack's own grant to the caller user is unchanged.
+- `runtime-deployment` (RD-9: CI deploys the two agents from the root `Dockerfile`), `scheduling` (SC-5:
+  the schedule guard) and `feed-api` (FA-6: the CORS origins come from the committed context file).
+- The README `CHAT_API_ID` note now says the deploy job requires the variable, and that it must be updated
+  if the chat API id changes (audit F11).
+
+### Pending (human-only, not run)
+- O12 a–i: the CI access stack deploy and variables, the re-bootstrap with the two-ARN execution policies
+  (rollback to `AdministratorAccess` is documented), the protection script in dry run and `--apply`, the
+  same-repo and fork PR checks, the first watched deploy, the signed 403/200 checks, the docs-only no-op
+  check, the CloudTrail and CloudFormation allow-list confirmation, and the Vercel origin by PR.
+
 ## 2026-10-24 — web-chat-ui and web-chat-ui-polish
 
 Specs: `apps/web/specs/archived/web-chat-ui/` and `apps/web/specs/archived/web-chat-ui-polish/`. Audits:

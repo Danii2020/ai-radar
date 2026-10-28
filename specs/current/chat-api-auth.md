@@ -1,6 +1,6 @@
 # Chat API Authentication Specification
 
-> Last synced: 2026-10-21. Owned artifacts: `infra/lib/chat_api.py` (the `AWS_IAM` authorizer, the
+> Last synced: 2026-10-28. Owned artifacts: `infra/lib/chat_api.py` (the `AWS_IAM` authorizer, the
 > caller user and its policy, the removed CORS configuration), `infra/stacks/chat_api_stack.py`
 > (the removed origins option, the `ChatApiCallerUserName` output), `run_chat_api_smoke.py`
 > (developer signing probe), `tests/test_chat_api_smoke.py`, the auth assertions in
@@ -142,6 +142,27 @@ the URL or any key material.
 - **WHEN** the README "Authentication amendment" is read
 - **THEN** it shows the probe table, the Lambda and CORS checks, and the open items, with `<api-id>`, `$API_URL` and `[username]` in place of the real values (verified 2026-10-21)
 
+### Requirement: CAAUTH-10 — A CI smoke role is a second principal on the route, defined outside the stack
+
+The system SHALL allow one more principal to call `POST /v1/chat`: the CI smoke role. It is defined in the CI
+access app `infra/ci_bootstrap/`, not in `AiRadarChatApi`. It trusts only `refs/heads/main` through GitHub OIDC,
+and its only route permission is `execute-api:Invoke` on `POST /v1/chat`. The deploy role SHALL NOT hold
+`execute-api:Invoke`. CAAUTH-5 stays literally true: the stack itself grants only the caller user, with one
+statement. This amends ADR 0028, because the set of principals that can call the route grows from one to two
+(ADR 0043).
+
+**Source:** backend-cicd-pipeline · intent.md § AC8 and § Constraints (the contradiction with CAAUTH-5 and ADR 0028, accepted by the human 2026-10-27); execution-plan.md § Proposed approach (smoke; ADR candidate 0043); ADR 0043
+
+#### Scenario: The deploy role signs the chat route
+- **WHEN** the deploy role sends a signed `POST /v1/chat`
+- **THEN** the response is 403 (offline: `tests/test_infra_ci_bootstrap.py`, `test_deploy_role_cannot_call_the_chat_route`).
+  The live 403 check is pending O12 f.
+
+#### Scenario: The smoke role signs the chat route
+- **WHEN** the smoke role sends a signed `POST /v1/chat` with the smoke probe
+- **THEN** the response is 200 with `answer` and `sources` (offline: `tests/test_ci_smoke.py`). The live check is
+  pending O12 f.
+
 ## Invariants
 
 1. One route, `POST /v1/chat`, authorized with `AWS_IAM`, and no `$default` route. Adding a second, unauthenticated route would expose the Lambda to unauthorized floods, so a test pins the single route.
@@ -162,12 +183,14 @@ the URL or any key material.
 | CAAUTH-KEY | The caller key is long-lived and stays `Active` in the local profile `ai-radar-chat-caller` until the `apps/web` signing spec ships. Rotation and the leak response are in the README runbook. | LOW (accepted) | ADR 0030; `specs/archived/chat-api-auth/audit.md` (round 2 note) |
 | CAAUTH-F11 | The `chat-api` F11 closure re-check was an unsigned burst, which now gets 403 at the gateway and never reaches the Lambda. The re-check must be a signed run after the quota increase. No signed burst tool exists, and none was written. Open work. | MEDIUM (inherits `chat-api` CAPI-F11) | `specs/archived/chat-api-auth/audit.md` (round 2); README amendment |
 | CAAUTH-F3 | The Docker build context does not exclude caches such as `.mypy_cache`, so the image fingerprint can change with local tooling runs. Pre-existing debt, not changed here. | LOW | `specs/archived/chat-api-auth/audit.md` (F3) |
+| CAAUTH-SMOKE | The principals that may call `POST /v1/chat` grow from one to two: the CI smoke role (CAAUTH-10, ADR 0043). An HTTP API has no resource policy, so the limit is the grant alone. The smoke role's grant is confirmed live only by the first deploy's signed 200 (O12 f). Accepted by the human on 2026-10-27 (Q4). | LOW (accepted) | `specs/archived/backend-cicd-pipeline/audit.md` (round 2, privilege and first-deploy review); ADR 0043 |
 
 ## Contributing features
 
 | Feature | Shipped | What it established |
 |---|---|---|
 | chat-api-auth | 2026-10-21 | CAAUTH-1..CAAUTH-9: `POST /v1/chat` requires AWS SigV4 (`AWS_IAM`) from one stack-created caller user with one `execute-api:Invoke` statement. No CORS, and the origins option is removed. The caller key is created by hand and never sits in CloudFormation. Deployed in place as `AiRadarChatApi`, and amends `chat-api` CAPI-4 and CAPI-6. |
+| backend-cicd-pipeline | 2026-10-28 | CAAUTH-10: a second principal may call `POST /v1/chat`, the CI smoke role, defined in the CI access app and trusted only for `main`. Amends ADR 0028 (ADR 0043). The stack's own grant (CAAUTH-5) is unchanged. Implemented and audit-approved with reservations; **not live** (the signed 403/200 check is pending O12 f). |
 
 ## Related ADRs
 
@@ -177,3 +200,4 @@ the URL or any key material.
 | [0029](../archived/chat-api-auth/decisions/0029-browsers-are-not-a-supported-caller-so-no-cors.md) | Browsers are not a supported caller, so the chat API has no CORS configuration | Accepted |
 | [0030](../archived/chat-api-auth/decisions/0030-caller-access-key-is-long-lived-and-created-outside-cloudformation.md) | The caller's access key is long-lived and created by hand, outside CloudFormation | Accepted |
 | [0031](../archived/chat-api-auth/decisions/0031-http-api-construct-id-kept-so-the-api-updates-in-place.md) | The HTTP API construct keeps its logical id, so the deploy updates the API in place | Accepted |
+| [0043](../archived/backend-cicd-pipeline/decisions/0043-smoke-role-is-a-second-principal-on-the-chat-route.md) | A dedicated CI smoke role becomes a second principal on the chat route, amending ADR 0028 | Accepted |

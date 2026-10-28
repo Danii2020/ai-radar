@@ -1,0 +1,105 @@
+{
+ "_comment": "Handler permissions the execution policies deliberately do not allow. `permission` is an fnmatch pattern (case-insensitive). Each entry needs a reason. Reviewed with the handler snapshot.",
+ "omissions": [
+  {
+   "permission": "ec2:*",
+   "reason": "No VPC-attached Lambda in the stacks (VPC describe calls are only for VPC configs)."
+  },
+  {
+   "permission": "elasticfilesystem:*",
+   "reason": "No EFS file system config on any function."
+  },
+  {
+   "permission": "s3files:*",
+   "reason": "No S3 Files mount on any function."
+  },
+  {
+   "permission": "kms:*",
+   "reason": "No customer-managed KMS key in the stacks; all encryption uses service-owned keys."
+  },
+  {
+   "permission": "logs:AssociateKmsKey",
+   "reason": "No customer-managed KMS key on log groups."
+  },
+  {
+   "permission": "logs:DisassociateKmsKey",
+   "reason": "No customer-managed KMS key on log groups."
+  },
+  {
+   "permission": "kinesis:*",
+   "reason": "No Kinesis stream; the table does not stream."
+  },
+  {
+   "permission": "dynamodb:EnableKinesisStreamingDestination",
+   "reason": "No Kinesis streaming destination on the table."
+  },
+  {
+   "permission": "dynamodb:DisableKinesisStreamingDestination",
+   "reason": "No Kinesis streaming destination on the table."
+  },
+  {
+   "permission": "dynamodb:UpdateKinesisStreamingDestination",
+   "reason": "No Kinesis streaming destination on the table."
+  },
+  {
+   "permission": "application-autoscaling:*",
+   "reason": "No autoscaling on the on-demand table."
+  },
+  {
+   "permission": "lambda:PassCapacityProvider",
+   "reason": "Lambda capacity providers are not used."
+  },
+  {
+   "permission": "lambda:AssociateRuntimeAlias",
+   "reason": "Runtime aliases are not used."
+  },
+  {
+   "permission": "lambda:GetLayerVersion",
+   "reason": "No Lambda layers are used (container images)."
+  },
+  {
+   "permission": "logs:CreateLogDelivery",
+   "reason": "Log delivery to S3 or Firehose is not used."
+  },
+  {
+   "permission": "s3:*",
+   "reason": "No S3 code, OpenAPI body or log delivery in the stacks (Lambda code is a container image)."
+  },
+  {
+   "permission": "firehose:*",
+   "reason": "Log delivery to Firehose is not used."
+  },
+  {
+   "permission": "iam:CreateServiceLinkedRole",
+   "reason": "Needed only for cross-region table replicas; the table has no replicas."
+  },
+  {
+   "permission": "dynamodb:DeleteTable",
+   "reason": "GlobalTable update handler uses it only for replica removal. The explicit deny on ai-radar-cards stays; the table is RETAIN with no replicas, so a future replica removal is a manual step outside the execution role."
+  },
+  {
+   "permission": "dynamodb:DeleteTableReplica",
+   "reason": "GlobalTable update handler uses it only for replica removal. The table has no replicas; a future replica removal is a manual step outside the execution role (same reason as DeleteTable)."
+  },
+  {
+   "permission": "iam:*Group*",
+   "reason": "No IAM groups in the stacks."
+  },
+  {
+   "permission": "iam:*LoginProfile",
+   "reason": "The caller user has no console password."
+  },
+  {
+   "permission": "iam:*PermissionsBoundary",
+   "reason": "Permissions boundaries are out of scope (execution plan, follow-up risk)."
+  },
+  {
+   "permission": "secretsmanager:ReplicateSecretToRegions",
+   "reason": "No cross-region secret replication."
+  },
+  {
+   "permission": "secretsmanager:RemoveRegionsFromReplication",
+   "reason": "No cross-region secret replication."
+  }
+ ]
+}

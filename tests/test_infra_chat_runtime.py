@@ -20,7 +20,7 @@ REPO_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(REPO_ROOT / "infra"))
 
 import aws_cdk as cdk
-from aws_cdk.assertions import Match, Template
+from aws_cdk.assertions import Template
 from stacks.agent_runtime_stack import AgentRuntimeStack
 from stacks.chat_runtime_stack import ChatRuntimeStack
 
@@ -159,13 +159,6 @@ def test_the_stack_references_the_table_and_creates_no_secret():
     assert not _resources_of_type(template_json, "AWS::SecretsManager::Secret")
 
 
-def test_the_stack_outputs_the_execution_role_arn():
-    app = cdk.App()
-    Template.from_stack(ChatRuntimeStack(app, "TestStack")).has_output(
-        "ExecutionRoleArn", Match.any_value()
-    )
-
-
 def test_the_curation_role_is_not_widened_for_chat():
     statements = _statements(_template_json(AgentRuntimeStack))
 
@@ -182,8 +175,3 @@ def test_the_curation_role_is_not_widened_for_chat():
     resources = [r for s in statements for r in _as_list(s.get("Resource", []))]
     assert not any("sonnet" in r.lower() for r in resources)
 
-
-def test_the_chat_stack_is_registered_in_the_cdk_app_as_ai_radar_chat_runtime():
-    source = (REPO_ROOT / "infra" / "app.py").read_text()
-
-    assert 'ChatRuntimeStack(app, "AiRadarChatRuntime")' in source

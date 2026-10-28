@@ -8,6 +8,7 @@ Credentials come from the default botocore chain; set AWS_PROFILE_NAME to pick a
 named profile. `--unsigned` sends no signature, `--tamper` changes the body after
 signing (both should be rejected with 403). Prints the caller identity, then the
 status and body. Never prints the secret key, session token or Authorization header.
+Opt-in: `--expect-status N` / `--expect-keys a,b` exit 1 on a mismatch (default exit 0).
 """
 from __future__ import annotations
 
@@ -57,6 +58,17 @@ def main(argv: list[str] | None = None) -> int:
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--unsigned", action="store_true", help="send without a signature")
     group.add_argument("--tamper", action="store_true", help="alter the body after signing")
+    parser.add_argument(
+        "--expect-status",
+        type=int,
+        default=None,
+        help="opt-in: exit 1 when the HTTP status differs (default: always exit 0)",
+    )
+    parser.add_argument(
+        "--expect-keys",
+        default=None,
+        help="opt-in: comma-separated top-level JSON keys the body must have, else exit 1",
+    )
     args = parser.parse_args(argv)
 
     base = os.environ.get("CHAT_API_URL", "").rstrip("/")
@@ -90,6 +102,23 @@ def main(argv: list[str] | None = None) -> int:
         status, text = exc.code, exc.read().decode("utf-8", "replace")
     print(f"status={status}")
     print(text)
+    return _expectation_exit_code(args.expect_status, args.expect_keys, status, text)
+
+
+def _expectation_exit_code(
+    expect_status: int | None, expect_keys: str | None, status: int, text: str
+) -> int:
+    """0 unless an opt-in expectation fails (then 1). No option given -> always 0."""
+    if expect_status is not None and status != expect_status:
+        return 1
+    if expect_keys is not None:
+        wanted = [k.strip() for k in expect_keys.split(",") if k.strip()]
+        try:
+            parsed = json.loads(text)
+        except ValueError:
+            return 1
+        if not isinstance(parsed, dict) or any(k not in parsed for k in wanted):
+            return 1
     return 0
 
 

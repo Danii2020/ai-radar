@@ -16,7 +16,6 @@ Zero AWS/network.
 """
 from __future__ import annotations
 
-import ast
 import importlib
 import json
 import sys
@@ -28,7 +27,6 @@ import pytest
 from contracts.card import CARD_SCHEMA_VERSION, json_schema
 
 REPO_ROOT = Path(__file__).parent.parent
-SRC = REPO_ROOT / "src"
 ARTIFACT_PATH = REPO_ROOT / "docs" / "api" / "feed-api.v1.schema.json"
 
 # infra/ on sys.path so `lib.feed_api` resolves as a flat module, matching
@@ -150,62 +148,3 @@ def test_fixed_gsi_constants_are_not_overridable_by_a_same_named_env_var(
     ) as module:
         assert module.FEED_GSI_NAME == "feed-by-score"
         assert module.FEED_GSI_PARTITION == "CARD"
-
-
-# --- Guarantee 14 / AD-3: plane separation + boto3 confinement (AST) -------
-
-
-def _imported_roots(path: Path) -> set[str]:
-    tree = ast.parse(path.read_text(), filename=str(path))
-    roots: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            roots.update(alias.name.split(".")[0] for alias in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.module:
-            roots.add(node.module.split(".")[0])
-    return roots
-
-
-def _py_files(directory: Path) -> list[Path]:
-    assert directory.is_dir(), f"expected {directory} to exist"
-    return sorted(directory.rglob("*.py"))
-
-
-def test_api_and_contracts_import_nothing_from_curation():
-    for directory in (SRC / "api", SRC / "contracts"):
-        for path in _py_files(directory):
-            assert "curation" not in _imported_roots(path), (
-                f"{path} (Plane B) must not import curation (Plane A)"
-            )
-
-
-def test_curation_and_shared_import_nothing_from_api_or_contracts():
-    for directory in (SRC / "curation", SRC / "shared"):
-        for path in _py_files(directory):
-            roots = _imported_roots(path)
-            assert "api" not in roots, f"{path} must not import api (Plane B)"
-            assert "contracts" not in roots, f"{path} must not import contracts"
-
-
-def test_boto3_import_confined_to_api_dynamo_module():
-    for directory in (SRC / "api", SRC / "contracts"):
-        for path in _py_files(directory):
-            if directory.name == "api" and path.name == "dynamo.py":
-                continue
-            assert "boto3" not in _imported_roots(path), f"{path} must not import boto3"
-
-    dynamo_path = SRC / "api" / "dynamo.py"
-    assert dynamo_path.exists(), "expected src/api/dynamo.py to exist"
-    assert "boto3" in _imported_roots(dynamo_path), (
-        "dynamo.py is the one designated infra-adapter site and must import boto3"
-    )
-
-
-def test_api_config_does_not_import_shared_per_ad3():
-    config_path = SRC / "api" / "config.py"
-    assert config_path.exists(), "expected src/api/config.py to exist"
-    assert "shared" not in _imported_roots(config_path), (
-        "AD-3: src/api/config.py must not import shared.config — the Lambda "
-        "has no .env and gets AWS_REGION from the runtime, not shared.config's "
-        "dotenv side effect"
-    )

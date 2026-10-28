@@ -1,8 +1,9 @@
 # Runtime Deployment Specification
 
-> Last synced: 2026-10-18. Owned artifacts: `runtime_app.py`, `chat_app.py`,
+> Last synced: 2026-10-28. Owned artifacts: `runtime_app.py`, `chat_app.py`,
 > `infra/lib/agent_runtime.py`, `infra/stacks/agent_runtime_stack.py`,
-> `infra/lib/chat_runtime.py`, `infra/stacks/chat_runtime_stack.py`, `Dockerfile`.
+> `infra/lib/chat_runtime.py`, `infra/stacks/chat_runtime_stack.py`, `Dockerfile`,
+> `scripts/ci/agentcore.template.yaml` and `scripts/ci/agentcore_config.py` (the CI render of the agent config).
 
 ## Purpose
 
@@ -118,6 +119,22 @@ agent source tree, because the toolkit builds only the one at the `source_path`.
 - **WHEN** the chat agent's runtime is started without `AGENT_ENTRYPOINT=chat_app.py`
 - **THEN** the image runs the curation entrypoint, and the chat invoke returns the curation ack rather than an answer (the runbook's AC10 step 6 check catches this)
 
+### Requirement: RD-9 — CI deploys both agents in place, from the root Dockerfile
+
+The system SHALL deploy the two existing agent runtimes from CI with `agentcore deploy -a <agent> --local-build`,
+from an agent config rendered in the runner that carries each existing runtime id, so the toolkit updates the
+runtime and never creates one. Before each deploy, the deploy job SHALL copy the root `Dockerfile`, unchanged,
+into `.bedrock_agentcore/<agent>/Dockerfile` beside the rendered config, because the locked toolkit reads it
+only from that path. The chat agent SHALL always get `AGENT_ENTRYPOINT=chat_app.py` (RD-8). No second Dockerfile
+SHALL be committed.
+
+**Source:** backend-cicd-pipeline · execution-plan.md § Proposed approach (agents; ADR 0044); § Binding constraints (agent Dockerfile placement); intent.md § AC6
+
+#### Scenario: The copy step is missing for one agent
+- **WHEN** the deploy job has no copy step for `ai_radar_chat`
+- **THEN** the offline workflow test fails (`tests/test_ci_workflows.py -k dockerfile`). The live agent deploy
+  that keeps both runtime ids is pending O12 e, so this is not yet verified live
+
 ## Invariants
 
 1. `bedrock_agentcore`, `asyncio`, and the Secrets Manager `boto3` client
@@ -138,6 +155,7 @@ agent source tree, because the toolkit builds only the one at the `source_path`.
 | async-invocation-ack | 2026-08-10 | Async handler with immediate ack + background execution, single-flight guard — fixes `scheduling`'s finding F5 (EventBridge Scheduler's undocumented ~30s synchronous target timeout). |
 | chat-retrieval | 2026-10-13 | RD-3: the `InvokeTitanEmbed` statement (`bedrock:InvokeModel` on the Titan v2 foundation-model ARN only). The role change is in the template; the stack is not redeployed, so it is not live. |
 | chat-agent-runtime | 2026-10-18 | RD-7: a second agent (`chat_app.py`) with its own `AiRadarChatRuntime` role and stack. RD-8: one shared Dockerfile with the `AGENT_ENTRYPOINT` selector, which narrows the intent's "separate Dockerfile". Invariant 1 now covers `chat_app.py`. Deployed 2026-10-18 (`ai_radar_chat-JFCO0R9lkT`). |
+| backend-cicd-pipeline | 2026-10-28 | RD-9: CI deploys both agents in place (`agentcore deploy -a`, local build) from the root `Dockerfile`, copied to the path the toolkit reads (ADR 0044). Implemented and audit-approved with reservations; **not live**, the agent deploy through CI is pending O12 e. |
 
 ## Related ADRs
 
@@ -146,5 +164,6 @@ agent source tree, because the toolkit builds only the one at the `source_path`.
 | [0014](../archived/chat-retrieval/decisions/0014-titan-grant-scoped-to-the-foundation-model.md) | The Titan embedding grant is a separate statement, scoped to the one foundation-model ARN | Accepted |
 | [0017](../archived/chat-agent-runtime/decisions/0017-one-shared-dockerfile-with-entrypoint-selected-by-environment.md) | One root Dockerfile serves both agents, with the entrypoint selected by AGENT_ENTRYPOINT | Accepted |
 | [0020](../archived/chat-agent-runtime/decisions/0020-chat-execution-role-is-a-separate-least-privilege-construct.md) | The chat agent gets its own execution role, in its own CDK construct and stack, and the curation role is not widened | Accepted |
+| [0044](../archived/backend-cicd-pipeline/decisions/0044-agents-built-locally-from-a-copy-of-the-root-dockerfile.md) | The agents are deployed with a local build, from a copy of the root Dockerfile placed where the toolkit reads it | Accepted |
 
 (Both earlier contributing features shipped before `harny-adr` existed in this project, so they get no retroactive ADRs.)

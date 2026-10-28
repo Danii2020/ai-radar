@@ -174,9 +174,19 @@ verify commands, and known operational gotchas are tracked in `README.md`,
 not here — that table is the source of truth for what's actually deployed at
 any given time.
 
+**CI/CD (`backend-cicd-pipeline`, implemented, not live yet).** Once live, GitHub Actions
+(`.github/workflows/backend-*.yml`) checks every PR and deploys the changed parts of the backend on each
+merge to `main`, through GitHub OIDC roles with no AWS key in GitHub. The deploy code is in `scripts/ci/`,
+with one pinned context file (`scripts/ci/deploy_context.json`). The CI access roles and the two scoped
+CloudFormation execution policies are a separate CDK app, `infra/ci_bootstrap/`, which a human deploys
+once and CI never deploys. The capability is `specs/current/ci-cd.md`, and its runbook is the README's
+"Backend CI/CD" section.
+
 ## Validation
 
 See `CLAUDE.md` and `README.md` for exact commands; in short: `uv sync` to
 install, `uv run pytest tests/` for the test suite, `uv run ruff check` /
 `uv run mypy` for lint/type-check (wired into this repo's harny feedback hook
-and CI workflow as of the `stack: python` harness configuration).
+and CI workflow as of the `stack: python` harness configuration). The backend PR checks
+(`.github/workflows/backend-checks.yml`) also run `pytest`, `actionlint` and `cdk synth` of all seven stacks;
+they have not run on GitHub yet.

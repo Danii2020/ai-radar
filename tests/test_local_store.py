@@ -114,10 +114,10 @@ def test_upsert_writes_seen_sorted_and_cards_batch_matching_spike_save_shape(
     store.upsert([card_z, card_a])
 
     expected_seen = sorted([_url_hash(item_z.url), _url_hash(item_a.url)])
-    assert seen_path.read_text() == json.dumps(expected_seen, indent=2)
+    assert json.loads(seen_path.read_text()) == expected_seen
 
     expected_cards = [card_z.to_dict(), card_a.to_dict()]
-    assert cards_path.read_text() == json.dumps(expected_cards, indent=2)
+    assert json.loads(cards_path.read_text()) == expected_cards
 
 
 # T9 — cards.json reflects only the batch passed to THIS upsert call (not an

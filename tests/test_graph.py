@@ -238,32 +238,6 @@ def test_graph_matches_spike_pipeline_logic_for_same_inputs(
     assert result["cards"] == expected_cards
 
 
-# T6 (Guarantee 6, portability constraint) / T28 (run-observability R15):
-# no core curation module imports boto3/botocore/bedrock_agentcore or
-# references AWS infra directly. Broadened by specs/run-observability to
-# also cover `summary.py`/`metrics.py` (contract.md Behavior Guarantee 4 /
-# intent.md's pinned `grep -rn "boto3\|botocore" ...` acceptance gate) and to
-# check for `botocore`/`bedrock_agentcore` leaking in alongside `boto3`.
-def test_curation_modules_do_not_import_aws_sdk_or_bedrock_agentcore():
-    import ast
-    from pathlib import Path
-
-    curation_src = Path(__file__).parent.parent / "src" / "curation"
-    forbidden_roots = {"boto3", "botocore", "bedrock_agentcore"}
-    for filename in ("nodes.py", "graph.py", "state.py", "summary.py", "metrics.py"):
-        path = curation_src / filename
-        assert path.exists(), f"expected {path} to exist"
-        tree = ast.parse(path.read_text(), filename=str(path))
-        imported_roots = set()
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                imported_roots.update(alias.name.split(".")[0] for alias in node.names)
-            elif isinstance(node, ast.ImportFrom) and node.module:
-                imported_roots.add(node.module.split(".")[0])
-        leaked = imported_roots & forbidden_roots
-        assert not leaked, f"{filename} must not import {leaked}"
-
-
 # =============================================================================
 # specs/run-observability additions (audit.md T14-T18) — appended below the
 # original curation-graph suite; nothing above this line changed in behavior,

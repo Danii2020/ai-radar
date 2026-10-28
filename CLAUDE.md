@@ -103,6 +103,18 @@ key. Deploy with `-c chat_api_reserved_concurrency=none` while the account Lambd
 shipped as the `apps/web` specs `web-chat-ui` and `web-chat-ui-polish` (2026-10-24; locally verified, live key check and Vercel deploy pending). See "Phase 3 — Chatbot" in
 [`README.md`](README.md).
 
+**Backend CI/CD (`backend-cicd-pipeline`) is implemented and audit-approved with reservations (round 2,
+2026-10-28), and it is NOT live.** Once live, every PR will run pytest, ruff, mypy, actionlint and `cdk synth`
+(`.github/workflows/backend-*.yml`), and a same-repo PR will also get a read-only `cdk diff` through a lookup-only
+role. Once live, a merge to `main` will deploy only the changed targets (`scripts/ci/`), through GitHub OIDC roles
+(no AWS key in GitHub), and then run a smoke check. CloudFormation executes under two scoped policies from the
+separate CI access app `infra/ci_bootstrap/`, which CI never deploys. **Human-only and not yet run (O12 a–i):**
+the CI access stack deploy, the five repository variables, the CDK re-bootstrap with the scoped policies,
+the repository protection script, and the first pipeline run. Until those happen, nothing is deployed by CI
+and the workflows have not run on GitHub. The repository is public, so no control relies on hiding a
+workflow, role or account id. Runbook: "Backend CI/CD" in [`README.md`](README.md). The `ci-cd` capability
+is `specs/current/ci-cd.md`; ADRs 0040 and 0042–0047 record the decisions.
+
 ## SDD harness: two roots
 
 [harny](../harny) is installed twice, once per stack, until harny supports
@@ -117,8 +129,8 @@ several stacks in one install:
   `apps/web/`** so `CLAUDE_PROJECT_DIR` points there and its hooks, agents,
   and skills load.
 
-ADR numbers are monotonic across both roots (used through 0039 as of 2026-10-24; check
-`specs/current/_index.md` for the next free number). When you change
+ADR numbers are monotonic across both roots (used through 0047 as of 2026-10-28, with 0041 never
+promoted; check `specs/current/_index.md` for the next free number). When you change
 `.sdd/feedback/run-feedback.mjs` or a shared role or skill in one root, make
 the same change in the other.
 

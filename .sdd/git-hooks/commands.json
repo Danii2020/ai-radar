@@ -3,6 +3,8 @@
     "id": "ruff",
     "kind": "lint",
     "argv": [
+      "uv",
+      "run",
       "ruff",
       "check"
     ],
@@ -12,13 +14,15 @@
       ".pyi"
     ],
     "requires": {
-      "binary": "ruff"
+      "binary": "uv"
     }
   },
   {
     "id": "mypy",
     "kind": "typecheck",
     "argv": [
+      "uv",
+      "run",
       "mypy"
     ],
     "pathMode": "per-file",
@@ -27,7 +31,7 @@
       ".pyi"
     ],
     "requires": {
-      "binary": "mypy"
+      "binary": "uv"
     }
   }
 ]

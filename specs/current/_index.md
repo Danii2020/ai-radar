@@ -1,7 +1,11 @@
 # Current-State Specifications
 
 > Current truth for this repo. Maintained by `harny-sync`; do not hand-edit.
-> Last synced: 2026-10-21 (`chat-api-auth` archived: new `chat-api-auth` capability, amends
+> Last synced: 2026-10-28 (`backend-cicd-pipeline` archived, implemented and audit-approved with
+> reservations, NOT LIVE: new `ci-cd` capability, ADRs 0040 and 0042–0047 (0041 not promoted), amends
+> `runtime-deployment` (RD-9), `scheduling` (SC-5), `chat-api-auth` (CAAUTH-10, ADR 0028 amended by ADR 0043)
+> and `feed-api` (FA-6) — see Notes).
+> Earlier: 2026-10-21 (`chat-api-auth` archived: new `chat-api-auth` capability, amends
 > `chat-api` CAPI-4 and CAPI-6, ADRs 0028–0031, ADR 0027 superseded, reservations CAAUTH-F1, F3,
 > F5, F6, F9, F11 and the admin and key limits — see Notes).
 > Earlier: 2026-10-21 (`chat-api` archived: new `chat-api` capability, ADRs 0022–0027,
@@ -25,15 +29,16 @@
 |---|---|---|
 | curation-pipeline | [curation-pipeline.md](./curation-pipeline.md) | [curation-graph](../archived/curation-graph/), [tavily-discovery](../archived/tavily-discovery/), [chat-retrieval](../archived/chat-retrieval/) |
 | card-persistence | [card-persistence.md](./card-persistence.md) | [dynamodb-card-store](../archived/dynamodb-card-store/), [chat-retrieval](../archived/chat-retrieval/) |
-| runtime-deployment | [runtime-deployment.md](./runtime-deployment.md) | [runtime-packaging](../archived/runtime-packaging/), [async-invocation-ack](../archived/async-invocation-ack/), [chat-retrieval](../archived/chat-retrieval/), [chat-agent-runtime](../archived/chat-agent-runtime/) |
-| scheduling | [scheduling.md](./scheduling.md) | [eventbridge-schedule](../archived/eventbridge-schedule/) |
+| runtime-deployment | [runtime-deployment.md](./runtime-deployment.md) | [runtime-packaging](../archived/runtime-packaging/), [async-invocation-ack](../archived/async-invocation-ack/), [chat-retrieval](../archived/chat-retrieval/), [chat-agent-runtime](../archived/chat-agent-runtime/), [backend-cicd-pipeline](../archived/backend-cicd-pipeline/) (RD-9) |
+| scheduling | [scheduling.md](./scheduling.md) | [eventbridge-schedule](../archived/eventbridge-schedule/), [backend-cicd-pipeline](../archived/backend-cicd-pipeline/) (SC-5) |
 | observability | [observability.md](./observability.md) | [run-observability](../archived/run-observability/) |
 | config-loading | [config-loading.md](./config-loading.md) | [pydantic-settings-config](../archived/pydantic-settings-config/), [rename-spike-to-shared](../archived/rename-spike-to-shared/) |
-| feed-api | [feed-api.md](./feed-api.md) | [feed-api](../archived/feed-api/) |
+| feed-api | [feed-api.md](./feed-api.md) | [feed-api](../archived/feed-api/), [backend-cicd-pipeline](../archived/backend-cicd-pipeline/) (FA-6) |
 | chat-retrieval | [chat-retrieval.md](./chat-retrieval.md) | [chat-retrieval](../archived/chat-retrieval/), [chat-agent-runtime](../archived/chat-agent-runtime/) (no requirement change) |
 | chat-agent | [chat-agent.md](./chat-agent.md) | [chat-agent-runtime](../archived/chat-agent-runtime/) |
 | chat-api | [chat-api.md](./chat-api.md) | [chat-api](../archived/chat-api/), [chat-api-auth](../archived/chat-api-auth/) (CAPI-4 amended, CAPI-6 note) |
-| chat-api-auth | [chat-api-auth.md](./chat-api-auth.md) | [chat-api-auth](../archived/chat-api-auth/) |
+| chat-api-auth | [chat-api-auth.md](./chat-api-auth.md) | [chat-api-auth](../archived/chat-api-auth/), [backend-cicd-pipeline](../archived/backend-cicd-pipeline/) (CAAUTH-10; amends ADR 0028 via ADR 0043) |
+| ci-cd | [ci-cd.md](./ci-cd.md) | [backend-cicd-pipeline](../archived/backend-cicd-pipeline/) (new; implemented, NOT LIVE — O12 a–i pending) |
 
 ## Keyword lookup
 
@@ -120,6 +125,26 @@
 | CORS (chat API) / no CORS configuration | chat-api-auth |
 | chat_api_allowed_origins (removed) | chat-api-auth |
 | unauthenticated chat / 403 at the gateway | chat-api-auth |
+| CI/CD / GitHub Actions / backend-cicd-pipeline | ci-cd |
+| OIDC / id-token / sts.amazonaws.com | ci-cd |
+| CI access stack / infra/ci_bootstrap | ci-cd |
+| diff role / lookup role / cdk diff | ci-cd |
+| deploy role / smoke role | ci-cd, chat-api-auth |
+| CAAUTH-10 / second principal / CI smoke role | chat-api-auth, ci-cd |
+| deploy plan / change detection / last successful deploy | ci-cd |
+| pinned deploy context / deploy_context.json | ci-cd, feed-api |
+| origin validation (CI) | ci-cd, feed-api |
+| schedule guard / schedule DISABLED guard | ci-cd, scheduling |
+| SC-5 | scheduling |
+| FA-6 | feed-api |
+| CloudFormation execution policy / cdk bootstrap | ci-cd |
+| handler snapshot / omission list | ci-cd |
+| repository protection / ruleset | ci-cd |
+| CODEOWNERS | ci-cd |
+| CHAT_API_ID / ::add-mask:: | ci-cd |
+| .bedrock_agentcore / Dockerfile copy / local-build | runtime-deployment, ci-cd |
+| RD-9 / agentcore deploy in CI | runtime-deployment |
+| CICD-F (ci-cd reservations) | ci-cd |
 
 ## Synchronized Changes
 
@@ -139,10 +164,11 @@
 | chat-agent-runtime | [specs/archived/chat-agent-runtime/](../archived/chat-agent-runtime/) | [chat-agent.md](./chat-agent.md) (new), [runtime-deployment.md](./runtime-deployment.md) (RD-7, RD-8), [chat-retrieval.md](./chat-retrieval.md) (contributing row only) |
 | chat-api | [specs/archived/chat-api/](../archived/chat-api/) | [chat-api.md](./chat-api.md) (new) |
 | chat-api-auth | [specs/archived/chat-api-auth/](../archived/chat-api-auth/) | [chat-api-auth.md](./chat-api-auth.md) (new), [chat-api.md](./chat-api.md) (CAPI-4 amended, CAPI-6 note, ADR 0027 superseded) |
+| backend-cicd-pipeline | [specs/archived/backend-cicd-pipeline/](../archived/backend-cicd-pipeline/) | [ci-cd.md](./ci-cd.md) (new), [runtime-deployment.md](./runtime-deployment.md) (RD-9), [scheduling.md](./scheduling.md) (SC-5), [chat-api-auth.md](./chat-api-auth.md) (CAAUTH-10, ADR 0043 amends ADR 0028), [feed-api.md](./feed-api.md) (FA-6). Implemented and audit-approved with reservations; not live. |
 
 ## Decisions (ADR registry)
 
-ADR numbers are **repo-wide monotonic** across both harness roots: 0001–0007 belong to `web-feed-ui` and 0008 to `feed-structure-refactor`, both registered in [`apps/web/specs/current/_index.md`](../../apps/web/specs/current/_index.md) (the frontend index still names 0008 as next, and is not edited here). The next ADR written in either harness is **0040** (ADRs 0032–0039 were written by `web-chat-ui` and `web-chat-ui-polish` in the frontend harness; see [`apps/web/specs/current/_index.md`](../../apps/web/specs/current/_index.md)). ADRs 0028–0031 were written by `chat-api-auth` and supersede ADR 0027.
+ADR numbers are **repo-wide monotonic** across both harness roots: 0001–0007 belong to `web-feed-ui` and 0008 to `feed-structure-refactor`, both registered in [`apps/web/specs/current/_index.md`](../../apps/web/specs/current/_index.md) (the frontend index still names 0008 as next, and is not edited here). ADRs 0032–0039 were written by `web-chat-ui` and `web-chat-ui-polish` in the frontend harness (see [`apps/web/specs/current/_index.md`](../../apps/web/specs/current/_index.md)). ADRs 0040 and 0042–0047 were written by `backend-cicd-pipeline`. **0041 was never promoted** (the cap of seven ADRs per feature in `harny-adr` was reached), so it stays unassigned. The next ADR written in either harness is **0048**. ADRs 0028–0031 were written by `chat-api-auth` and supersede ADR 0027. ADR 0043 amends ADR 0028; ADR 0028's file is not edited and its status stays Accepted.
 
 | ADR | Title | Status | Capability | Path |
 |---|---|---|---|---|
@@ -169,6 +195,13 @@ ADR numbers are **repo-wide monotonic** across both harness roots: 0001–0007 b
 | 0029 | Browsers are not a supported caller, so the chat API has no CORS configuration | Accepted | chat-api-auth | [specs/archived/chat-api-auth/decisions/0029-browsers-are-not-a-supported-caller-so-no-cors.md](../archived/chat-api-auth/decisions/0029-browsers-are-not-a-supported-caller-so-no-cors.md) |
 | 0030 | The caller's access key is long-lived and created by hand, outside CloudFormation | Accepted | chat-api-auth | [specs/archived/chat-api-auth/decisions/0030-caller-access-key-is-long-lived-and-created-outside-cloudformation.md](../archived/chat-api-auth/decisions/0030-caller-access-key-is-long-lived-and-created-outside-cloudformation.md) |
 | 0031 | The HTTP API construct keeps its logical id, so the deploy updates the API in place | Accepted | chat-api-auth | [specs/archived/chat-api-auth/decisions/0031-http-api-construct-id-kept-so-the-api-updates-in-place.md](../archived/chat-api-auth/decisions/0031-http-api-construct-id-kept-so-the-api-updates-in-place.md) |
+| 0040 | CI authenticates with GitHub OIDC through three least-privilege roles, defined outside the deployed stacks | Accepted | ci-cd | [specs/archived/backend-cicd-pipeline/decisions/0040-github-oidc-with-three-least-privilege-ci-roles-outside-the-stacks.md](../archived/backend-cicd-pipeline/decisions/0040-github-oidc-with-three-least-privilege-ci-roles-outside-the-stacks.md) |
+| 0042 | Deploy targets come from the changes since the last successful deploy, not from the parent commit | Accepted | ci-cd | [specs/archived/backend-cicd-pipeline/decisions/0042-deploy-targets-from-changes-since-the-last-successful-deploy.md](../archived/backend-cicd-pipeline/decisions/0042-deploy-targets-from-changes-since-the-last-successful-deploy.md) |
+| 0043 | A dedicated CI smoke role becomes a second principal on the chat route, amending ADR 0028 | Accepted | chat-api-auth | [specs/archived/backend-cicd-pipeline/decisions/0043-smoke-role-is-a-second-principal-on-the-chat-route.md](../archived/backend-cicd-pipeline/decisions/0043-smoke-role-is-a-second-principal-on-the-chat-route.md) |
+| 0044 | The agents are deployed with a local build, from a copy of the root Dockerfile placed where the toolkit reads it | Accepted | runtime-deployment | [specs/archived/backend-cicd-pipeline/decisions/0044-agents-built-locally-from-a-copy-of-the-root-dockerfile.md](../archived/backend-cicd-pipeline/decisions/0044-agents-built-locally-from-a-copy-of-the-root-dockerfile.md) |
+| 0045 | The deploy context is one committed file, and a guard fails the run if the schedule is enabled | Accepted | ci-cd | [specs/archived/backend-cicd-pipeline/decisions/0045-one-committed-deploy-context-and-a-schedule-guard-that-fails-the-run.md](../archived/backend-cicd-pipeline/decisions/0045-one-committed-deploy-context-and-a-schedule-guard-that-fails-the-run.md) |
+| 0046 | CloudFormation executes under two scoped customer-managed policies, not AdministratorAccess | Accepted | ci-cd | [specs/archived/backend-cicd-pipeline/decisions/0046-cloudformation-execution-scoped-to-the-ai-radar-resources.md](../archived/backend-cicd-pipeline/decisions/0046-cloudformation-execution-scoped-to-the-ai-radar-resources.md) |
+| 0047 | Repository protection is applied by a rerunnable script that dry-runs by default | Accepted | ci-cd | [specs/archived/backend-cicd-pipeline/decisions/0047-repository-protection-as-a-rerunnable-script-that-dry-runs-by-default.md](../archived/backend-cicd-pipeline/decisions/0047-repository-protection-as-a-rerunnable-script-that-dry-runs-by-default.md) |
 
 All 10 features archived in the 2026-09-17 bootstrap pass shipped before
 `harny-adr` existed in this project; per that skill's own no-backfill
@@ -207,6 +240,17 @@ first feature archived here with ADRs (0009–0015, from its approved execution 
 | CAAUTH-F11 | The `chat-api` F11 closure re-check must be a signed burst, because unsigned floods get 403 at the gateway. No signed burst tool exists. Open work. | MEDIUM | `specs/archived/chat-api-auth/audit.md` (round 2) | chat-api-auth, chat-api |
 | CAAUTH-ADMIN | An HTTP API has no resource policy, so any identity in the account with its own `execute-api:Invoke` grant (an administrator, for example) can also call the route. Accepted limitation. | LOW (accepted) | ADR 0028; `specs/archived/chat-api-auth/audit.md` (plan-flagged limits) | chat-api-auth |
 | CAAUTH-KEY | The caller access key is long-lived and stays `Active` in the local profile until the `apps/web` signing spec ships. | LOW (accepted) | ADR 0030; `specs/archived/chat-api-auth/audit.md` (round 2 note) | chat-api-auth |
+| CAAUTH-SMOKE | The principals that may call `POST /v1/chat` grow from one to two: the CI smoke role (CAAUTH-10, ADR 0043). The HTTP API has no resource policy, so the limit is the grant alone. Accepted by the human 2026-10-27 (Q4); the smoke role's live 200 and the deploy role's 403 are pending O12 f. | LOW (accepted) | `specs/archived/backend-cicd-pipeline/audit.md` (round 2); ADR 0043 | chat-api-auth |
+| CICD-F8 | The live O12 steps (a)–(i) have not run: nothing is deployed, and the first PR diff, deploy, protection apply and signed-probe checks are pending. Human-only, expected. | LOW | `specs/archived/backend-cicd-pipeline/audit.md` (round 2, F8) | ci-cd |
+| CICD-F10 | The smoke job's mask step still reads `ChatApiUrl` with `2>/dev/null \|\| true`. No leak path found; inconsistent with the deploy job, which fails closed. | LOW | `specs/archived/backend-cicd-pipeline/audit.md` (round 2, F10) | ci-cd |
+| CICD-F11 | README `CHAT_API_ID` note corrected 2026-10-28. Residual: a stale variable after a chat API id change leaves the new URL unmasked in the deploy log. Accepted as-is. | LOW | `specs/archived/backend-cicd-pipeline/audit.md` (round 2, F11) | ci-cd |
+| CICD-F12 | Unused account-level grants on `*` (`logs:PutResourcePolicy`, `logs:DeleteResourcePolicy`, `billing:GetBillingViewData`). Accepted as-is. | LOW | `specs/archived/backend-cicd-pipeline/audit.md` (round 2, F12) | ci-cd |
+| CICD-F13 | Omission patterns are global wildcards, and the coverage test checks one primary action per type. Accepted; keying omissions by type is recommended. | LOW | `specs/archived/backend-cicd-pipeline/audit.md` (round 2, F13) | ci-cd |
+| CICD-F14 | `iam:ListGroupsForUser` and `iam:GetLoginProfile` are omitted, so an update or delete of the caller user may fail with `AccessDenied`. Recoverable; watched in O12 h. Accepted as-is. | LOW | `specs/archived/backend-cicd-pipeline/audit.md` (round 2, F14) | ci-cd |
+| CICD-F15 | `tasks.md` has two stale rows (the "Red test bug (O3)" response; O12(a) names three role ARNs where five variables are needed). Accepted as-is; the archived file is not edited. | LOW | `specs/archived/backend-cicd-pipeline/audit.md` (round 2, F15) | ci-cd |
+| CICD-ESC | Accepted escalation path: a merged template can create an `AiRadar*` role with an arbitrary inline policy and trust. Controls are the ruleset, `CODEOWNERS` and the PR diff; a permissions boundary is the follow-up. | LOW (accepted) | `specs/archived/backend-cicd-pipeline/audit.md` (round 2); ADR 0046 | ci-cd |
+| CICD-VERCEL | The Vercel origin is not yet in the context file (open item, not a blocker). | LOW (open) | `specs/archived/backend-cicd-pipeline/intent.md` § Open questions | ci-cd |
+| CICD-SOLO | Required approvals 0 and code-owner review off while there is one maintainer; the choice awaits the human's confirmation. | LOW (open) | `specs/archived/backend-cicd-pipeline/intent.md` § Open questions; ADR 0047 | ci-cd |
 
 ## Notes
 
@@ -296,3 +340,15 @@ written by `harny-adr` from the approved execution plan. Its open reservations a
 F6, F9 and F11 (MEDIUM, the signed F11 re-check), plus the accepted admin and caller-key limits. The
 live O7 steps ran on 2026-10-21 with the F9 exception. The `apps/web` server-side signing is a
 follow-up spec.
+
+**2026-10-28 backend-cicd-pipeline.** The backend CI/CD pipeline is archived as implemented and
+audit-approved with reservations (round 2). **It is NOT live.** Nothing is deployed and the workflows have
+not run on GitHub. The CI access stack deploy, the five repository variables, the CDK re-bootstrap with the
+two scoped execution policies, the protection script and the first pipeline run are human-only steps (tasks
+O12 a–i) and have not happened. Every live statement in `ci-cd.md` is therefore pending. The feature creates
+the `ci-cd` capability (CICD-1..CICD-16, new `ci-cd.md`) and amends `runtime-deployment` (RD-9, ADR 0044),
+`scheduling` (SC-5), `chat-api-auth` (CAAUTH-10, ADR 0043, which amends ADR 0028, whose file stays
+unedited) and `feed-api` (FA-6). Its ADRs are 0040 and 0042–0047; 0041 was never promoted, because `harny-adr`
+caps a feature at seven ADRs. Its open reservations are CICD-F8, F10–F15, CICD-ESC, CICD-VERCEL and
+CICD-SOLO, plus CAAUTH-SMOKE. The audit's round-1 findings F1–F6 and F9 are closed, and F7 is closed on reused
+evidence.

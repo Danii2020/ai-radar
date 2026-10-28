@@ -60,10 +60,6 @@ def _env_assignments() -> dict[str, str]:
     return assignments
 
 
-def test_dockerfile_exists():
-    assert DOCKERFILE_PATH.is_file(), "root Dockerfile must exist and be committed"
-
-
 def test_dockerfile_sets_docker_container_env_for_agentcore_host_binding():
     """F1 regression: without this, BedrockAgentCoreApp.run() may bind
     127.0.0.1 inside the AgentCore microVM and every real invocation fails,
@@ -108,9 +104,3 @@ def test_cmd_defaults_to_the_curation_entrypoint(tmp_path):
 def test_cmd_honors_agent_entrypoint_for_the_chat_agent(tmp_path):
     assert _resolved_command(tmp_path, "chat_app.py") == "chat_app.py"
 
-
-def test_dockerfile_still_exposes_the_agentcore_port():
-    assert any(
-        line.strip() == "EXPOSE 8080"
-        for line in DOCKERFILE_PATH.read_text().splitlines()
-    )

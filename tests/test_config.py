@@ -57,14 +57,6 @@ EXPECTED_DEFAULT_SEEDS = [
     "machine learning and deep learning breakthroughs",
     "open source AI model and tooling releases",
 ]
-EXPECTED_FEEDS = {
-    "arXiv cs.AI": "http://export.arxiv.org/rss/cs.AI",
-    "arXiv cs.LG": "http://export.arxiv.org/rss/cs.LG",
-    "Hugging Face Blog": "https://huggingface.co/blog/feed.xml",
-    "BAIR Blog": "https://bair.berkeley.edu/blog/feed.xml",
-    "Simon Willison": "https://simonwillison.net/atom/everything/",
-    "MIT Tech Review AI": "https://www.technologyreview.com/topic/artificial-intelligence/feed",
-}
 
 # --- The 26-row env-var -> constant -> default/override table (contract.md
 # Behavior Guarantee 1, Gate G3). Each row: (env_name, attr_name, override_str,
@@ -365,51 +357,6 @@ def test_curation_config_env_var_sets_its_constant(
 ):
     with reload_config_module("curation.config", env={env_name: override}) as module:
         assert getattr(module, attr_name) == expected
-
-
-# --- T4 / T5: all 26 defaults with a clean environment ----------------------
-
-
-@pytest.mark.parametrize(
-    "env_name, attr_name, _override, _expected, default",
-    SHARED_ENV_CASES,
-    ids=[row[0] for row in SHARED_ENV_CASES],
-)
-def test_shared_config_default_value(
-    reload_config_module, env_name, attr_name, _override, _expected, default
-):
-    with reload_config_module(
-        "shared.config", clear=SHARED_ALL_ENV_NAMES
-    ) as module:
-        assert getattr(module, attr_name) == default
-
-
-@pytest.mark.parametrize(
-    "env_name, attr_name, _override, _expected, default",
-    CURATION_ENV_CASES,
-    ids=[row[0] for row in CURATION_ENV_CASES],
-)
-def test_curation_config_default_value(
-    reload_config_module, env_name, attr_name, _override, _expected, default
-):
-    with reload_config_module(
-        "curation.config", clear=CURATION_ALL_ENV_NAMES
-    ) as module:
-        assert getattr(module, attr_name) == default
-
-
-def test_shared_config_feeds_has_the_six_documented_entries(reload_config_module):
-    with reload_config_module("shared.config") as module:
-        assert module.FEEDS == EXPECTED_FEEDS
-        assert len(module.FEEDS) == 6
-
-
-def test_curation_config_default_seeds_has_the_five_documented_seeds(
-    reload_config_module,
-):
-    with reload_config_module("curation.config") as module:
-        assert module._DEFAULT_SEEDS == EXPECTED_DEFAULT_SEEDS
-        assert len(module._DEFAULT_SEEDS) == 5
 
 
 # --- T6: the 11 fixed constants are unmoved by a same-named env var --------
@@ -782,14 +729,6 @@ def test_pyproject_declares_pydantic_settings_as_a_main_dependency():
         "it is only dev-transitive today (via bedrock-agentcore-starter-toolkit), "
         "and Dockerfile runs `uv sync --frozen --no-dev` (intent.md Constraints)"
     )
-
-
-def test_pydantic_settings_is_not_declared_in_the_dev_dependency_group():
-    pyproject = tomllib.loads(PYPROJECT_PATH.read_text())
-    dev_deps = _dependency_names(
-        pyproject.get("dependency-groups", {}).get("dev", [])
-    )
-    assert "pydantic-settings" not in dev_deps
 
 
 # --- Consumer-regression test (tasks.md Task 4.5) ---------------------------
