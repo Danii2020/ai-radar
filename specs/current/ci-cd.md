@@ -10,6 +10,7 @@
 > **Status: implemented and audit-approved with reservations (round 2, 2026-10-28). NOT LIVE.** Nothing is
 > deployed by CI, and the workflows have not run on GitHub. Every "live" statement below is pending the
 > human-only steps O12 a–i, and none of them has run. The offline checks below are verified.
+> The `ci-log-masking` fix (2026-10-28, ADR 0048) is implemented and audit-approved. It is **not committed, merged or run on GitHub**, so its live checks O4 and O6 are pending (CICD-LEAK).
 
 ## Purpose
 
@@ -162,7 +163,12 @@ The GitHub OIDC provider, the diff, deploy and smoke roles, and the two CloudFor
 SHALL be defined in `infra/ci_bootstrap/`, a CDK app separate from `infra/app.py`, using
 `CliCredentialsStackSynthesizer`. A human SHALL deploy it with their own administrator credentials. CI
 SHALL NOT deploy it. No CI role SHALL grant `Action: "*"`. Every trust condition SHALL use `StringEquals` on
-`aud` and `sub`. No CI role name SHALL start with `AiRadar` or `ai-radar`.
+`aud` and `sub`. No CI role name SHALL start with `AiRadar` or `ai-radar`. The deploy role's only ECR write is
+`ecr:CreateRepository`, allowed only on the two agent repositories (`bedrock-agentcore-ai_radar_curation` and
+`bedrock-agentcore-ai_radar_chat`), because the locked toolkit's `deploy_to_ecr` always calls
+`create_repository`. The grant was found missing by the first live agent deploy (2026-10-28) and added by the
+`ci-log-masking` change (AC6). The offline test is `test_deploy_role_may_call_create_repository_only_on_the_two_agent_repositories`,
+and the deploy role has no `bedrock-agentcore:ListAgentRuntimes`.
 
 **Source:** backend-cicd-pipeline · intent.md § AC9; execution-plan.md § Binding constraints (the CI access app); ADR 0040
 
@@ -176,7 +182,7 @@ SHALL NOT deploy it. No CI role SHALL grant `Action: "*"`. Every trust condition
 No log, job summary, artifact or cache SHALL show the chat API id or URL, an access key id, a secret, a
 session token or an `Authorization` header. No step SHALL echo the environment or enable shell tracing.
 Caches SHALL hold only uv and npm dependencies. The deploy job SHALL mask the id and the derived URL from
-`vars.CHAT_API_ID` before any `cdk deploy`, SHALL stop when the variable is empty, and its read of the
+`secrets.CHAT_API_ID` before any `cdk deploy`, SHALL stop when the secret is empty, and its read of the
 deployed chat URL SHALL fail the step on error (no `|| true` and no `2>/dev/null` on that read).
 
 **Source:** backend-cicd-pipeline · intent.md § AC10; execution-plan.md § Binding constraints (public logs; audit F5)
@@ -257,10 +263,11 @@ which is the live value. The Vercel origin is added by a PR when the project exi
 `.github/CODEOWNERS` SHALL request the maintainer's review for the workflows, itself, the CI helpers,
 `infra/ci_bootstrap/` and the deploy context file. Every job SHALL set `timeout-minutes`. The workflow default
 `permissions` SHALL be `contents: read`, and only the diff job SHALL have `id-token: write`. The workflows
-SHALL reference no `secrets.*` other than `GITHUB_TOKEN`. While there is one maintainer, CODEOWNERS only
+SHALL reference no `secrets.*` other than `GITHUB_TOKEN`, `CHAT_API_ID` and `AWS_ACCOUNT_ID` (the allow-list of
+ADR 0048; the reusable checks workflow references no secret, and `secrets: inherit` is forbidden). While there is one maintainer, CODEOWNERS only
 requests review and does not enforce it (CICD-SOLO).
 
-**Source:** backend-cicd-pipeline · intent.md § AC16; execution-plan.md § Binding constraints (public repository)
+**Source:** backend-cicd-pipeline · intent.md § AC16; execution-plan.md § Binding constraints (public repository); ci-log-masking intent.md § AC4 (the allow-list, which replaces the earlier "no `secrets.*` other than `GITHUB_TOKEN`"; ADR 0048)
 
 #### Scenario: A PR that edits the deploy workflow
 - **WHEN** a PR edits `.github/workflows/backend-deploy.yml`
@@ -289,6 +296,13 @@ opt-in.
 3. CI never deploys the CI access app, never runs `destroy`, `configure --create` or a curation `invoke`, and
    never enables `AiRadarSchedule` (`scheduling` SC-1).
 4. The required check names in the ruleset equal the workflow job names. A test compares them.
+6. No workflow references a `vars.*` context for the five retired names (`AWS_DIFF_ROLE_ARN`,
+   `AWS_DEPLOY_ROLE_ARN`, `AWS_SMOKE_ROLE_ARN`, `AWS_ACCOUNT_ID`, `CHAT_API_ID`). The chat API id and the
+   account id reach steps only through `secrets.CHAT_API_ID` and `secrets.AWS_ACCOUNT_ID` (ADR 0048). Offline
+   test: `test_no_workflow_references_the_retired_repository_variables`, `test_ids_reach_steps_only_through_secrets`.
+7. Each role ARN is `arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/<name>`, and each `<name>` equals the
+   stack constant (`gha-airadar-diff`, `gha-airadar-deploy`, `gha-airadar-smoke`). The role names are literal in
+   the workflows (they are not secret). Offline test: `test_role_arns_are_built_from_the_secret_account_and_the_stack_role_names`.
 5. The two execution policies together deny changes to the CI roles, the OIDC provider, the `cdk-hnb659fds-*`
    roles and both policies.
 
@@ -306,6 +320,10 @@ opt-in.
 | CICD-ESC | Accepted escalation path. A merged template can still create an `AiRadar*` role with an arbitrary inline policy and trust (`iam:PutRolePolicy`, `iam:UpdateAssumeRolePolicy`, `iam:PassRole` on `role/AiRadar*`) and attach it to a Lambda or a schedule. The controls are the ruleset, `CODEOWNERS` and the PR diff. A permissions boundary is the recorded follow-up. | LOW (accepted) | `specs/archived/backend-cicd-pipeline/audit.md` (round 2, privilege review); ADR 0046; README risk register |
 | CICD-VERCEL | The Vercel origin is not in the context file. Until the human creates the project and adds the origin by PR, the committed origin is `http://localhost:3000` only. Open item, not a blocker. | LOW (open) | `specs/archived/backend-cicd-pipeline/intent.md` § Open questions; AC15 |
 | CICD-SOLO | Required approvals are 0 and code-owner review is off while there is one maintainer, because GitHub does not let an author approve their own PR. The intent lists this for confirmation, and the audit records no confirmation. Raise both when a second maintainer joins. | LOW (open) | `specs/archived/backend-cicd-pipeline/intent.md` § Open questions; ADR 0047 |
+| CICD-LEAK | Live leak in the first run (2026-10-28): the chat API id (in the `deploy` and PR `diff` job logs, through the mask step's `env` block) and the account id (the `role-to-assume` input in the `diff`, `deploy` and `smoke` jobs) were printed into public Actions logs. The workflows now read both only from repository secrets, `CHAT_API_ID` and `AWS_ACCOUNT_ID` (ADR 0048). The fix is implemented and audit-approved, but it is **not committed, merged or run on GitHub**, so this stays open until the live steps pass: O4 (a zero-count grep of the new `diff`, `deploy` and `smoke` logs) and O6 (the two leaked runs' logs deleted for every attempt; those runs must not be re-run). Both are human-only and not yet run. | LOW (open until O4 and O6) | `specs/archived/ci-log-masking/audit.md` (round 1); `specs/archived/ci-log-masking/tasks.md` O3–O6 |
+| CLM-F2 | The allow-list test matches only the dotted `secrets.NAME` form. `${{ secrets['NAME'] }}`, `${{ toJSON(secrets) }}` and `secrets[` would not be flagged. The workflows use only the dotted form today. Accepted as-is by the human. | LOW (accepted) | `specs/archived/ci-log-masking/audit.md` (round 1, F2) |
+| CLM-F3 | The AC6 test pins the `ecr:CreateRepository` scope but does not assert that the deploy role lacks `bedrock-agentcore:ListAgentRuntimes`. The audit's grep shows it is absent. Accepted as-is by the human. | LOW (accepted) | `specs/archived/ci-log-masking/audit.md` (round 1, F3) |
+| CLM-F4 | The live AC5 check (O4 grep, expect 0 per job and value) and the O6 deletion of the leaked logs for every attempt have not run. Expected, because they are human-only. Accepted as pending by the human. | LOW (open, pending) | `specs/archived/ci-log-masking/audit.md` (round 1, F4) |
 
 Notes:
 - Round 1 findings F1–F6 and F9 were closed in round 2. F7 (actionlint over all five workflows with
@@ -316,11 +334,20 @@ Notes:
 - The live tiers (lint on a PR, the diff, the deploy, the smoke, the protection read-back) are recorded as
   human-only in the execution plan's Validation table and in `tasks.md` O12. The audit did not run them.
 
+Observation (open note, not a reservation): `mypy` and `ruff` write `.mypy_cache` and `.ruff_cache` into the
+repository root, which is also the Lambda image build context, and `.dockerignore` does not exclude them. An
+image hash can therefore change between two synths of the same code. The `ci-log-masking` audit saw this once:
+`tests/test_infra_chat_api.py::test_allowed_origins_context_key_is_ignored` failed in a full run while `mypy`
+and `ruff` ran at the same time, and passed on its own and on the clean rerun (835 passed). This is the
+CAAUTH-F3 class. It can make the infra synth tests flaky, and it is a risk for CI runs that share a workspace.
+The `.dockerignore` speedup is deferred, so the cache is not excluded yet.
+
 ## Contributing features
 
 | Feature | Shipped | What it established |
 |---|---|---|
 | backend-cicd-pipeline | 2026-10-28 | CICD-1..CICD-16: the PR checks (pytest, ruff, mypy, actionlint, `cdk synth`); the same-repo read-only diff; the OIDC deploy from `main` with an account guard; the change-aware, ordered, one-at-a-time deploy; the pinned context and schedule guard; the agent deploy from the root `Dockerfile`; the four-probe smoke; the CI access app with the two scoped execution policies; the protection script; `CODEOWNERS`; public-repository hardening. Implemented and audit-approved with reservations. **Not live**: the O12 a–i human steps have not run. Also amends `chat-api-auth` (CAAUTH-10, ADR 0043), `runtime-deployment` (RD-9), `scheduling` (SC-5) and `feed-api` (FA-6). |
+| ci-log-masking | 2026-10-28 | CICD-11 and CICD-15 amended, invariants 6 and 7, the ECR grant in CICD-10. The chat API id and the account id move from repository variables to repository secrets (`CHAT_API_ID`, `AWS_ACCOUNT_ID`), role ARNs are built from the secret account id plus the fixed role names, and the secrets allow-list is `GITHUB_TOKEN`, `CHAT_API_ID`, `AWS_ACCOUNT_ID` (ADR 0048, amends ADR 0040). Implemented and audit-approved with reservations. **Not yet run on GitHub**: the fix is not committed or merged; O4 and O6 are pending (CICD-LEAK). |
 
 ## Related ADRs
 
@@ -331,6 +358,7 @@ Notes:
 | [0045](../archived/backend-cicd-pipeline/decisions/0045-one-committed-deploy-context-and-a-schedule-guard-that-fails-the-run.md) | The deploy context is one committed file, and a guard fails the run if the schedule is enabled | Accepted |
 | [0046](../archived/backend-cicd-pipeline/decisions/0046-cloudformation-execution-scoped-to-the-ai-radar-resources.md) | CloudFormation executes under two scoped customer-managed policies, not AdministratorAccess | Accepted |
 | [0047](../archived/backend-cicd-pipeline/decisions/0047-repository-protection-as-a-rerunnable-script-that-dry-runs-by-default.md) | Repository protection is applied by a rerunnable script that dry-runs by default | Accepted |
+| [0048](../archived/ci-log-masking/decisions/0048-ci-identifiers-are-repository-secrets-so-logs-mask-them.md) | The chat API id and the account id are repository secrets, so GitHub masks them in every log line (amends ADR 0040) | Accepted |
 
 ADR 0041 (PR diff) was not promoted: the seven-per-feature cap of `harny-adr` was reached. Its rules (the
 same-repo guard, `--method=template`, and no `pull_request_target`) are the requirements CICD-2 and invariant 1.

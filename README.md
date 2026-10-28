@@ -1451,7 +1451,7 @@ account's stacks as you see fit (note the `agentcore destroy` role gotcha above)
 **Status (2026-10-28): implemented and audit-approved with reservations (round 2); not yet live.**
 The workflows, the CI access app, the pinned context file, the protection script and the offline tests
 are in the repository. Nothing is deployed, and nothing has run on GitHub. These steps are human-only
-and have **not** happened: the CI access stack deploy, the repository variables, the CDK re-bootstrap
+and have **not** happened: the CI access stack deploy, the repository secrets, the CDK re-bootstrap
 with the scoped execution policies, the protection script, and the first pipeline run (tasks O12 a–i).
 Until they are done, CI deploys nothing. The open live checks and reservations are in
 [`specs/current/ci-cd.md`](specs/current/ci-cd.md).
@@ -1523,14 +1523,37 @@ this repo) and `<account-id>` with the account.
    uv sync --group infra
    uv run cdk deploy --app "python infra/ci_bootstrap/app.py" CiAccess -c chat_api_id=<chat-api-id>
    ```
-   Record the outputs `DiffRoleArn`, `DeployRoleArn`, `SmokeRoleArn`, `ExecutionPolicyArn1`, `ExecutionPolicyArn2`.
-2. **Set repository variables** (variables, not secrets; ARNs are not credentials):
-   `AWS_DIFF_ROLE_ARN`, `AWS_DEPLOY_ROLE_ARN`, `AWS_SMOKE_ROLE_ARN`, `AWS_ACCOUNT_ID`, and
-   `CHAT_API_ID`. `CHAT_API_ID` is required, not optional: the deploy job masks the chat API id and
-   its URL from this variable, and it stops with an error when the variable is empty, so set it before
-   the first deploy (step 5). If the chat API id ever changes, update this variable as well: a stale
-   value would leave the new URL unmasked in the deploy log. The workflows reference no secret except
-   `GITHUB_TOKEN`.
+   Record the outputs `ExecutionPolicyArn1` and `ExecutionPolicyArn2`. The role ARNs are no longer
+   stored anywhere: the workflows build them from the `AWS_ACCOUNT_ID` secret and the fixed role names
+   (`gha-airadar-diff`, `gha-airadar-deploy`, `gha-airadar-smoke`).
+2. **Set two repository secrets**, `CHAT_API_ID` and `AWS_ACCOUNT_ID`. They are secrets, not variables,
+   because GitHub masks secrets in every log line, including `env` blocks and `with:` inputs that the
+   runner prints before any mask step runs. Neither is a credential (the chat route still needs SigV4,
+   and the account id is already in this repository). Set each value from standard input, never on the
+   command line and never pasted into chat, so it stays out of shell history:
+   ```bash
+   read -rs CHAT_API_ID_VALUE && printf '%s' "$CHAT_API_ID_VALUE" | gh secret set CHAT_API_ID --repo Danii2020/ai-radar && unset CHAT_API_ID_VALUE
+   read -rs AWS_ACCOUNT_ID_VALUE && printf '%s' "$AWS_ACCOUNT_ID_VALUE" | gh secret set AWS_ACCOUNT_ID --repo Danii2020/ai-radar && unset AWS_ACCOUNT_ID_VALUE
+   gh secret list --repo Danii2020/ai-radar
+   ```
+   `gh secret list` shows names and timestamps only. `CHAT_API_ID` is required: the deploy job masks the
+   chat API id and its URL from this secret and stops with an error when it is empty, so set it before
+   the first deploy (step 5). If the chat API id ever changes, update the `CHAT_API_ID` secret as well,
+   or the new URL will not be masked in the deploy log. The workflows reference no secret except
+   `GITHUB_TOKEN`, `CHAT_API_ID` and `AWS_ACCOUNT_ID`.
+
+   **2026-10-28 leak, and the cleanup.** The first live run printed the chat API id (in the `deploy` and
+   PR `diff` job logs, through the mask step's `env` block) and the account id (in the
+   `Configure AWS credentials` step, through the `role-to-assume` input) into public Actions logs. The
+   two secrets fix the workflows, but they do not remove the old logs. After the fixed workflow has run
+   once, delete the logs of the two leaked runs for every attempt with
+   `gh api -X DELETE repos/Danii2020/ai-radar/actions/runs/<leaked-run-id>/logs`, then try to download
+   each attempt's logs and confirm none remain. Do not re-run those two runs: a re-run uses the workflow
+   file from its original commit and would leak again. Once a clean run has passed, delete the five
+   retired repository variables (`AWS_DIFF_ROLE_ARN`, `AWS_DEPLOY_ROLE_ARN`, `AWS_SMOKE_ROLE_ARN`,
+   `AWS_ACCOUNT_ID`, `CHAT_API_ID`) with `gh variable delete <name> --repo Danii2020/ai-radar`. The
+   fix is implemented and audit-approved, but it has **not** been committed, merged or run on GitHub yet, so
+   the cleanup steps are pending (ADR 0048, `specs/archived/ci-log-masking/`).
 3. **Re-bootstrap CDK with the two scoped execution policies** (account-wide: it also governs your own
    `cdk deploy`). Pin the CLI version the pipeline uses (`aws-cdk@2.1132.0`):
    ```bash
@@ -1582,7 +1605,7 @@ every target from `main`.
 | A collaborator's PR or a workflow edit runs attacker code in PR checks | That code reaches only the diff role, which can only assume the read-only lookup role |
 | A merged workflow edit is a privilege path | Ruleset requires a PR and the checks; `CODEOWNERS`; the scoped execution policy; CI never deploys the access stack |
 | Residual: a merged change creates an `AiRadar*` role with broad permissions | Review of the PR diff; a permissions boundary is a recorded follow-up (it changes every role template) |
-| Logs leak ids, URLs or credentials | `::add-mask::` for the chat API id and URL; no env dumps, no shell tracing; masked account id |
+| Logs leak ids, URLs or credentials | The chat API id and the account id are repository secrets, so GitHub masks them in every log line (ADR 0048); `::add-mask::` for the chat URL; no env dumps, no shell tracing. The 2026-10-28 leak is handled in step 2 above |
 | Actions minutes and Bedrock cost abuse | Approval for outside contributors' runs; `timeout-minutes` on every job; PR runs cancel when superseded; deploys only on `main` |
 | Committed secrets | gitleaks in `harny-feedback.yml` (unchanged); secret scanning and push protection |
 | Caches and artifacts readable by fork runs | Only uv dependency caches; no `cdk.out`, config or credential in a cache or artifact |

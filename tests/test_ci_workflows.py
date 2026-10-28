@@ -1,5 +1,6 @@
 """Static checks of the backend CI/CD workflows, `CODEOWNERS` and the ruleset check names
-(spec backend-cicd-pipeline, outcome O8; AC1-AC10, AC14, AC16).
+(spec backend-cicd-pipeline, outcome O8; AC1-AC10, AC14, AC16; spec ci-log-masking, outcome O2;
+AC1-AC4, AC7).
 
 Spec: specs/backend-cicd-pipeline/execution-plan.md § Validation rows AC1, AC2, AC3, AC4, AC5,
 AC6, AC7, AC8, AC9, AC10, AC14 (check-name cross-check) and AC16. These parse the YAML with
@@ -13,10 +14,15 @@ Layout the implementation must follow (the plan leaves names open; chosen by the
 - The `cdk` wrapper is `scripts/ci/cdk.py` (or `python -m scripts.ci.cdk`); the planner, smoke
   runner, schedule guard and origin validation are `scripts.ci.deploy_plan`, `scripts.ci.smoke`,
   `scripts.ci.schedule_guard` and `scripts.ci.deploy_context`.
-- AWS roles are chosen with `${{ vars.* }}` (repository variables), never secrets. The account
-  guard is a step that calls `get-caller-identity`; the account id itself is not pinned here.
+- ci-log-masking: the chat API id and the AWS account id reach the workflows ONLY as the
+  repository secrets `CHAT_API_ID` and `AWS_ACCOUNT_ID` (GitHub masks secrets everywhere in a
+  log; a repository variable in a step's `env` or `with` is printed). Each role ARN is built as
+  `arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/<name>` with the role names imported from
+  `infra/ci_bootstrap/ci_access_stack.py`. The five old variables are retired. The account guard
+  is a step that calls `get-caller-identity`; the account id itself is not pinned here.
 
-RED phase: none of the backend workflows or `CODEOWNERS` exist yet.
+RED phase (ci-log-masking): the workflows still read the five retired `vars.*` names, so the
+secrets, role-ARN, account-guard and deploy-mask tests fail until they are rewritten.
 """
 from __future__ import annotations
 
@@ -115,6 +121,16 @@ def _role_expr(job: dict[str, Any]) -> str:
     steps = _aws_creds_steps(job)
     assert len(steps) == 1
     return str(steps[0]["with"]["role-to-assume"])
+
+
+def _role_names() -> dict[str, str]:
+    """The CI role names exactly as the CI access stack defines them (one source of truth)."""
+    stack = load("ci_bootstrap.ci_access_stack")
+    return {"diff": stack.DIFF_ROLE, "deploy": stack.DEPLOY_ROLE, "smoke": stack.SMOKE_ROLE}
+
+
+def _role_arn_pattern(name: str) -> str:
+    return rf"arn:aws:iam::\$\{{\{{\s*secrets\.AWS_ACCOUNT_ID\s*\}}\}}:role/{re.escape(name)}"
 
 
 def _permissions(node: dict[str, Any]) -> dict[str, str]:
@@ -219,11 +235,10 @@ def test_diff_job_compares_templates_through_the_wrapper_and_the_read_only_looku
     assert all("--method=template" in ln or "--method template" in ln for ln in diffs)
 
 
-def test_diff_job_assumes_a_repository_variable_role_and_is_the_only_job_with_an_id_token():
+def test_diff_job_assumes_the_diff_role_built_from_the_secret_account_and_is_the_only_job_with_an_id_token():
     wf = _wf(PR)
     jobs = _jobs(wf)
-    assert "vars." in _role_expr(jobs["diff"])
-    assert "secrets." not in _role_expr(jobs["diff"])
+    assert re.fullmatch(_role_arn_pattern(_role_names()["diff"]), _role_expr(jobs["diff"]))
     with_token = {i for i, j in jobs.items() if _permissions(j).get("id-token") == "write"}
     assert with_token == {"diff"}
     assert _permissions(wf).get("id-token") != "write"
@@ -262,11 +277,10 @@ def test_deploy_trigger_deploy_starts_only_after_the_checks_and_has_no_approval_
         assert "environment" not in job, job_id
 
 
-def test_deploy_trigger_deploy_job_authenticates_through_oidc_with_a_variable_role():
+def test_deploy_trigger_deploy_job_authenticates_through_oidc_with_the_built_deploy_role():
     jobs = _jobs(_wf(DEPLOY))
     assert _permissions(jobs["deploy"]).get("id-token") == "write"
-    assert "vars." in _role_expr(jobs["deploy"])
-    assert "secrets." not in _role_expr(jobs["deploy"])
+    assert re.fullmatch(_role_arn_pattern(_role_names()["deploy"]), _role_expr(jobs["deploy"]))
 
 
 def test_deploy_trigger_account_check_precedes_the_first_cdk_or_agentcore_step():
@@ -396,15 +410,22 @@ def test_smoke_job_runs_the_smoke_runner_and_never_deploys_or_invokes_agents():
 def test_smoke_job_uses_its_own_oidc_role_distinct_from_the_deploy_role():
     jobs = _jobs(_wf(DEPLOY))
     assert _permissions(jobs["smoke"]).get("id-token") == "write"
-    assert "vars." in _role_expr(jobs["smoke"])
+    assert re.fullmatch(_role_arn_pattern(_role_names()["smoke"]), _role_expr(jobs["smoke"]))
     assert _role_expr(jobs["smoke"]) != _role_expr(jobs["deploy"])
 
 
-def test_no_workflow_references_a_secret_other_than_the_github_token():
+SECRET_ALLOW_LIST = {"GITHUB_TOKEN", "CHAT_API_ID", "AWS_ACCOUNT_ID"}
+
+
+def test_workflows_reference_only_allow_listed_secrets_and_never_inherit():
     for path in _backend_workflows():
         text = path.read_text()
-        assert set(re.findall(r"secrets\.([A-Za-z0-9_]+)", text)) <= {"GITHUB_TOKEN"}, path.name
+        assert set(re.findall(r"secrets\.([A-Za-z0-9_]+)", text)) <= SECRET_ALLOW_LIST, path.name
         assert not re.search(r"secrets:\s*inherit", text), path.name
+
+
+def test_the_reusable_checks_workflow_references_no_secret():
+    assert "secrets." not in CHECKS.read_text()
 
 
 # --- AC10: public logs and caches -------------------------------------------------------------------------------
@@ -677,7 +698,7 @@ def test_dockerfile_detector_flags_a_source_other_than_the_root_dockerfile():
     assert len(problems) == 2 and all("not a copy of the root Dockerfile" in p for p in problems)
 
 
-# --- audit F5: the deploy job's mask fails closed (AC10) ------------------------------------------------------------
+# --- audit F5 / ci-log-masking: the deploy job masks from the secret and fails closed (AC10) ------------------------------------------------------------
 
 SUPPRESSION = re.compile(r"\|\|\s*(?:true\b|:(?=[\s)]|$))|2>\s*/dev/null|2>&-")
 
@@ -686,16 +707,21 @@ def _mask_deploy_problems(wf: dict[str, Any]) -> list[str]:
     steps = _steps(_jobs(wf)["deploy"])
     mask_steps = [i for i, s in enumerate(steps) if "::add-mask::" in s.get("run", "")]
     problems: list[str] = []
-    from_var = [i for i in mask_steps if "vars.CHAT_API_ID" in json.dumps(steps[i])]
-    if not from_var:
-        problems.append("no mask step uses vars.CHAT_API_ID")
-    for i in from_var:
+    from_secret = [i for i in mask_steps if "secrets.CHAT_API_ID" in json.dumps(steps[i])]
+    if not from_secret:
+        problems.append("no mask step uses secrets.CHAT_API_ID")
+    for i in from_secret:
         run = steps[i]["run"]
-        holders = [k for k, v in (steps[i].get("env") or {}).items() if "vars.CHAT_API_ID" in str(v)]
-        direct = re.search(r"add-mask::\$\{\{\s*vars\.CHAT_API_ID\s*\}\}", run)
+        holders = [k for k, v in (steps[i].get("env") or {}).items() if "secrets.CHAT_API_ID" in str(v)]
+        direct = re.search(r"add-mask::\$\{\{\s*secrets\.CHAT_API_ID\s*\}\}", run)
         via_env = any(re.search(rf"add-mask::\"?\$\{{?{k}\b", run) for k in holders)
         if not (direct or via_env):
-            problems.append("vars.CHAT_API_ID is not what the mask step emits `::add-mask::` for")
+            problems.append("secrets.CHAT_API_ID is not what the mask step emits `::add-mask::` for")
+        stops_on_empty = any(
+            re.search(rf"-z\s+\"?\$\{{?{k}\b", run) and re.search(r"exit\s+[1-9]", run) for k in holders
+        )
+        if not stops_on_empty:
+            problems.append("the mask step does not stop (exit non-zero) when the secret is empty")
     for i in mask_steps:
         for line in _logical_lines(steps[i]["run"]):
             if SUPPRESSION.search(line):
@@ -703,8 +729,8 @@ def _mask_deploy_problems(wf: dict[str, Any]) -> list[str]:
     first_cdk_deploy = next(
         (i for i, s in enumerate(steps) if re.search(WRAPPER + r"\s+deploy\b", s.get("run", ""))), None
     )
-    if first_cdk_deploy is not None and (not from_var or min(from_var) > first_cdk_deploy):
-        problems.append("the vars.CHAT_API_ID mask does not precede every cdk deploy")
+    if first_cdk_deploy is not None and (not from_secret or min(from_secret) > first_cdk_deploy):
+        problems.append("the secrets.CHAT_API_ID mask does not precede every cdk deploy")
     return problems
 
 
@@ -715,8 +741,9 @@ def _fixture_mask_workflow() -> dict[str, Any]:
                 "steps": [
                     {
                         "name": "Mask",
-                        "env": {"CHAT_API_ID": "${{ vars.CHAT_API_ID }}"},
+                        "env": {"CHAT_API_ID": "${{ secrets.CHAT_API_ID }}"},
                         "run": (
+                            'if [ -z "$CHAT_API_ID" ]; then exit 1; fi\n'
                             'echo "::add-mask::$CHAT_API_ID"\n'
                             "url=$(aws cloudformation describe-stacks --stack-name AiRadarChatApi \\\n"
                             "  --query x --output text)\n"
@@ -730,7 +757,7 @@ def _fixture_mask_workflow() -> dict[str, Any]:
     }
 
 
-def test_mask_deploy_job_masks_from_the_repository_variable_and_fails_closed():
+def test_mask_deploy_job_masks_from_the_secret_and_fails_closed():
     assert _mask_deploy_problems(_wf(DEPLOY)) == []
 
 
@@ -746,12 +773,19 @@ def test_mask_deploy_detector_flags_a_swallowed_read_error():
         assert any("swallows" in p for p in _mask_deploy_problems(wf)), suffix
 
 
-def test_mask_deploy_detector_flags_a_mask_that_does_not_use_the_variable():
+def test_mask_deploy_detector_flags_a_mask_that_does_not_use_the_secret():
     wf = _fixture_mask_workflow()
     step = wf["jobs"]["deploy"]["steps"][0]
     del step["env"]
     step["run"] = step["run"].replace('echo "::add-mask::$CHAT_API_ID"\n', "")
-    assert any("vars.CHAT_API_ID" in p for p in _mask_deploy_problems(wf))
+    assert any("secrets.CHAT_API_ID" in p for p in _mask_deploy_problems(wf))
+
+
+def test_mask_deploy_detector_flags_a_mask_that_does_not_stop_on_an_empty_secret():
+    wf = _fixture_mask_workflow()
+    step = wf["jobs"]["deploy"]["steps"][0]
+    step["run"] = step["run"].replace('if [ -z "$CHAT_API_ID" ]; then exit 1; fi\n', "")
+    assert any("empty" in p for p in _mask_deploy_problems(wf))
 
 
 def test_mask_deploy_detector_flags_a_mask_placed_after_the_deploy():
@@ -759,3 +793,133 @@ def test_mask_deploy_detector_flags_a_mask_placed_after_the_deploy():
     steps = wf["jobs"]["deploy"]["steps"]
     steps.append(steps.pop(0))
     assert any("precede" in p for p in _mask_deploy_problems(wf))
+
+
+# --- ci-log-masking: two identifiers live only in repository secrets (AC1-AC4, AC7) -----------------------
+#
+# GitHub prints a step's `env` and `with` before any `::add-mask::` runs, and prints the
+# `role-to-assume` input; a repository VARIABLE is shown in clear, a SECRET is masked everywhere.
+# So the chat API id and the AWS account id (and any role ARN, which embeds the account id) may
+# reach a step only through `secrets.*`.
+
+RETIRED_VARIABLES = (
+    "CHAT_API_ID",
+    "AWS_ACCOUNT_ID",
+    "AWS_DIFF_ROLE_ARN",
+    "AWS_DEPLOY_ROLE_ARN",
+    "AWS_SMOKE_ROLE_ARN",
+)
+EXPRESSION = re.compile(r"\$\{\{(.*?)\}\}", re.DOTALL)
+IDENTIFIER = re.compile(r"CHAT_API_ID|AWS_ACCOUNT_ID|_ROLE_ARN")
+
+
+def _step_sections(wf: dict[str, Any]) -> list[tuple[str, str]]:
+    """(location, text) for every step's env, with and run in the workflow."""
+    out: list[tuple[str, str]] = []
+    for job_id, job in _jobs(wf).items():
+        for i, step in enumerate(_steps(job)):
+            for section in ("env", "with", "run"):
+                if section in step:
+                    out.append((f"{job_id}[{i}].{section}", json.dumps(step[section])))
+    return out
+
+
+def _identifier_problems(wf: dict[str, Any]) -> list[str]:
+    problems: list[str] = []
+    for where, text in _step_sections(wf):
+        for expr in EXPRESSION.findall(text.replace('\\"', '"')):
+            if not IDENTIFIER.search(expr):
+                continue
+            if "vars." in expr or not re.search(r"secrets\.(CHAT_API_ID|AWS_ACCOUNT_ID)\b", expr):
+                problems.append(f"{where}: `{expr.strip()}` does not come from the two secrets")
+    return problems
+
+
+def test_no_workflow_references_the_retired_repository_variables():
+    pattern = re.compile(r"\bvars\.(" + "|".join(RETIRED_VARIABLES) + r")\b")
+    for path in _backend_workflows():
+        for expr in EXPRESSION.findall(path.read_text()):
+            assert not pattern.search(expr), f"{path.name}: {expr.strip()}"
+
+
+def test_ids_reach_steps_only_through_secrets():
+    for path in _backend_workflows():
+        assert _identifier_problems(_wf(path)) == [], path.name
+
+
+def test_ids_detector_accepts_secret_references_in_env_with_and_run():
+    wf = {"jobs": {"j": {"steps": [{
+        "env": {"CHAT_API_ID": "${{ secrets.CHAT_API_ID }}"},
+        "with": {"role-to-assume": "arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/example"},
+        "run": "echo ${{ github.run_id }}",
+    }]}}}
+    assert _identifier_problems(wf) == []
+
+
+def test_ids_detector_flags_a_variable_chat_api_id_in_env():
+    wf = {"jobs": {"j": {"steps": [{"env": {"CHAT_API_ID": "${{ vars.CHAT_API_ID }}"}, "run": "true"}]}}}
+    assert len(_identifier_problems(wf)) == 1
+
+
+def test_ids_detector_flags_a_variable_role_arn_in_with():
+    wf = {"jobs": {"j": {"steps": [{"with": {"role-to-assume": "${{ vars.AWS_DEPLOY_ROLE_ARN }}"}}]}}}
+    assert len(_identifier_problems(wf)) == 1
+
+
+def test_ids_detector_flags_a_variable_account_id_in_run():
+    wf = {"jobs": {"j": {"steps": [{"run": "echo ${{ vars.AWS_ACCOUNT_ID }}"}]}}}
+    assert len(_identifier_problems(wf)) == 1
+
+
+def test_role_arns_are_built_from_the_secret_account_and_the_stack_role_names():
+    names = _role_names()
+    assert len(set(names.values())) == 3
+    pr_jobs, deploy_jobs = _jobs(_wf(PR)), _jobs(_wf(DEPLOY))
+    assumed = {
+        "diff": _role_expr(pr_jobs["diff"]),
+        "deploy": _role_expr(deploy_jobs["deploy"]),
+        "smoke": _role_expr(deploy_jobs["smoke"]),
+    }
+    for kind, expr in assumed.items():
+        assert re.fullmatch(_role_arn_pattern(names[kind]), expr), (kind, expr)
+    assert len(set(assumed.values())) == 3
+    for path in _backend_workflows():
+        for job in _jobs(_wf(path)).values():
+            for step in _aws_creds_steps(job):
+                assert str(step["with"].get("mask-aws-account-id")).lower() == "true", path.name
+
+
+def _account_guard_step() -> dict[str, Any]:
+    steps = [s for s in _steps(_jobs(_wf(DEPLOY))["deploy"]) if "get-caller-identity" in s.get("run", "")]
+    assert len(steps) == 1
+    return steps[0]
+
+
+def _run_guard(step: dict[str, Any], expected: str, actual: str) -> int:
+    """Run the guard step's script with the secret set to `expected` and the caller as `actual`."""
+    holders = [k for k, v in (step.get("env") or {}).items() if "secrets.AWS_ACCOUNT_ID" in str(v)]
+    run = re.sub(r"\$\{\{\s*secrets\.AWS_ACCOUNT_ID\s*\}\}", expected, step["run"])
+    with tempfile.TemporaryDirectory() as tmp:
+        shim = Path(tmp) / "aws"
+        shim.write_text(f'#!/bin/sh\necho "{actual}"\n')
+        shim.chmod(0o755)
+        env = {"PATH": f"{tmp}:/usr/bin:/bin", **dict.fromkeys(holders, expected)}
+        done = subprocess.run(
+            ["bash", "-c", run], cwd=tmp, env=env, capture_output=True, timeout=30, check=False
+        )
+    return done.returncode
+
+
+def test_account_guard_compares_with_the_secret_and_fails_on_empty():
+    step = _account_guard_step()
+    assert "secrets.AWS_ACCOUNT_ID" in json.dumps(step)
+    assert "vars." not in json.dumps(step)
+    fake_a, fake_b = "1" * 12, "2" * 12
+    assert _run_guard(step, expected=fake_a, actual=fake_a) == 0
+    assert _run_guard(step, expected=fake_a, actual=fake_b) != 0
+    assert _run_guard(step, expected="", actual=fake_a) != 0
+
+
+def test_smoke_job_does_not_read_the_chat_api_id_secret():
+    smoke = _jobs(_wf(DEPLOY))["smoke"]
+    assert "secrets.CHAT_API_ID" not in json.dumps(smoke)
