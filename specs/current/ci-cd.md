@@ -5,11 +5,11 @@
 > `scripts/ci/**` (the deploy context and its validation, the `cdk` wrapper, the schedule guard, the deploy
 > planner, the agent config template and renderer, the smoke runner, the repository protection script),
 > `infra/ci_bootstrap/**` (the CI access CDK app), `tests/test_ci_*.py`, `tests/test_infra_ci_*.py`,
-> `tests/fixtures/cfn/*`, `tests/test_readme_runbooks.py`, and the README "Backend CI/CD" runbook.
+> `tests/fixtures/cfn/*`, `tests/test_readme_runbooks.py`, and the `docs/runbooks.md` "CI/CD one-time bootstrap" runbook.
 >
-> **Status: implemented and audit-approved with reservations (round 2, 2026-10-28). NOT LIVE.** Nothing is
-> deployed by CI, and the workflows have not run on GitHub. Every "live" statement below is pending the
-> human-only steps O12 a–i, and none of them has run. The offline checks below are verified.
+> **Status: implemented and audit-approved with reservations (round 2, 2026-10-28). LIVE.** `gh run list` showed two
+> successful `backend deploy` runs on `main` on 2026-10-28, and the repository secrets and the `main-protection` ruleset
+> exist. The steps O12 a–i were not individually re-verified, and the offline checks below are the audited evidence.
 > The `ci-log-masking` fix (2026-10-28, ADR 0048) is implemented and audit-approved. It is **not committed, merged or run on GitHub**, so its live checks O4 and O6 are pending (CICD-LEAK).
 
 ## Purpose
