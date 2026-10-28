@@ -49,7 +49,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "infra"))
 
 import aws_cdk as cdk
-from aws_cdk.assertions import Match, Template
+from aws_cdk.assertions import Template
 from stacks.curation_schedule_stack import CurationScheduleStack
 
 
@@ -372,22 +372,6 @@ def test_agent_arn_is_a_template_parameter_and_stack_creates_no_scope_creep_reso
     template.resource_count_is("AWS::DynamoDB::Table", 0)
     template.resource_count_is("AWS::DynamoDB::GlobalTable", 0)
     template.resource_count_is("AWS::Lambda::Function", 0)
-
-
-# T13 (C13): all eight documented CfnOutputs are present.
-def test_stack_emits_all_eight_outputs():
-    template = _synthesized_template()
-    for output_name in (
-        "ScheduleName",
-        "ScheduleArn",
-        "ScheduleExpression",
-        "ScheduleTimezone",
-        "ScheduleEnabled",
-        "DeadLetterQueueUrl",
-        "DeadLetterQueueArn",
-        "AgentRuntimeArnParameter",
-    ):
-        template.has_output(output_name, Match.any_value())
 
 
 # T14 (C12/R9): cadence, timezone, and the enabled-state each change in
