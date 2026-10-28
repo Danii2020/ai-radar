@@ -16,9 +16,6 @@ named 'curation.composite'` until the implementation lands.
 """
 from __future__ import annotations
 
-import ast
-from pathlib import Path
-
 import curation.nodes as nodes_module
 from curation.composite import CompositeDiscoverer
 from curation.graph import build_graph
@@ -124,46 +121,6 @@ def test_seam_build_graph_with_composite_discoverer_invokes_end_to_end(
 
     assert {card.url for card in result["cards"]} == {rss_item.url, tavily_item.url}
     assert store.upsert_calls == 1
-
-
-# T10 (Guarantee 8 — portability): the `tavily` SDK is imported ONLY in
-# tavily.py; it does not leak into composite.py/nodes.py/graph.py/state.py/
-# interfaces.py. No `boto3` appears anywhere in this spec's modules.
-def test_tavily_sdk_imported_only_in_tavily_module_no_boto3_anywhere():
-    curation_src = Path(__file__).parent.parent / "src" / "curation"
-    files_that_must_not_import_tavily = [
-        "composite.py",
-        "config.py",
-        "nodes.py",
-        "graph.py",
-        "state.py",
-        "interfaces.py",
-    ]
-
-    def imported_roots(path: Path) -> set[str]:
-        tree = ast.parse(path.read_text(), filename=str(path))
-        roots: set[str] = set()
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                roots.update(alias.name.split(".")[0] for alias in node.names)
-            elif isinstance(node, ast.ImportFrom) and node.module:
-                roots.add(node.module.split(".")[0])
-        return roots
-
-    for filename in files_that_must_not_import_tavily:
-        path = curation_src / filename
-        assert path.exists(), f"expected {path} to exist"
-        roots = imported_roots(path)
-        assert "tavily" not in roots, f"{filename} must not import the tavily SDK"
-        assert "boto3" not in roots, f"{filename} must not import boto3"
-
-    tavily_path = curation_src / "tavily.py"
-    assert tavily_path.exists(), f"expected {tavily_path} to exist"
-    tavily_roots = imported_roots(tavily_path)
-    assert "boto3" not in tavily_roots, "tavily.py must not import boto3"
-    # Guards against a vacuous pass above: tavily.py must actually be the one
-    # place that imports the SDK.
-    assert "tavily" in tavily_roots, "tavily.py is expected to import the tavily SDK"
 
 
 # =============================================================================

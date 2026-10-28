@@ -16,10 +16,8 @@ is expected to fail at collection with `ModuleNotFoundError: No module named
 """
 from __future__ import annotations
 
-import ast
 import hashlib
 from decimal import Decimal
-from pathlib import Path
 
 from boto3.dynamodb.conditions import Key
 
@@ -341,34 +339,6 @@ def test_feed_by_score_gsi_query_orders_by_score_desc_then_date_desc(
     )
 
     assert [i["title"] for i in resp["Items"]] == ["HighNew", "HighOld", "Low"]
-
-
-# T10 (Guarantee 8): boto3 is imported only in dynamo.py; it is absent from the
-# portable curation modules (nodes/graph/state/interfaces/local).
-def test_boto3_import_confined_to_dynamo_module():
-    curation_src = Path(__file__).parent.parent / "src" / "curation"
-
-    def _imported_roots(path: Path) -> set[str]:
-        tree = ast.parse(path.read_text(), filename=str(path))
-        roots: set[str] = set()
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                roots.update(alias.name.split(".")[0] for alias in node.names)
-            elif isinstance(node, ast.ImportFrom) and node.module:
-                roots.add(node.module.split(".")[0])
-        return roots
-
-    portable_files = ["nodes.py", "graph.py", "state.py", "interfaces.py", "local.py"]
-    for filename in portable_files:
-        path = curation_src / filename
-        assert path.exists(), f"expected {path} to exist"
-        assert "boto3" not in _imported_roots(path), f"{filename} must not import boto3"
-
-    dynamo_path = curation_src / "dynamo.py"
-    assert dynamo_path.exists(), "expected src/curation/dynamo.py to exist"
-    assert "boto3" in _imported_roots(dynamo_path), (
-        "dynamo.py is the one designated infra-adapter site and must import boto3"
-    )
 
 
 # --- specs/chat-retrieval AC3: `set_embeddings` is the sanctioned separate

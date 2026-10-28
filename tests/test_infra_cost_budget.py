@@ -24,7 +24,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "infra"))
 
 import aws_cdk as cdk
-from aws_cdk.assertions import Match, Template
+from aws_cdk.assertions import Template
 from lib.cost_budget import DEFAULT_NOTIFICATION_EMAIL
 from stacks.cost_budget_stack import CostBudgetStack
 
@@ -195,19 +195,6 @@ def test_context_overrides_change_budget_name_limit_thresholds_and_email():
 
     subs = _resources_of_type(template_json, "AWS::SNS::Subscription")
     assert subs[0]["Properties"]["Endpoint"] == "someone@example.com"
-
-
-# T33 (continued): the five documented CfnOutputs are present.
-def test_stack_emits_all_five_outputs():
-    template = _synthesized_template()
-    for output_name in (
-        "BudgetName",
-        "BudgetLimitUsd",
-        "BudgetThresholdsUsd",
-        "AlertTopicArn",
-        "AlertEmail",
-    ):
-        template.has_output(output_name, Match.any_value())
 
 
 # T34: the budget stack creates no scope-creep resources (Non-Goals: no

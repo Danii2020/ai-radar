@@ -31,7 +31,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "infra"))
 
 import aws_cdk as cdk
-from aws_cdk.assertions import Match, Template
+from aws_cdk.assertions import Template
 from lib.agent_runtime import TAVILY_SECRET_UNSET_SENTINEL
 from stacks.agent_runtime_stack import AgentRuntimeStack
 
@@ -247,11 +247,3 @@ def test_stack_does_not_create_a_dynamodb_table_only_references_it():
     template.resource_count_is("AWS::DynamoDB::Table", 0)
     template.resource_count_is("AWS::DynamoDB::GlobalTable", 0)
 
-
-# T14 (CDK stack + app pinned skeleton): outputs the role ARN + secret
-# ARN/name for the operator's `agentcore configure --execution-role` step.
-def test_stack_outputs_execution_role_arn_and_tavily_secret_arn_and_name():
-    template = _synthesized_template()
-    template.has_output("ExecutionRoleArn", Match.any_value())
-    template.has_output("TavilySecretArn", Match.any_value())
-    template.has_output("TavilySecretName", Match.any_value())

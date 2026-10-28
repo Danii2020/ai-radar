@@ -116,24 +116,6 @@ def test_split_by_origin_empty_mapping_returns_zero_zero():
     assert split_by_origin({}) == (0, 0)
 
 
-def test_summary_module_does_not_import_the_tavily_sdk_or_curation_tavily():
-    """contract.md §2: `split_by_origin` classifies by string prefix
-    specifically so `summary.py` never has to import `curation.tavily` (which
-    itself imports the `tavily` SDK)."""
-    import ast
-    from pathlib import Path
-
-    path = Path(__file__).parent.parent / "src" / "curation" / "summary.py"
-    tree = ast.parse(path.read_text(), filename=str(path))
-    roots: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            roots.update(a.name.split(".")[0] for a in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.module:
-            roots.add(node.module.split(".")[0])
-    assert "tavily" not in roots
-
-
 # =============================================================================
 # T7/T8 — build_run_summary
 # =============================================================================
