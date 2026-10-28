@@ -20,13 +20,36 @@ a version number. Each entry links to its archived SDD spec
 Nothing pending beyond `apps/web/specs/archived/web-feed-ui/` (Phase 2 spec 02, the Next.js
 frontend — still in progress, not yet archived).
 
+## 2026-10-28 — ci-log-masking (not yet run on GitHub)
+
+Specs: `specs/archived/ci-log-masking/`. Audit: APPROVED WITH RESERVATIONS (round 1, 2026-10-28), with all
+reservations accepted by the human. Decision: ADR 0048 (amends ADR 0040). **Not live yet:** the fix is
+implemented and audit-approved, but it is not committed, merged or run on GitHub. The human-only steps
+O4 (grep of the new logs) and O6 (deletion of the leaked runs' logs) are pending, and O5 (deleting the
+retired variables) waits for one clean run.
+
+### Fixed
+- The first live run (2026-10-28) printed the chat API id (deploy and PR diff job logs, through the mask
+  step's `env` block) and the account id (the `role-to-assume` input) into public Actions logs. The
+  workflows now read those two values only from the repository secrets `CHAT_API_ID` and
+  `AWS_ACCOUNT_ID`, which GitHub masks in every log line. The role ARNs are built from the secret account
+  id and the fixed role names (`gha-airadar-diff`, `gha-airadar-deploy`, `gha-airadar-smoke`).
+- The deploy role may call `ecr:CreateRepository`, scoped to the two agent repositories. The first live
+  agent deploy failed without it, because the locked toolkit's `deploy_to_ecr` always calls
+  `create_repository`.
+
+### Changed
+- The five repository variables (`AWS_DIFF_ROLE_ARN`, `AWS_DEPLOY_ROLE_ARN`, `AWS_SMOKE_ROLE_ARN`,
+  `AWS_ACCOUNT_ID`, `CHAT_API_ID`) are retired. The README bootstrap sets the two secrets with `gh secret set`.
+- The secrets allow-list is `GITHUB_TOKEN`, `CHAT_API_ID` and `AWS_ACCOUNT_ID` (`ci-cd` CICD-15).
+
 ## 2026-10-28 — backend-cicd-pipeline (not live yet)
 
 Specs: `specs/archived/backend-cicd-pipeline/`. Audit: APPROVED WITH RESERVATIONS (round 2, 2026-10-28;
 round 1 was REJECTED and its blockers were repaired). The suite passes (823 tests), ruff and mypy are
 clean, and actionlint with shellcheck is clean on the five workflows (reused evidence). **Nothing is
 live.** Nothing is deployed, and the workflows have not run on GitHub. The CI access stack deploy, the
-five repository variables, the CDK re-bootstrap with the two scoped execution policies, the repository
+two repository secrets (`CHAT_API_ID`, `AWS_ACCOUNT_ID`; see the ci-log-masking entry), the CDK re-bootstrap with the two scoped execution policies, the repository
 protection script and the first pipeline run are human-only steps (tasks O12 a–i) and have not happened.
 Decisions: ADRs 0040 and 0042–0047 (ADR 0041 was not promoted, because of the seven-per-feature cap).
 
@@ -57,7 +80,7 @@ Decisions: ADRs 0040 and 0042–0047 (ADR 0041 was not promoted, because of the 
   if the chat API id changes (audit F11).
 
 ### Pending (human-only, not run)
-- O12 a–i: the CI access stack deploy and variables, the re-bootstrap with the two-ARN execution policies
+- O12 a–i: the CI access stack deploy and the two secrets, the re-bootstrap with the two-ARN execution policies
   (rollback to `AdministratorAccess` is documented), the protection script in dry run and `--apply`, the
   same-repo and fork PR checks, the first watched deploy, the signed 403/200 checks, the docs-only no-op
   check, the CloudTrail and CloudFormation allow-list confirmation, and the Vercel origin by PR.

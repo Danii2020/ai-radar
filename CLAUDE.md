@@ -109,11 +109,12 @@ shipped as the `apps/web` specs `web-chat-ui` and `web-chat-ui-polish` (2026-10-
 role. Once live, a merge to `main` will deploy only the changed targets (`scripts/ci/`), through GitHub OIDC roles
 (no AWS key in GitHub), and then run a smoke check. CloudFormation executes under two scoped policies from the
 separate CI access app `infra/ci_bootstrap/`, which CI never deploys. **Human-only and not yet run (O12 a–i):**
-the CI access stack deploy, the five repository variables, the CDK re-bootstrap with the scoped policies,
+the CI access stack deploy, the two repository secrets (`CHAT_API_ID`, `AWS_ACCOUNT_ID`; the role ARNs are
+built from them, ADR 0048), the CDK re-bootstrap with the scoped policies,
 the repository protection script, and the first pipeline run. Until those happen, nothing is deployed by CI
 and the workflows have not run on GitHub. The repository is public, so no control relies on hiding a
 workflow, role or account id. Runbook: "Backend CI/CD" in [`README.md`](README.md). The `ci-cd` capability
-is `specs/current/ci-cd.md`; ADRs 0040 and 0042–0047 record the decisions.
+is `specs/current/ci-cd.md`; ADRs 0040, 0042–0047 and 0048 record the decisions.
 
 ## SDD harness: two roots
 
@@ -129,7 +130,7 @@ several stacks in one install:
   `apps/web/`** so `CLAUDE_PROJECT_DIR` points there and its hooks, agents,
   and skills load.
 
-ADR numbers are monotonic across both roots (used through 0047 as of 2026-10-28, with 0041 never
+ADR numbers are monotonic across both roots (used through 0048 as of 2026-10-28, with 0041 never
 promoted; check `specs/current/_index.md` for the next free number). When you change
 `.sdd/feedback/run-feedback.mjs` or a shared role or skill in one root, make
 the same change in the other.
