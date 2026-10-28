@@ -42,14 +42,14 @@ jobs:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
-          role-to-assume: ${{ vars.AWS_DIFF_ROLE_ARN }}
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gha-airadar-diff
           aws-region: us-east-1
           role-session-name: pr-diff-${{ github.run_id }}
           mask-aws-account-id: true
       - name: Mask the chat API id and URL
         shell: bash
         env:
-          CHAT_API_ID: ${{ vars.CHAT_API_ID }}
+          CHAT_API_ID: ${{ secrets.CHAT_API_ID }}
         run: |
           if [ -n "$CHAT_API_ID" ]; then
             echo "::add-mask::$CHAT_API_ID"
@@ -58,7 +58,7 @@ jobs:
       - name: cdk diff of all seven stacks (template comparison, read-only)
         shell: bash
         env:
-          CHAT_API_ID: ${{ vars.CHAT_API_ID }}
+          CHAT_API_ID: ${{ secrets.CHAT_API_ID }}
         run: |
           {
             echo "## Stack diff (read-only template comparison against the live account)"

@@ -85,14 +85,14 @@ jobs:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
-          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gha-airadar-deploy
           aws-region: us-east-1
           role-session-name: deploy-${{ github.run_id }}
           mask-aws-account-id: true
       - name: Stop unless the caller is the expected account
         shell: bash
         env:
-          EXPECTED_ACCOUNT: ${{ vars.AWS_ACCOUNT_ID }}
+          EXPECTED_ACCOUNT: ${{ secrets.AWS_ACCOUNT_ID }}
         run: |
           actual=$(aws sts get-caller-identity --query Account --output text)
           if [ -z "$EXPECTED_ACCOUNT" ] || [ "$actual" != "$EXPECTED_ACCOUNT" ]; then
@@ -102,10 +102,10 @@ jobs:
       - name: Mask the chat API id and URL
         shell: bash
         env:
-          CHAT_API_ID: ${{ vars.CHAT_API_ID }}
+          CHAT_API_ID: ${{ secrets.CHAT_API_ID }}
         run: |
           if [ -z "$CHAT_API_ID" ]; then
-            echo "vars.CHAT_API_ID is not set; stopping before any deploy"
+            echo "the CHAT_API_ID secret is not set; stopping before any deploy"
             exit 1
           fi
           echo "::add-mask::$CHAT_API_ID"
@@ -188,7 +188,7 @@ jobs:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
-          role-to-assume: ${{ vars.AWS_SMOKE_ROLE_ARN }}
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gha-airadar-smoke
           aws-region: us-east-1
           role-session-name: smoke-${{ github.run_id }}
           mask-aws-account-id: true
