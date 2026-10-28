@@ -1,0 +1,7 @@
+# Review requests for the files that decide what CI can do (spec backend-cicd-pipeline, AC16).
+# Code-owner review is not enforced while there is one maintainer (see the README runbook).
+/.github/workflows/ @Danii2020
+/.github/CODEOWNERS @Danii2020
+/scripts/ci/ @Danii2020
+/infra/ci_bootstrap/ @Danii2020
+/scripts/ci/deploy_context.json @Danii2020

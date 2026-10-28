@@ -74,3 +74,114 @@ def test_signature_is_deterministic_for_a_fixed_clock_and_changes_with_the_body(
 
 def test_the_secret_key_never_appears_in_the_returned_headers(smoke):
     assert all(FAKE_SECRET not in v for v in _headers(smoke).values())
+
+
+# --- opt-in exit-code mode (backend-cicd-pipeline, outcome O4, AC7) -----------------------------
+#
+# Spec: specs/backend-cicd-pipeline/execution-plan.md § Validation row AC7 (opt-in option).
+# New options on `main()`: `--expect-status N` makes a different HTTP status exit 1, and
+# `--expect-keys a,b` makes a 2xx JSON body without every listed top-level key exit 1. Without
+# either option `main()` keeps returning 0 after printing (the chat-api-auth runbook relies on it).
+# RED phase: argparse rejects both options today.
+
+import io
+import json
+import urllib.error
+
+
+class _FakeResponse:
+    def __init__(self, status: int, body: bytes) -> None:
+        self.status = status
+        self._body = body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def read(self) -> bytes:
+        return self._body
+
+
+class _FakeCreds:
+    def get_frozen_credentials(self):
+        class _Frozen:
+            access_key = "AKIDEXAMPLE"
+            secret_key = FAKE_SECRET
+            token = None
+
+        return _Frozen()
+
+
+class _FakeSession:
+    def __init__(self, *args, **kwargs) -> None:
+        pass
+
+    def client(self, *args, **kwargs):
+        raise RuntimeError("no network in tests")  # `_identity` falls back to identity=unknown
+
+    def get_credentials(self):
+        return _FakeCreds()
+
+
+@pytest.fixture
+def run_main(smoke, monkeypatch, capsys):
+    """Call `main(argv)` against a stubbed `urlopen` answering (status, body)."""
+
+    def _run(argv: list[str], status: int, body: dict | str):
+        text = body if isinstance(body, str) else json.dumps(body)
+        monkeypatch.setenv("CHAT_API_URL", "https://abc123.execute-api.us-east-1.amazonaws.com")
+        monkeypatch.setattr(smoke.boto3, "Session", _FakeSession)
+
+        def fake_urlopen(request, timeout=None):
+            if status >= 400:
+                raise urllib.error.HTTPError(
+                    request.full_url, status, "err", {}, io.BytesIO(text.encode())  # type: ignore[arg-type]
+                )
+            return _FakeResponse(status, text.encode())
+
+        monkeypatch.setattr(smoke.urllib.request, "urlopen", fake_urlopen)
+        rc = smoke.main(argv)
+        return rc, capsys.readouterr().out
+
+    return _run
+
+
+def test_default_mode_exits_zero_even_when_the_api_answers_403(run_main):
+    rc, out = run_main(["--unsigned"], 403, {"message": "Forbidden"})
+    assert rc == 0
+    assert "status=403" in out
+
+
+def test_expect_status_matching_exits_zero(run_main):
+    rc, _ = run_main(["--expect-status", "403", "--unsigned"], 403, {"message": "Forbidden"})
+    assert rc == 0
+
+
+def test_expect_status_mismatch_exits_nonzero_and_still_prints_the_status(run_main):
+    rc, out = run_main(["--expect-status", "200"], 403, {"message": "Forbidden"})
+    assert rc == 1
+    assert "status=403" in out
+
+
+def test_expect_keys_present_exits_zero(run_main):
+    rc, _ = run_main(["--expect-status", "200", "--expect-keys", "answer,sources"], 200,
+                     {"answer": "hi", "sources": []})
+    assert rc == 0
+
+
+def test_expect_keys_missing_exits_nonzero_for_the_curation_ack_shape(run_main):
+    rc, _ = run_main(["--expect-status", "200", "--expect-keys", "answer,sources"], 200,
+                     {"status": "accepted", "run_id": "r-1"})
+    assert rc == 1
+
+
+def test_expect_keys_with_a_non_json_body_exits_nonzero(run_main):
+    rc, _ = run_main(["--expect-keys", "answer"], 200, "<html>nope</html>")
+    assert rc == 1
+
+
+def test_expect_mode_never_prints_the_secret_key(run_main):
+    _, out = run_main(["--expect-status", "200"], 200, {"answer": "hi", "sources": []})
+    assert FAKE_SECRET not in out

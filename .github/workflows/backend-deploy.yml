@@ -1,0 +1,207 @@
+# Backend deploy on merge to main (spec backend-cicd-pipeline, AC3-AC7). No approval gate and no
+# GitHub environment: safety comes from the required PR checks, one-at-a-time concurrency,
+# the schedule guard and the scoped CloudFormation execution policy.
+name: backend deploy
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      deploy_all:
+        description: Deploy every target (recovery or rollback re-run)
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: backend-deploy
+  cancel-in-progress: false
+jobs:
+  checks:
+    uses: ./.github/workflows/backend-checks.yml
+  plan:
+    needs: checks
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      targets: ${{ steps.plan.outputs.targets }}
+      has_targets: ${{ steps.plan.outputs.has_targets }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Compute the deploy targets
+        id: plan
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_ALL: ${{ inputs.deploy_all }}
+        run: |
+          # The base is the head of the last SUCCESSFUL deploy run, not the parent commit.
+          last=$(gh run list --workflow backend-deploy.yml --branch main --status success \
+            --limit 1 --json headSha --jq '.[0].headSha // ""')
+          args=(--last-success "$last")
+          if [ "$DEPLOY_ALL" = "true" ]; then args=(--all); fi
+          python3 -m scripts.ci.deploy_plan "${args[@]}"
+      - name: Report an empty plan
+        if: steps.plan.outputs.has_targets != 'true'
+        run: |
+          echo "Nothing to deploy: no deploy-relevant path changed since the last successful deploy." >> "$GITHUB_STEP_SUMMARY"
+  deploy:
+    needs: [checks, plan]
+    if: needs.plan.outputs.has_targets == 'true'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          version: "0.7.17"
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Install Python dependencies
+        run: uv sync --frozen --all-groups
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+      - name: Install the CDK CLI
+        run: npm install --global aws-cdk@2.1132.0
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+          role-session-name: deploy-${{ github.run_id }}
+          mask-aws-account-id: true
+      - name: Stop unless the caller is the expected account
+        shell: bash
+        env:
+          EXPECTED_ACCOUNT: ${{ vars.AWS_ACCOUNT_ID }}
+        run: |
+          actual=$(aws sts get-caller-identity --query Account --output text)
+          if [ -z "$EXPECTED_ACCOUNT" ] || [ "$actual" != "$EXPECTED_ACCOUNT" ]; then
+            echo "caller account does not match the expected account; stopping"
+            exit 1
+          fi
+      - name: Mask the chat API id and URL
+        shell: bash
+        env:
+          CHAT_API_ID: ${{ vars.CHAT_API_ID }}
+        run: |
+          if [ -z "$CHAT_API_ID" ]; then
+            echo "vars.CHAT_API_ID is not set; stopping before any deploy"
+            exit 1
+          fi
+          echo "::add-mask::$CHAT_API_ID"
+          echo "::add-mask::https://$CHAT_API_ID.execute-api.us-east-1.amazonaws.com"
+      - name: Pre-deploy checks (context, synth, schedule guard)
+        run: |
+          uv run python -m scripts.ci.deploy_context
+          uv run python -m scripts.ci.cdk synth --quiet --no-notices
+          uv run python -m scripts.ci.schedule_guard cdk.out
+      - name: Deploy AiRadarCardStore
+        if: contains(fromJSON(needs.plan.outputs.targets), 'AiRadarCardStore')
+        run: uv run python -m scripts.ci.cdk deploy --exclusively AiRadarCardStore --require-approval never --no-notices
+      - name: Deploy AiRadarRuntimeRole
+        if: contains(fromJSON(needs.plan.outputs.targets), 'AiRadarRuntimeRole')
+        run: uv run python -m scripts.ci.cdk deploy --exclusively AiRadarRuntimeRole --require-approval never --no-notices
+      - name: Deploy AiRadarChatRuntime
+        if: contains(fromJSON(needs.plan.outputs.targets), 'AiRadarChatRuntime')
+        run: uv run python -m scripts.ci.cdk deploy --exclusively AiRadarChatRuntime --require-approval never --no-notices
+      - name: Render the CI AgentCore config
+        if: contains(fromJSON(needs.plan.outputs.targets), 'ai_radar_curation') || contains(fromJSON(needs.plan.outputs.targets), 'ai_radar_chat')
+        run: uv run python -m scripts.ci.agentcore_config --output-dir "$GITHUB_WORKSPACE"
+      - name: Place the root Dockerfile where agentcore reads it
+        if: contains(fromJSON(needs.plan.outputs.targets), 'ai_radar_curation') || contains(fromJSON(needs.plan.outputs.targets), 'ai_radar_chat')
+        run: |
+          # The toolkit reads <workspace>/.bedrock_agentcore/<agent>/Dockerfile when source_path
+          # is the repository root, so each agent gets a copy of the root Dockerfile.
+          for agent in ai_radar_curation ai_radar_chat; do
+            mkdir -p ".bedrock_agentcore/$agent"
+            cp Dockerfile ".bedrock_agentcore/$agent/Dockerfile"
+          done
+      - name: Update agent ai_radar_curation
+        if: contains(fromJSON(needs.plan.outputs.targets), 'ai_radar_curation')
+        env:
+          AGENTCORE_SUPPRESS_RECOMMENDATION: "1"
+        run: |
+          uv run agentcore deploy -a ai_radar_curation --local-build --auto-update-on-conflict \
+            --image-tag "ci-${GITHUB_SHA::12}"
+      - name: Update agent ai_radar_chat
+        if: contains(fromJSON(needs.plan.outputs.targets), 'ai_radar_chat')
+        env:
+          AGENTCORE_SUPPRESS_RECOMMENDATION: "1"
+        run: |
+          uv run agentcore deploy -a ai_radar_chat --local-build --auto-update-on-conflict \
+            --image-tag "ci-${GITHUB_SHA::12}" \
+            --env AGENT_ENTRYPOINT=chat_app.py
+      - name: Deploy AiRadarSchedule
+        if: contains(fromJSON(needs.plan.outputs.targets), 'AiRadarSchedule')
+        run: uv run python -m scripts.ci.cdk deploy --exclusively AiRadarSchedule --require-approval never --no-notices
+      - name: Deploy AiRadarBudget
+        if: contains(fromJSON(needs.plan.outputs.targets), 'AiRadarBudget')
+        run: uv run python -m scripts.ci.cdk deploy --exclusively AiRadarBudget --require-approval never --no-notices
+      - name: Deploy AiRadarFeedApi
+        if: contains(fromJSON(needs.plan.outputs.targets), 'AiRadarFeedApi')
+        run: uv run python -m scripts.ci.cdk deploy --exclusively AiRadarFeedApi --require-approval never --no-notices
+      - name: Deploy AiRadarChatApi
+        if: contains(fromJSON(needs.plan.outputs.targets), 'AiRadarChatApi')
+        run: uv run python -m scripts.ci.cdk deploy --exclusively AiRadarChatApi --require-approval never --no-notices
+  smoke:
+    needs: [plan, deploy]
+    if: needs.plan.outputs.has_targets == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          version: "0.7.17"
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Install Python dependencies
+        run: uv sync --frozen --all-groups
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_SMOKE_ROLE_ARN }}
+          aws-region: us-east-1
+          role-session-name: smoke-${{ github.run_id }}
+          mask-aws-account-id: true
+      - name: Mask the chat API id and URL
+        shell: bash
+        run: |
+          url=$(aws cloudformation describe-stacks --stack-name AiRadarChatApi \
+            --query "Stacks[0].Outputs[?OutputKey=='ChatApiUrl'].OutputValue" \
+            --output text 2>/dev/null || true)
+          if [ -n "$url" ] && [ "$url" != "None" ]; then
+            echo "::add-mask::$url"
+            host="${url#https://}"
+            echo "::add-mask::${host%%.*}"
+          fi
+      - name: Post-deploy smoke
+        run: uv run python -m scripts.ci.smoke

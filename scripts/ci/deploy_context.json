@@ -1,0 +1,6 @@
+{
+  "feed_api_reserved_concurrency": "none",
+  "chat_api_reserved_concurrency": "none",
+  "budget_limit_usd": "500",
+  "feed_api_allowed_origins": "http://localhost:3000"
+}
