@@ -1,6 +1,6 @@
 # Feed API Specification
 
-> Last synced: 2026-09-17. Owned artifacts: `src/api/`, `src/contracts/card.py`,
+> Last synced: 2026-10-28. Owned artifacts: `src/api/`, `src/contracts/card.py`, `scripts/ci/deploy_context.json` (the CORS origins, from the CI context),
 > `infra/lib/feed_api.py`, `infra/stacks/feed_api_stack.py`,
 > `docs/api/feed-api.v1.schema.json`.
 
@@ -66,6 +66,21 @@ and `AllowMethods` SHALL be `["GET"]` only.
 
 **Source:** feed-api · contract.md § Behavior Guarantees 12
 
+### Requirement: FA-6 — The CORS origins are the committed deploy context, and CI cannot silently revert them
+
+The system SHALL take the feed API's allowed origins from `feed_api_allowed_origins` in the committed
+`scripts/ci/deploy_context.json`, so a CI deploy of `AiRadarFeedApi` keeps the origin list the file holds. An
+origin passed by hand is reverted by the next CI deploy. Each origin SHALL be `http://localhost:<port>` or an
+`https://` URL with a host and no path, and a placeholder SHALL NOT be deployed.
+
+**Source:** backend-cicd-pipeline · intent.md § AC15; execution-plan.md § Binding constraints (origin validation); ADR 0045 (capability `ci-cd`)
+
+#### Scenario: A placeholder origin in the context file
+- **WHEN** the context holds `https://<project>.vercel.app`
+- **THEN** the origin validation fails the PR (offline: `tests/test_ci_deploy_context.py -k origin`). The value is
+  `http://localhost:3000` today, the live value. The Vercel origin and its preflight check are pending
+  (open item CICD-VERCEL in `ci-cd`; O12 i).
+
 ## Invariants
 
 1. `docs/api/feed-api.v1.schema.json` must equal `contracts.card.json_schema()`
@@ -86,6 +101,7 @@ and `AllowMethods` SHALL be `["GET"]` only.
 | Feature | Shipped | What it established |
 |---|---|---|
 | feed-api | 2026-09-03 | `GET /v1/cards`, cursor pagination, tag filter, the `CardOut`/`FeedResponse` versioned contract, the `AiRadarFeedApi` CDK stack. Live-curl-verified 2026-09-04. |
+| backend-cicd-pipeline | 2026-10-28 | FA-6: the allowed origins come from the committed deploy context (`http://localhost:3000`, the live value), validated, so a CI deploy does not revert them. Implemented and audit-approved with reservations; **not live**: the Vercel origin and its preflight are pending (O12 i). |
 
 ## Related ADRs
 

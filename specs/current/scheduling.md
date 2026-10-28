@@ -1,7 +1,7 @@
 # Scheduling Specification
 
-> Last synced: 2026-09-17. Owned artifacts: `infra/lib/curation_schedule.py`,
-> `infra/stacks/curation_schedule_stack.py`.
+> Last synced: 2026-10-28. Owned artifacts: `infra/lib/curation_schedule.py`,
+> `infra/stacks/curation_schedule_stack.py`, `scripts/ci/schedule_guard.py` (the CI guard over the synthesized template).
 
 ## Purpose
 
@@ -57,6 +57,19 @@ summarizing.
 
 **Source:** eventbridge-schedule · contract.md § Behavior Guarantees 8
 
+### Requirement: SC-5 — A CI deploy never enables the schedule
+
+The system SHALL fail a CI deploy before any deploy action when the synthesized `AiRadarSchedule` template's
+`AWS::Scheduler::Schedule` `State` is not `DISABLED`. The pinned deploy context SHALL carry no `schedule_*` key,
+so no CI deploy can turn the cadence on. Enabling the cadence stays a separate, deliberate human action (SC-1).
+
+**Source:** backend-cicd-pipeline · intent.md § AC6 and § Constraints (the schedule stays `DISABLED`); execution-plan.md § Binding constraints (schedule guard); ADR 0045 (capability `ci-cd`)
+
+#### Scenario: A commit that enables the schedule
+- **WHEN** a commit changes the schedule's default so that its `State` becomes `ENABLED`
+- **THEN** the guard fails the run before any deploy (offline: `tests/test_ci_schedule_guard.py`). The live
+  first-deploy check that the schedule stays `DISABLED` is pending O12 e.
+
 ## Invariants
 
 1. An empty DLQ alone does NOT prove single delivery — a delivery can be
@@ -77,6 +90,7 @@ summarizing.
 | Feature | Shipped | What it established |
 |---|---|---|
 | eventbridge-schedule | 2026-08-10 | Daily `EventBridge Scheduler` schedule via the `Universal` target, DLQ, least-privilege scoped role, deploy-`DISABLED` default. |
+| backend-cicd-pipeline | 2026-10-28 | SC-5: a CI deploy fails before any deploy action unless the synthesized schedule is `DISABLED`, and the pinned context carries no `schedule_*` key. Implemented and audit-approved with reservations; **not live** (O12 e pending). |
 
 ## Related ADRs
 
