@@ -11,7 +11,13 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   reporter: [['list']],
-  use: { baseURL: 'http://127.0.0.1:3100', browserName: 'chromium' },
+  // chromiumSandbox: Playwright disables Chromium's sandbox by default; keep it on
+  // so a browser exploit cannot escape the renderer.
+  use: {
+    baseURL: 'http://127.0.0.1:3100',
+    browserName: 'chromium',
+    launchOptions: { chromiumSandbox: true },
+  },
   webServer: [
     {
       command: 'node e2e/stub/feed-api-stub.mjs',
