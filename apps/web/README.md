@@ -5,7 +5,7 @@ Vercel. This is Phase 2 ("web feed") of the AI Radar project.
 
 For local-dev setup, the toolchain commands, the manual Vercel deploy
 runbook, and the `feed-api` CORS follow-up, see the repo root
-[`README.md`](../../README.md) — that is the single source of truth for this
+[`docs/runbooks.md`](../../docs/runbooks.md#web-app-on-vercel) — that is the single source of truth for this
 app's runbook; it is not duplicated here.
 
 ## SDD harness
@@ -31,7 +31,7 @@ Putting the real key there is a human step: read it yourself from the local AWS 
 `npm run dev`, open the page, ask one question, and check that the answer cites `[1]` (the live
 check, WEBCHAT-R2). Without the variables the widget shows its "unavailable" state. Tests and
 `npm run test:e2e` use fake credentials and a local stub, and need no AWS access. Key rotation
-and the leak response are in the root README, "Authentication amendment (`chat-api-auth`)".
+and the leak response are in [`docs/runbooks.md`](../../docs/runbooks.md#chat-api-caller-key), "Chat API caller key".
 
 The widget UI (`web-chat-ui-polish`): assistant answers render as markdown through `react-markdown`
 (a safe subset: no raw HTML, no images, http(s) links only), the conversation follows the newest

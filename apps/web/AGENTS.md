@@ -9,7 +9,7 @@ directory so this file, `.claude/`, and the TypeScript harny harness load.
 frontend that renders the curated AI-news cards served by the backend `feed-api`
 (`GET /v1/cards`). It is Phase 2 of the AI Radar project; the Python backend and
 its own harness live at the repo root. Runbook (local dev, Vercel deploy, CORS
-follow-up) is in the repo root [`README.md`](../../README.md); current-state
+follow-up) is in the repo root [`docs/runbooks.md`](../../docs/runbooks.md#web-app-on-vercel); current-state
 specs are in [`specs/current/_index.md`](specs/current/_index.md).
 
 ## Components
