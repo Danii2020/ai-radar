@@ -5,7 +5,7 @@ import { isChatResponse } from './chat-response'
 export const CLIENT_TIMEOUT_MS = 35_000
 
 const CODES: readonly ChatErrorCode[] = [
-  'invalid_request', 'busy', 'timeout', 'upstream_failure', 'unavailable', 'internal_error',
+  'invalid_request', 'busy', 'timeout', 'upstream_failure', 'unavailable', 'rate_limited', 'internal_error',
 ]
 
 export type SendTurnResult =
@@ -37,7 +37,8 @@ export async function sendTurn({ question, history, signal }: SendTurnParams): P
     try {
       body = await res.json()
     } catch {
-      return { ok: false, code: res.ok ? 'upstream_failure' : 'internal_error' }
+      if (res.ok) return { ok: false, code: 'upstream_failure' }
+      return { ok: false, code: res.status === 429 ? 'rate_limited' : 'internal_error' }
     }
     if (res.ok) {
       if (!isChatResponse(body)) return { ok: false, code: 'upstream_failure' }
@@ -45,7 +46,7 @@ export async function sendTurn({ question, history, signal }: SendTurnParams): P
     }
     const code = (body as { error?: unknown } | null)?.error
     const known = CODES.find((c) => c === code)
-    return { ok: false, code: known ?? 'internal_error' }
+    return { ok: false, code: known ?? (res.status === 429 ? 'rate_limited' : 'internal_error') }
   } catch (error) {
     const aborted = (error as { name?: unknown } | null)?.name === 'AbortError'
     return { ok: false, code: aborted ? 'timeout' : 'upstream_failure' }

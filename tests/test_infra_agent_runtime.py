@@ -112,6 +112,23 @@ def test_execution_role_trust_policy_scopes_assume_role_to_agentcore_with_source
     assert arn_pattern.endswith(":*")
 
 
+# Nova Lite is the default summarizer since 2026-11. Its grant sits BESIDE the Haiku one
+# so a HAIKU_MODEL_ID rollback needs no IAM change; same three destination regions.
+def test_nova_lite_statement_covers_the_profile_and_its_three_foundation_models():
+    statement = _statement_by_sid(
+        _all_policy_statements(_synthesized_template().to_json()), "InvokeNovaLiteCrossRegion"
+    )
+
+    assert statement["Effect"] == "Allow"
+    assert set(_as_list(statement["Action"])) == {"bedrock:InvokeModel"}
+    assert set(_as_list(statement["Resource"])) == {
+        f"arn:aws:bedrock:{REGION}:{ACCOUNT}:inference-profile/us.amazon.nova-lite-v1:0",
+        "arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-lite-v1:0",
+        "arn:aws:bedrock:us-east-2::foundation-model/amazon.nova-lite-v1:0",
+        "arn:aws:bedrock:us-west-2::foundation-model/amazon.nova-lite-v1:0",
+    }
+
+
 # T8 (Guarantee 6 / Success Criteria - Bedrock scoping): InvokeModel is scoped
 # to the Haiku inference-profile + its per-region foundation-model ARNs only;
 # no streaming action, no Sonnet/Titan resource anywhere in the role.

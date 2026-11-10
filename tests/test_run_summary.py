@@ -79,8 +79,9 @@ def _pinned_summary() -> RunSummary:
 
 def test_estimate_bedrock_cost_usd_matches_design_prices_and_zero_case():
     assert estimate_bedrock_cost_usd(0, 0) == 0.0
-    # design §7 defaults: Haiku $1/1M in, $5/1M out.
-    assert estimate_bedrock_cost_usd(24135, 3120) == pytest.approx(0.039735)
+    # Defaults since 2026-11 are Nova Lite: $0.06/1M in, $0.24/1M out (list price; credits
+    # offset it on the bill, but the estimate stays gross).
+    assert estimate_bedrock_cost_usd(24135, 3120) == pytest.approx(0.002197)
 
 
 def test_estimate_bedrock_cost_usd_reads_prices_from_spike_config_at_call_time(monkeypatch):

@@ -52,17 +52,17 @@ class _SharedSettings(BaseSettings):
     aws_region: str = Field("us-east-1", validation_alias="AWS_REGION")
 
     haiku_model_id: str = Field(
-        "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+        "us.amazon.nova-lite-v1:0",
         validation_alias="HAIKU_MODEL_ID",
     )
     haiku_input_usd_per_1m: float = Field(
-        1.0, validation_alias="HAIKU_INPUT_USD_PER_1M"
+        0.06, validation_alias="HAIKU_INPUT_USD_PER_1M"
     )
     haiku_output_usd_per_1m: float = Field(
-        5.0, validation_alias="HAIKU_OUTPUT_USD_PER_1M"
+        0.24, validation_alias="HAIKU_OUTPUT_USD_PER_1M"
     )
     sonnet_model_id: str = Field(
-        "us.anthropic.claude-sonnet-4-6",
+        "us.amazon.nova-pro-v1:0",
         validation_alias="SONNET_MODEL_ID",
     )
 
@@ -88,7 +88,13 @@ _settings = _SharedSettings()
 AWS_REGION: str = _settings.aws_region
 
 # Cross-region inference profiles (verified available in us-east-1).
-# Haiku 4.5 = cheap bulk summarization; Sonnet 4.6 = higher-quality chat.
+# 2026-11: both roles moved from Claude to Amazon Nova. Amazon models bill as plain
+# "Amazon Bedrock", so AWS promotional credits cover them; Claude is billed through AWS
+# Marketplace and is NOT credit-covered. The HAIKU_*/SONNET_* names are kept (they are env
+# keys and imported constants) but now mean "bulk summarizer" and "chat model": Nova Lite
+# and Nova Pro. Roll back with HAIKU_MODEL_ID=us.anthropic.claude-haiku-4-5-20251001-v1:0
+# (+ HAIKU_INPUT_USD_PER_1M=1.0, HAIKU_OUTPUT_USD_PER_1M=5.0) and
+# SONNET_MODEL_ID=us.anthropic.claude-sonnet-4-6. Evidence: evals/.
 HAIKU_MODEL_ID: str = _settings.haiku_model_id
 
 # Bedrock unit prices (design §7), USD per 1M tokens, for HAIKU_MODEL_ID above.

@@ -29,8 +29,12 @@ REGION = "us-east-1"
 SONNET_PROFILE = "us.anthropic.claude-sonnet-4-6"
 SONNET_FM = "anthropic.claude-sonnet-4-6"
 
+NOVA_PRO_PROFILE = "us.amazon.nova-pro-v1:0"
+NOVA_PRO_FM = "amazon.nova-pro-v1:0"
+
 EXPECTED_SIDS = {
     "InvokeSonnetCrossRegion",
+    "InvokeNovaProCrossRegion",
     "InvokeTitanEmbed",
     "CardIndexQuery",
     "AgentCoreLogsWrite",
@@ -108,6 +112,19 @@ def test_sonnet_statement_covers_the_profile_and_its_three_foundation_models():
     }
 
 
+def test_nova_pro_statement_covers_the_profile_and_its_three_foundation_models():
+    statement = _by_sid(_statements(_template_json()), "InvokeNovaProCrossRegion")
+
+    assert statement["Effect"] == "Allow"
+    assert set(_as_list(statement["Action"])) == {"bedrock:InvokeModel"}
+    assert set(_as_list(statement["Resource"])) == {
+        f"arn:aws:bedrock:{REGION}:{ACCOUNT}:inference-profile/{NOVA_PRO_PROFILE}",
+        f"arn:aws:bedrock:us-east-1::foundation-model/{NOVA_PRO_FM}",
+        f"arn:aws:bedrock:us-east-2::foundation-model/{NOVA_PRO_FM}",
+        f"arn:aws:bedrock:us-west-2::foundation-model/{NOVA_PRO_FM}",
+    }
+
+
 def test_titan_statement_is_the_one_foundation_model_arn():
     statement = _by_sid(_statements(_template_json()), "InvokeTitanEmbed")
 
@@ -164,6 +181,7 @@ def test_the_curation_role_is_not_widened_for_chat():
 
     assert {s["Sid"] for s in statements} == {
         "InvokeHaikuCrossRegion",
+        "InvokeNovaLiteCrossRegion",
         "InvokeTitanEmbed",
         "CardStoreReadWrite",
         "TavilyKeyRead",
