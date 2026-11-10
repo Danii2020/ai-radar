@@ -35,6 +35,12 @@ beforeEach(() => {
   vi.stubEnv("CHAT_API_BASE_URL", BASE_URL);
   vi.stubEnv("CHAT_API_ACCESS_KEY_ID", KEY_ID);
   vi.stubEnv("CHAT_API_SECRET_ACCESS_KEY", SECRET);
+  // Visitor limiter (web-chat-visitor-rate-limit): these cases share one visitor and send far more
+  // than the default burst, so they run with limits out of reach. Limiter behaviour is in
+  // rate-limit.test.ts.
+  vi.stubEnv("CHAT_RATE_LIMIT_BURST", "1000000");
+  vi.stubEnv("CHAT_RATE_LIMIT_DAILY", "1000000");
+  vi.stubEnv("CHAT_RATE_LIMIT_GLOBAL_DAILY", "1000000");
   logged = [];
   for (const method of ["log", "info", "warn", "error"] as const) {
     vi.spyOn(console, method).mockImplementation((...args: unknown[]) => {

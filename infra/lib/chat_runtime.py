@@ -25,6 +25,8 @@ class ChatRuntime(Construct):
         sonnet_inference_profile_id: str = "us.anthropic.claude-sonnet-4-6",
         sonnet_foundation_model_id: str = "anthropic.claude-sonnet-4-6",
         sonnet_regions: list[str] | None = None,
+        nova_pro_inference_profile_id: str = "us.amazon.nova-pro-v1:0",
+        nova_pro_foundation_model_id: str = "amazon.nova-pro-v1:0",
         titan_embed_model_id: str = "amazon.titan-embed-text-v2:0",
     ) -> None:
         super().__init__(scope, construct_id)
@@ -58,6 +60,22 @@ class ChatRuntime(Construct):
                     f"arn:aws:bedrock:{region}:{account}:inference-profile/{sonnet_inference_profile_id}",
                 ] + [
                     f"arn:aws:bedrock:{r}::foundation-model/{sonnet_foundation_model_id}"
+                    for r in sonnet_regions
+                ],
+            )
+        )
+
+        # Nova Pro (the default chat model since 2026-11), BESIDE the Sonnet grant so an
+        # env rollback needs no IAM change. Same three destination regions as the profile.
+        self.role.add_to_policy(
+            iam.PolicyStatement(
+                sid="InvokeNovaProCrossRegion",
+                effect=iam.Effect.ALLOW,
+                actions=["bedrock:InvokeModel"],
+                resources=[
+                    f"arn:aws:bedrock:{region}:{account}:inference-profile/{nova_pro_inference_profile_id}",
+                ] + [
+                    f"arn:aws:bedrock:{r}::foundation-model/{nova_pro_foundation_model_id}"
                     for r in sonnet_regions
                 ],
             )

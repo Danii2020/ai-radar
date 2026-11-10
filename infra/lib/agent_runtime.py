@@ -61,6 +61,8 @@ class AgentRuntime(Construct):
         haiku_inference_profile_id: str = "us.anthropic.claude-haiku-4-5-20251001-v1:0",
         haiku_foundation_model_id: str = "anthropic.claude-haiku-4-5-20251001-v1:0",
         haiku_regions: list[str] | None = None,
+        nova_lite_inference_profile_id: str = "us.amazon.nova-lite-v1:0",
+        nova_lite_foundation_model_id: str = "amazon.nova-lite-v1:0",
         titan_embed_model_id: str = "amazon.titan-embed-text-v2:0",
     ) -> None:
         super().__init__(scope, construct_id)
@@ -119,6 +121,23 @@ class AgentRuntime(Construct):
                 effect=iam.Effect.ALLOW,
                 actions=["bedrock:InvokeModel"],
                 resources=bedrock_resources,
+            )
+        )
+
+        # Nova Lite (the default summarizer since 2026-11). Added BESIDE the Haiku grant,
+        # not instead of it, so a HAIKU_MODEL_ID env rollback needs no IAM change. The
+        # `us.` profile routes to the same three regions as the Haiku one.
+        self.role.add_to_policy(
+            iam.PolicyStatement(
+                sid="InvokeNovaLiteCrossRegion",
+                effect=iam.Effect.ALLOW,
+                actions=["bedrock:InvokeModel"],
+                resources=[
+                    f"arn:aws:bedrock:{region}:{account}:inference-profile/{nova_lite_inference_profile_id}",
+                ] + [
+                    f"arn:aws:bedrock:{r}::foundation-model/{nova_lite_foundation_model_id}"
+                    for r in haiku_regions
+                ],
             )
         )
 

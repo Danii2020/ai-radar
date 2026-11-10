@@ -93,6 +93,11 @@ const CREDENTIAL_ENV = /CHAT_API_(?:BASE_URL|ACCESS_KEY_ID|SECRET_ACCESS_KEY)/;
 const credentialEnvReads = (file: string, source: string) =>
   CREDENTIAL_ENV.test(source) ? [`${file} reads a CHAT_API_* variable outside features/chat/api/`] : [];
 
+// The limiter's server-only settings (visitor limits, salt, store choice, Upstash REST pair).
+const LIMITER_ENV = /CHAT_RATE_LIMIT_[A-Z_]+|KV_REST_API_[A-Z_]+|UPSTASH_REDIS_REST_[A-Z_]+/;
+const limiterEnvReads = (file: string, source: string) =>
+  LIMITER_ENV.test(source) ? [`${file} names a limiter variable outside features/chat/api/`] : [];
+
 const read = (file: string) => readFileSync(file, "utf-8");
 const chatSource = walk(CHAT_DIR).filter((f) => !isTestFile(f));
 const outsideChat = walk(WEB_ROOT, (full) => full === CHAT_DIR);
@@ -139,6 +144,11 @@ describe("web-chat-ui: the key and the backend stay on the server (WEB-1 extende
     const files = walk(WEB_ROOT, (full) => full === join(CHAT_DIR, "api")).filter((f) => !isTestFile(f));
     expect(files.flatMap((f) => credentialEnvReads(f, read(f)))).toEqual([]);
   });
+
+  it("the limiter variables (CHAT_RATE_LIMIT_*, KV_REST_API_*, UPSTASH_REDIS_REST_*) are named only inside features/chat/api/", () => {
+    const files = walk(WEB_ROOT, (full) => full === join(CHAT_DIR, "api")).filter((f) => !isTestFile(f));
+    expect(files.flatMap((f) => limiterEnvReads(f, read(f)))).toEqual([]);
+  });
 });
 
 describe("web-chat-ui: the guards fire on violations", () => {
@@ -163,5 +173,12 @@ describe("web-chat-ui: the guards fire on violations", () => {
   it("credential env names", () => {
     expect(credentialEnvReads(FAKE_OUTSIDE, "process.env.CHAT_API_SECRET_ACCESS_KEY")).toHaveLength(1);
     expect(credentialEnvReads(FAKE_OUTSIDE, "const x = 1")).toEqual([]);
+  });
+
+  it("limiter env names", () => {
+    expect(limiterEnvReads(FAKE_OUTSIDE, "process.env.CHAT_RATE_LIMIT_SALT")).toHaveLength(1);
+    expect(limiterEnvReads(FAKE_OUTSIDE, "process.env.KV_REST_API_TOKEN")).toHaveLength(1);
+    expect(limiterEnvReads(FAKE_OUTSIDE, "process.env.UPSTASH_REDIS_REST_URL")).toHaveLength(1);
+    expect(limiterEnvReads(FAKE_OUTSIDE, "const x = 1")).toEqual([]);
   });
 });

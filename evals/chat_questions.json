@@ -1,0 +1,198 @@
+[
+  {
+    "id": "a01",
+    "question": "What is the Indic pretraining effort and how many tokens does it use?",
+    "answerable": true,
+    "expect_urls": [
+      "https://huggingface.co/blog/nvidia/scaling-indic-pretraining"
+    ]
+  },
+  {
+    "id": "a02",
+    "question": "How does state-space unlearning handle bias in land surface forecasting?",
+    "answerable": true,
+    "expect_urls": [
+      "https://arxiv.org/abs/2610.02248"
+    ]
+  },
+  {
+    "id": "a03",
+    "question": "Tell me about the Beam open model: how big is it and who is it for?",
+    "answerable": true,
+    "expect_urls": [
+      "https://huggingface.co/blog/reflection-beam"
+    ]
+  },
+  {
+    "id": "a04",
+    "question": "What is ABBEL and how does it handle long-horizon interactions?",
+    "answerable": true,
+    "expect_urls": [
+      "http://bair.berkeley.edu/blog/2026/07/26/abbel/"
+    ]
+  },
+  {
+    "id": "a05",
+    "question": "What did Meta release with Muse Spark Open?",
+    "answerable": true,
+    "expect_urls": [
+      "https://huggingface.co/blog/meta-muse-spark-open"
+    ]
+  },
+  {
+    "id": "a06",
+    "question": "How is conformal prediction used to detect corporate greenwashing?",
+    "answerable": true,
+    "expect_urls": [
+      "https://arxiv.org/abs/2610.02225"
+    ]
+  },
+  {
+    "id": "a07",
+    "question": "What does HyMLRaman identify, and with which techniques?",
+    "answerable": true,
+    "expect_urls": [
+      "https://arxiv.org/abs/2610.02224"
+    ]
+  },
+  {
+    "id": "a08",
+    "question": "What does Granite Switch 4.1 combine into one endpoint?",
+    "answerable": true,
+    "expect_urls": [
+      "https://huggingface.co/blog/ibm-granite/granite-switch-4-1"
+    ]
+  },
+  {
+    "id": "a09",
+    "question": "How does K-Search move CUDA kernel optimizations to Apple Silicon?",
+    "answerable": true,
+    "expect_urls": [
+      "http://bair.berkeley.edu/blog/2026/07/29/cuda-to-mlx-k-search/"
+    ]
+  },
+  {
+    "id": "a10",
+    "question": "What did the AI Risk Observatory find about AI disclosures in UK annual reports?",
+    "answerable": true,
+    "expect_urls": [
+      "https://arxiv.org/abs/2610.02281"
+    ]
+  },
+  {
+    "id": "a11",
+    "question": "What is CITA and what problem does it solve for tool-use agents?",
+    "answerable": true,
+    "expect_urls": [
+      "https://arxiv.org/abs/2610.02330"
+    ]
+  },
+  {
+    "id": "a12",
+    "question": "What did the paired evaluation of System-1 decision models find?",
+    "answerable": true,
+    "expect_urls": [
+      "https://arxiv.org/abs/2610.02267"
+    ]
+  },
+  {
+    "id": "a13",
+    "question": "Is FLUX.3 Image Klein available in a library I can use?",
+    "answerable": true,
+    "expect_urls": [
+      "https://huggingface.co/blog/flux-3"
+    ]
+  },
+  {
+    "id": "a14",
+    "question": "What is MintFlow and how does it enforce constraints?",
+    "answerable": true,
+    "expect_urls": [
+      "https://arxiv.org/abs/2610.02260"
+    ]
+  },
+  {
+    "id": "a15",
+    "question": "What trade-off does the CALM paper describe for text-to-image safety?",
+    "answerable": true,
+    "expect_urls": [
+      "https://arxiv.org/abs/2610.02300"
+    ]
+  },
+  {
+    "id": "a16",
+    "question": "What is the argument in 'Intelligence is Free, Now What?'",
+    "answerable": true,
+    "expect_urls": [
+      "http://bair.berkeley.edu/blog/2026/07/07/intelligence-is-free-now-what/"
+    ]
+  },
+  {
+    "id": "a17",
+    "question": "Which items are about open-weight or open-source models?",
+    "answerable": true,
+    "expect_urls": [
+      "https://huggingface.co/blog/reflection-beam",
+      "https://huggingface.co/blog/meta-muse-spark-open"
+    ]
+  },
+  {
+    "id": "a18",
+    "question": "What research is there on improving LLM agents on long tasks?",
+    "answerable": true,
+    "expect_urls": [
+      "http://bair.berkeley.edu/blog/2026/07/26/abbel/",
+      "https://arxiv.org/abs/2610.02330",
+      "https://arxiv.org/abs/2610.02267"
+    ]
+  },
+  {
+    "id": "a19",
+    "question": "Anything on safety or bias in generative or forecasting models?",
+    "answerable": true,
+    "expect_urls": [
+      "https://arxiv.org/abs/2610.02300",
+      "https://arxiv.org/abs/2610.02248"
+    ]
+  },
+  {
+    "id": "a20",
+    "question": "What is new for image generation?",
+    "answerable": true,
+    "expect_urls": [
+      "https://huggingface.co/blog/flux-3",
+      "https://arxiv.org/abs/2610.02300",
+      "https://arxiv.org/abs/2610.02260"
+    ]
+  },
+  {
+    "id": "u01",
+    "question": "What is NVIDIA's stock price today?",
+    "answerable": false,
+    "expect_urls": []
+  },
+  {
+    "id": "u02",
+    "question": "Who won the 2026 football World Cup?",
+    "answerable": false,
+    "expect_urls": []
+  },
+  {
+    "id": "u03",
+    "question": "Give me step-by-step instructions to fine-tune Llama 3 on AWS Trainium.",
+    "answerable": false,
+    "expect_urls": []
+  },
+  {
+    "id": "u04",
+    "question": "What did OpenAI announce this week?",
+    "answerable": false,
+    "expect_urls": []
+  },
+  {
+    "id": "u05",
+    "question": "Summarize Anthropic's latest Claude release.",
+    "answerable": false,
+    "expect_urls": []
+  }
+]

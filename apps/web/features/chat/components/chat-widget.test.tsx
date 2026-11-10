@@ -238,6 +238,7 @@ describe("failure states (AC5)", () => {
     ["upstream_failure", 502],
     ["unavailable", 503],
     ["internal_error", 500],
+    ["rate_limited", 429],
   ];
 
   async function alertTextFor(code: string, status: number) {
@@ -267,6 +268,33 @@ describe("failure states (AC5)", () => {
 
   it("a throttled turn says the service is busy", async () => {
     expect(await alertTextFor("busy", 429)).toMatch(/busy/i);
+  });
+
+  describe("the two states the visitor limit adds (AC12)", () => {
+    const RATE_LIMITED_COPY = "You've reached the chat limit for now. Please try again later.";
+    const UNAVAILABLE_COPY = "Chat is unavailable at the moment. Try again later.";
+    const BANNED = /limiter|store|redis|upstash|salt|config|retry-after|rate_limited/i;
+
+    it.each([
+      ["a 429 rate_limited reply", () => json({ error: "rate_limited" }, 429), RATE_LIMITED_COPY],
+      ["a 429 HTML body (platform firewall page)", () => new Response("<html>Blocked</html>", { status: 429 }), RATE_LIMITED_COPY],
+      ["a 503 unavailable reply (store outage or limiter misconfiguration)", () => json({ error: "unavailable" }, 503), UNAVAILABLE_COPY],
+    ])("%s shows its exact copy, keeps the question and offers Retry", async (_name, reply, copy) => {
+      fetchMock.mockResolvedValue(reply());
+      render(<ChatWidget />);
+      open();
+      ask("my question");
+      const alert = await screen.findByRole("alert");
+      expect(alert.textContent?.trim()).toContain(copy);
+      expect(alert.textContent).not.toMatch(BANNED);
+      expect(alert.textContent).not.toMatch(/\b(429|503)\b/);
+      expect(within(alert).getByRole("button", { name: /retry|try again/i })).toBeInTheDocument();
+      expect(input().value).toBe("my question");
+    });
+
+    it("the rate_limited copy differs from the busy copy", async () => {
+      expect(await alertTextFor("rate_limited", 429)).not.toBe(await alertTextFor("busy", 429));
+    });
   });
 
   it("keeps the conversation and the typed question after an error", async () => {

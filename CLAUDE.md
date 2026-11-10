@@ -185,8 +185,10 @@ docs/                   # design + research + architecture principles
 
 | Role | Model ID | Access |
 |---|---|---|
-| Summarize (Haiku 4.5) | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | ✅ enabled |
-| Chat (Sonnet 4.6, current default) | `us.anthropic.claude-sonnet-4-6` | ✅ enabled (the `SONNET_MODEL_ID` default; used by the deployed chat agent) |
+| Summarize (Nova Lite, current default) | `us.amazon.nova-lite-v1:0` | ✅ enabled (the `HAIKU_MODEL_ID` default; $0.06/$0.24 per 1M tokens) |
+| Summarize (Haiku 4.5, rollback) | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | ✅ enabled, not credit-covered |
+| Chat (Nova Pro, current default) | `us.amazon.nova-pro-v1:0` | ✅ enabled (the `SONNET_MODEL_ID` default) |
+| Chat (Sonnet 4.6, rollback) | `us.anthropic.claude-sonnet-4-6` | ✅ enabled, not credit-covered (what the chat agent runs until redeployed) |
 | Chat (Sonnet 4.5, legacy) | `us.anthropic.claude-sonnet-4-5-20250929-v1:0` | ⚠️ `LEGACY` in Bedrock, no longer the default |
 | Embeddings (Titan v2) | `amazon.titan-embed-text-v2:0` | ✅ enabled (256-dim, normalized) |
 
@@ -234,7 +236,7 @@ docs/                   # design + research + architecture principles
   per-item try/except so one bad item doesn't kill a run.
 - Keep **LangGraph-portable logic separate from infra** — the loop is plain Python now
   so it can move onto AgentCore Runtime later without rewrites.
-- Cost discipline: Haiku for bulk, Sonnet only for chat; dedup before summarizing.
+- Cost discipline: Nova models (Lite for bulk, Pro for chat) because Amazon-model usage bills as plain Amazon Bedrock and is covered by AWS credits, while **Claude on Bedrock is billed via AWS Marketplace and is NOT** (verified on the Oct-Nov 2026 bill). The `HAIKU_*`/`SONNET_*` names are historical. Dedup before summarizing. Model comparison evals live in `evals/`.
 - Library/SDK/cloud docs: use the Context7 MCP (see global rules) before relying on memory.
 - **Docker-image-Lambda packaging (`uv --only-group <name>`, this repo's AD-1
   pattern, first used by `feed-api`):** a dependency-group membership bug

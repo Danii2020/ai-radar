@@ -7,12 +7,12 @@ Purpose: code both planes use, plus the Phase 0 local RAG chat. Root guidance:
 
 - `config.py` — region, model IDs (`HAIKU_MODEL_ID`, `SONNET_MODEL_ID`,
   `EMBED_MODEL_ID`), `EMBED_DIM`, feeds and tuning. pydantic-settings, fail-fast.
-  `SONNET_MODEL_ID` defaults to `us.anthropic.claude-sonnet-4-6`, and the env override
+  `SONNET_MODEL_ID` defaults to `us.amazon.nova-pro-v1:0` (Claude Sonnet 4.6 is the rollback), and the env override
   still wins. Its `load_dotenv()` is the one `.env` load; `chat/config.py` relies on it.
   A local `.env` can still pin an older model, so check the printed model ID when it matters.
 - `embeddings.py` — `embed(text)` (Titan v2, `dimensions=EMBED_DIM`,
   `normalize=True`) and `card_text(card)`. Used by curation and by chat.
-- `bedrock.py` — bedrock-runtime client and the Haiku summarize call (forced tool call).
+- `bedrock.py` — bedrock-runtime client and the summarize call (`HAIKU_MODEL_ID`, Nova Lite by default) (forced tool call).
 - `retrieval.py` — `CardIndex`, the in-memory cosine index for the local chat path,
   disk-cached in `.ai_radar_cache/embeddings.json`.
 - `chat.py` — `answer_question(question, prior_messages, hits)`: the stateless answer step

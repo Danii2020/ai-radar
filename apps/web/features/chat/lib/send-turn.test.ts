@@ -5,7 +5,9 @@
  * Interface the tests fix (from `./send-turn`):
  *   sendTurn({ question, history, signal? })
  *     -> Promise<{ ok: true; answer; sources } | { ok: false; code }>
- * `code` is one of: invalid_request, busy, timeout, upstream_failure, unavailable, internal_error.
+ * `code` is one of: invalid_request, busy, timeout, upstream_failure, unavailable, internal_error,
+ * rate_limited (the route's own per-visitor / global limit; a 429 with an unreadable or unknown
+ * body also maps to it, a 429 with a known code such as busy keeps that code).
  * Anything the route could not have said (a network failure, an unreadable body, an unknown
  * code) maps to upstream_failure for a failed transport and internal_error for an unknown code.
  */
@@ -67,6 +69,7 @@ describe("sendTurn", () => {
     [502, "upstream_failure"],
     [503, "unavailable"],
     [500, "internal_error"],
+    [429, "rate_limited"],
   ])("passes the route's %i %s through as that code", async (status, code) => {
     fetchMock.mockResolvedValue(json({ error: code }, status));
     expect(await sendTurn({ question: "q", history: [] })).toEqual({ ok: false, code });
@@ -75,6 +78,28 @@ describe("sendTurn", () => {
   it("treats an error body with an unknown code as internal_error", async () => {
     fetchMock.mockResolvedValue(json({ error: "something_else" }, 418));
     expect(await sendTurn({ question: "q", history: [] })).toEqual({ ok: false, code: "internal_error" });
+  });
+
+  it.each([
+    ["an HTML (non-JSON) body such as a platform firewall page", () => new Response("<html>Too many requests</html>", { status: 429 })],
+    ["a JSON body with an unknown code", () => json({ error: "other" }, 429)],
+    ["an empty body", () => new Response("", { status: 429 })],
+  ])("maps a 429 with %s to rate_limited", async (_name, reply) => {
+    fetchMock.mockResolvedValue(reply());
+    expect(await sendTurn({ question: "q", history: [] })).toEqual({ ok: false, code: "rate_limited" });
+  });
+
+  it("keeps a 429 busy as busy and an unknown non-429 code as internal_error", async () => {
+    fetchMock.mockResolvedValue(json({ error: "busy" }, 429));
+    expect(await sendTurn({ question: "q", history: [] })).toEqual({ ok: false, code: "busy" });
+    fetchMock.mockResolvedValue(json({ error: "rate_limited_ish" }, 418));
+    expect(await sendTurn({ question: "q", history: [] })).toEqual({ ok: false, code: "internal_error" });
+  });
+
+  it("does not retry a rate_limited reply (one request per call)", async () => {
+    fetchMock.mockResolvedValue(json({ error: "rate_limited" }, 429));
+    await sendTurn({ question: "q", history: [] });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("treats a 200 with the wrong shape or a non-JSON body as upstream_failure", async () => {

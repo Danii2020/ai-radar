@@ -19,6 +19,7 @@ const ERROR_COPY: Record<ChatErrorCode, string> = {
   timeout: 'The assistant took too long to reply. Try again.',
   upstream_failure: 'The assistant could not be reached. Try again.',
   unavailable: 'Chat is unavailable at the moment. Try again later.',
+  rate_limited: "You've reached the chat limit for now. Please try again later.",
   internal_error: 'Something went wrong on our side. Try again.',
 }
 

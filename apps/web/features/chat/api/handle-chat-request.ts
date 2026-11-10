@@ -1,6 +1,7 @@
 import { isValidHistory, trimHistory } from '../lib/history'
 import { BODY_MAX_BYTES, QUESTION_MAX_CHARS } from '../lib/limits'
 import { callChatBackend } from './backend'
+import { checkRateLimit } from './rate-limit'
 import type { ChatErrorCode } from './types'
 
 type Outcome =
@@ -12,6 +13,9 @@ type Outcome =
   | 'backend_forbidden'
   | 'backend_error'
   | 'missing_config'
+  | 'rate_limited'
+  | 'limiter_unavailable'
+  | 'limiter_config_invalid'
   | 'internal_error'
 
 const REPLY: Record<Exclude<Outcome, 'ok'>, [number, ChatErrorCode]> = {
@@ -22,19 +26,36 @@ const REPLY: Record<Exclude<Outcome, 'ok'>, [number, ChatErrorCode]> = {
   backend_forbidden: [503, 'unavailable'],
   backend_error: [503, 'unavailable'],
   missing_config: [503, 'unavailable'],
+  rate_limited: [429, 'rate_limited'],
+  limiter_unavailable: [503, 'unavailable'],
+  limiter_config_invalid: [503, 'unavailable'],
   internal_error: [500, 'internal_error'],
 }
 
 const HEADERS = { 'content-type': 'application/json', 'cache-control': 'no-store' }
 
-function failure(outcome: Exclude<Outcome, 'ok'>): Response {
+function failure(outcome: Exclude<Outcome, 'ok'>, retryAfterS?: number): Response {
   const [status, error] = REPLY[outcome]
-  return new Response(JSON.stringify({ error }), { status, headers: HEADERS })
+  const headers: Record<string, string> = retryAfterS === undefined ? HEADERS : { ...HEADERS, 'retry-after': String(retryAfterS) }
+  return new Response(JSON.stringify({ error }), { status, headers })
+}
+
+/** Extra fields on the log line: which limit fired, or which variable is invalid (never a value). */
+interface LogExtra {
+  limit?: string
+  variable?: string
+  retryAfterS?: number
 }
 
 /** One text-free line: outcome and duration only (never question, history, answer, credentials). */
-function log(outcome: Outcome, start: number): void {
-  const line = JSON.stringify({ event: 'chat_request', outcome, duration_ms: Math.round(performance.now() - start) })
+function log(outcome: Outcome, start: number, extra: LogExtra): void {
+  const line = JSON.stringify({
+    event: 'chat_request',
+    outcome,
+    duration_ms: Math.round(performance.now() - start),
+    ...(extra.limit ? { limit: extra.limit } : {}),
+    ...(extra.variable ? { variable: extra.variable } : {}),
+  })
   if (outcome === 'ok') console.info(line)
   else console.error(line)
 }
@@ -44,7 +65,7 @@ function envValue(name: string): string | null {
   return value ? value : null
 }
 
-async function handle(request: Request): Promise<Response | Exclude<Outcome, 'ok'>> {
+async function handle(request: Request, extra: LogExtra): Promise<Response | Exclude<Outcome, 'ok'>> {
   const declared = Number(request.headers.get('content-length'))
   if (Number.isFinite(declared) && declared > BODY_MAX_BYTES) return 'invalid_request'
   const raw = await request.text()
@@ -68,6 +89,18 @@ async function handle(request: Request): Promise<Response | Exclude<Outcome, 'ok
   const secretAccessKey = envValue('CHAT_API_SECRET_ACCESS_KEY')
   if (!baseUrl || !accessKeyId || !secretAccessKey) return 'missing_config'
 
+  const verdict = await checkRateLimit(request.headers)
+  if (verdict.kind === 'config_invalid') {
+    extra.variable = verdict.variable
+    return 'limiter_config_invalid'
+  }
+  if (verdict.kind === 'unavailable') return 'limiter_unavailable'
+  if (verdict.kind === 'limited') {
+    extra.limit = verdict.limit
+    extra.retryAfterS = verdict.retryAfterS
+    return 'rate_limited'
+  }
+
   const result = await callChatBackend({
     baseUrl: baseUrl.replace(/\/+$/, ''),
     accessKeyId,
@@ -83,16 +116,18 @@ async function handle(request: Request): Promise<Response | Exclude<Outcome, 'ok
 }
 
 /** The whole logic of `POST /api/chat`: size check, parse, validate, trim, read env, one
+ *  limiter check, one
  *  backend call, map to a fixed error code, log one line. Never throws. */
 export async function handleChatRequest(request: Request): Promise<Response> {
   const start = performance.now()
   let outcome: Outcome
   let response: Response
+  const extra: LogExtra = {}
   try {
-    const result = await handle(request)
+    const result = await handle(request, extra)
     if (typeof result === 'string') {
       outcome = result
-      response = failure(result)
+      response = failure(result, extra.retryAfterS)
     } else {
       outcome = 'ok'
       response = result
@@ -101,6 +136,6 @@ export async function handleChatRequest(request: Request): Promise<Response> {
     outcome = 'internal_error'
     response = failure('internal_error')
   }
-  log(outcome, start)
+  log(outcome, start, extra)
   return response
 }

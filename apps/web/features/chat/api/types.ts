@@ -26,6 +26,7 @@ export type ChatErrorCode =
   | 'timeout'
   | 'upstream_failure'
   | 'unavailable'
+  | 'rate_limited'
   | 'internal_error'
 
 /** What the backend call can report (internal; mapped to a ChatErrorCode by the route). */

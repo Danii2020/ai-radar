@@ -9,6 +9,12 @@ a version number. Each entry links to its archived SDD spec
 ## [Unreleased]
 
 ### Changed
+- Default models moved from Claude to Amazon Nova: summarizer Haiku 4.5 -> Nova Lite, chat Sonnet 4.6 -> Nova Pro
+  (`src/shared/config.py` defaults and Nova Lite/Pro prices; additive `InvokeNovaLiteCrossRegion` and
+  `InvokeNovaProCrossRegion` IAM statements beside the Claude grants in `infra/lib/agent_runtime.py` and
+  `infra/lib/chat_runtime.py`). Reason: Claude on Bedrock is billed through AWS Marketplace and is not covered by
+  AWS credits; Nova is. Evidence and eval harness in `evals/`. Local only until the stacks and agent images are
+  redeployed; roll back with `HAIKU_MODEL_ID` / `SONNET_MODEL_ID`.
 - Backend redeployed into AWS account `626259825216` (all six stacks and the
   `ai_radar_curation` agent, smoke-verified). The pinned `account` default in
   `infra/lib/agent_runtime.py` and `infra/lib/feed_api.py`, and the matching
