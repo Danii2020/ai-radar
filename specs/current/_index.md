@@ -1,7 +1,9 @@
 # Current-State Specifications
 
 > Current truth for this repo. Maintained by `harny-sync`; do not hand-edit.
-> Last synced: 2026-10-28 (`backend-cicd-pipeline` archived, implemented and audit-approved with
+> Last synced: 2026-10-28 (`ci-log-masking` archived: ADR 0048 amends ADR 0040 (the chat API id and the account id are
+> repository secrets, not variables); the fix is implemented and audit-approved, NOT yet run on GitHub; O4–O6 pending).
+> Earlier: 2026-10-28 (`backend-cicd-pipeline` archived, implemented and audit-approved with
 > reservations, NOT LIVE: new `ci-cd` capability, ADRs 0040 and 0042–0047 (0041 not promoted), amends
 > `runtime-deployment` (RD-9), `scheduling` (SC-5), `chat-api-auth` (CAAUTH-10, ADR 0028 amended by ADR 0043)
 > and `feed-api` (FA-6) — see Notes).
@@ -38,7 +40,7 @@
 | chat-agent | [chat-agent.md](./chat-agent.md) | [chat-agent-runtime](../archived/chat-agent-runtime/) |
 | chat-api | [chat-api.md](./chat-api.md) | [chat-api](../archived/chat-api/), [chat-api-auth](../archived/chat-api-auth/) (CAPI-4 amended, CAPI-6 note) |
 | chat-api-auth | [chat-api-auth.md](./chat-api-auth.md) | [chat-api-auth](../archived/chat-api-auth/), [backend-cicd-pipeline](../archived/backend-cicd-pipeline/) (CAAUTH-10; amends ADR 0028 via ADR 0043) |
-| ci-cd | [ci-cd.md](./ci-cd.md) | [backend-cicd-pipeline](../archived/backend-cicd-pipeline/) (new; implemented, NOT LIVE — O12 a–i pending) |
+| ci-cd | [ci-cd.md](./ci-cd.md) | [backend-cicd-pipeline](../archived/backend-cicd-pipeline/) (new; implemented, NOT LIVE — O12 a–i pending), [ci-log-masking](../archived/ci-log-masking/) (CICD-11, CICD-15, invariants 6–7; ADR 0048; not yet run on GitHub) |
 
 ## Keyword lookup
 
@@ -141,7 +143,9 @@
 | handler snapshot / omission list | ci-cd |
 | repository protection / ruleset | ci-cd |
 | CODEOWNERS | ci-cd |
-| CHAT_API_ID / ::add-mask:: | ci-cd |
+| CHAT_API_ID / AWS_ACCOUNT_ID (repository secrets) / ::add-mask:: | ci-cd |
+| repository variables (retired) / vars.* | ci-cd |
+| ci-log-masking / public log leak | ci-cd |
 | .bedrock_agentcore / Dockerfile copy / local-build | runtime-deployment, ci-cd |
 | RD-9 / agentcore deploy in CI | runtime-deployment |
 | CICD-F (ci-cd reservations) | ci-cd |
@@ -164,11 +168,12 @@
 | chat-agent-runtime | [specs/archived/chat-agent-runtime/](../archived/chat-agent-runtime/) | [chat-agent.md](./chat-agent.md) (new), [runtime-deployment.md](./runtime-deployment.md) (RD-7, RD-8), [chat-retrieval.md](./chat-retrieval.md) (contributing row only) |
 | chat-api | [specs/archived/chat-api/](../archived/chat-api/) | [chat-api.md](./chat-api.md) (new) |
 | chat-api-auth | [specs/archived/chat-api-auth/](../archived/chat-api-auth/) | [chat-api-auth.md](./chat-api-auth.md) (new), [chat-api.md](./chat-api.md) (CAPI-4 amended, CAPI-6 note, ADR 0027 superseded) |
+| ci-log-masking | [specs/archived/ci-log-masking/](../archived/ci-log-masking/) | [ci-cd.md](./ci-cd.md) (CICD-10 ECR grant, CICD-11, CICD-15, invariants 6–7, CICD-LEAK; ADR 0048 amends ADR 0040). Implemented and audit-approved; NOT yet run on GitHub. |
 | backend-cicd-pipeline | [specs/archived/backend-cicd-pipeline/](../archived/backend-cicd-pipeline/) | [ci-cd.md](./ci-cd.md) (new), [runtime-deployment.md](./runtime-deployment.md) (RD-9), [scheduling.md](./scheduling.md) (SC-5), [chat-api-auth.md](./chat-api-auth.md) (CAAUTH-10, ADR 0043 amends ADR 0028), [feed-api.md](./feed-api.md) (FA-6). Implemented and audit-approved with reservations; not live. |
 
 ## Decisions (ADR registry)
 
-ADR numbers are **repo-wide monotonic** across both harness roots: 0001–0007 belong to `web-feed-ui` and 0008 to `feed-structure-refactor`, both registered in [`apps/web/specs/current/_index.md`](../../apps/web/specs/current/_index.md) (the frontend index still names 0008 as next, and is not edited here). ADRs 0032–0039 were written by `web-chat-ui` and `web-chat-ui-polish` in the frontend harness (see [`apps/web/specs/current/_index.md`](../../apps/web/specs/current/_index.md)). ADRs 0040 and 0042–0047 were written by `backend-cicd-pipeline`. **0041 was never promoted** (the cap of seven ADRs per feature in `harny-adr` was reached), so it stays unassigned. The next ADR written in either harness is **0048**. ADRs 0028–0031 were written by `chat-api-auth` and supersede ADR 0027. ADR 0043 amends ADR 0028; ADR 0028's file is not edited and its status stays Accepted.
+ADR numbers are **repo-wide monotonic** across both harness roots: 0001–0007 belong to `web-feed-ui` and 0008 to `feed-structure-refactor`, both registered in [`apps/web/specs/current/_index.md`](../../apps/web/specs/current/_index.md) (the frontend index still names 0008 as next, and is not edited here). ADRs 0032–0039 were written by `web-chat-ui` and `web-chat-ui-polish` in the frontend harness (see [`apps/web/specs/current/_index.md`](../../apps/web/specs/current/_index.md)). ADRs 0040 and 0042–0047 were written by `backend-cicd-pipeline`. **0041 was never promoted** (the cap of seven ADRs per feature in `harny-adr` was reached), so it stays unassigned. ADR 0048 (`ci-log-masking`) amends ADR 0040 and is recorded in the registry; the next ADR written in either harness is **0049**. ADRs 0028–0031 were written by `chat-api-auth` and supersede ADR 0027. ADR 0043 amends ADR 0028; ADR 0028's file is not edited and its status stays Accepted.
 
 | ADR | Title | Status | Capability | Path |
 |---|---|---|---|---|
@@ -202,6 +207,7 @@ ADR numbers are **repo-wide monotonic** across both harness roots: 0001–0007 b
 | 0045 | The deploy context is one committed file, and a guard fails the run if the schedule is enabled | Accepted | ci-cd | [specs/archived/backend-cicd-pipeline/decisions/0045-one-committed-deploy-context-and-a-schedule-guard-that-fails-the-run.md](../archived/backend-cicd-pipeline/decisions/0045-one-committed-deploy-context-and-a-schedule-guard-that-fails-the-run.md) |
 | 0046 | CloudFormation executes under two scoped customer-managed policies, not AdministratorAccess | Accepted | ci-cd | [specs/archived/backend-cicd-pipeline/decisions/0046-cloudformation-execution-scoped-to-the-ai-radar-resources.md](../archived/backend-cicd-pipeline/decisions/0046-cloudformation-execution-scoped-to-the-ai-radar-resources.md) |
 | 0047 | Repository protection is applied by a rerunnable script that dry-runs by default | Accepted | ci-cd | [specs/archived/backend-cicd-pipeline/decisions/0047-repository-protection-as-a-rerunnable-script-that-dry-runs-by-default.md](../archived/backend-cicd-pipeline/decisions/0047-repository-protection-as-a-rerunnable-script-that-dry-runs-by-default.md) |
+| 0048 | The chat API id and the account id are repository secrets, so GitHub masks them in every log line (amends ADR 0040) | Accepted | ci-cd | [specs/archived/ci-log-masking/decisions/0048-ci-identifiers-are-repository-secrets-so-logs-mask-them.md](../archived/ci-log-masking/decisions/0048-ci-identifiers-are-repository-secrets-so-logs-mask-them.md) |
 
 All 10 features archived in the 2026-09-17 bootstrap pass shipped before
 `harny-adr` existed in this project; per that skill's own no-backfill
@@ -251,6 +257,10 @@ first feature archived here with ADRs (0009–0015, from its approved execution 
 | CICD-ESC | Accepted escalation path: a merged template can create an `AiRadar*` role with an arbitrary inline policy and trust. Controls are the ruleset, `CODEOWNERS` and the PR diff; a permissions boundary is the follow-up. | LOW (accepted) | `specs/archived/backend-cicd-pipeline/audit.md` (round 2); ADR 0046 | ci-cd |
 | CICD-VERCEL | The Vercel origin is not yet in the context file (open item, not a blocker). | LOW (open) | `specs/archived/backend-cicd-pipeline/intent.md` § Open questions | ci-cd |
 | CICD-SOLO | Required approvals 0 and code-owner review off while there is one maintainer; the choice awaits the human's confirmation. | LOW (open) | `specs/archived/backend-cicd-pipeline/intent.md` § Open questions; ADR 0047 | ci-cd |
+| CICD-LEAK | Live leak in the first run (2026-10-28): the chat API id and the account id were printed into public Actions logs. Fixed in the workflows by the secrets `CHAT_API_ID` and `AWS_ACCOUNT_ID` (ADR 0048). Open until the human-only O4 (zero-count grep of the new logs) and O6 (the two leaked runs' logs deleted for every attempt) have run. The fix is not yet committed or run on GitHub. | LOW (open until O4 and O6) | `specs/archived/ci-log-masking/audit.md` (round 1); `tasks.md` O3–O6 | ci-cd |
+| CLM-F2 | The allow-list test matches only the dotted `secrets.NAME` form (`secrets['NAME']`, `toJSON(secrets)` and `secrets[` are not flagged). Accepted as-is. | LOW (accepted) | `specs/archived/ci-log-masking/audit.md` (round 1, F2) | ci-cd |
+| CLM-F3 | The AC6 test does not assert the absence of `bedrock-agentcore:ListAgentRuntimes` on the deploy role. Accepted as-is. | LOW (accepted) | `specs/archived/ci-log-masking/audit.md` (round 1, F3) | ci-cd |
+| CLM-F4 | The live AC5 check (O4) and the O6 deletion have not run. Human-only, pending. | LOW (open, pending) | `specs/archived/ci-log-masking/audit.md` (round 1, F4) | ci-cd |
 
 ## Notes
 
@@ -341,9 +351,11 @@ F6, F9 and F11 (MEDIUM, the signed F11 re-check), plus the accepted admin and ca
 live O7 steps ran on 2026-10-21 with the F9 exception. The `apps/web` server-side signing is a
 follow-up spec.
 
+**2026-10-28 ci-log-masking.** The fix that moves the chat API id and the account id from repository variables to repository secrets is archived as implemented and audit-approved (round 1, all reservations accepted). It is NOT yet committed, merged or run on GitHub, so O4 and O6 are pending, and O5 waits for one clean run. Its ADR 0048 amends ADR 0040. It amends `ci-cd` (CICD-10 ECR grant, CICD-11, CICD-15, invariants 6–7) and adds the reservations CICD-LEAK and CLM-F2..F4.
+
 **2026-10-28 backend-cicd-pipeline.** The backend CI/CD pipeline is archived as implemented and
 audit-approved with reservations (round 2). **It is NOT live.** Nothing is deployed and the workflows have
-not run on GitHub. The CI access stack deploy, the five repository variables, the CDK re-bootstrap with the
+not run on GitHub. The CI access stack deploy, the two repository secrets (`CHAT_API_ID`, `AWS_ACCOUNT_ID`), the CDK re-bootstrap with the
 two scoped execution policies, the protection script and the first pipeline run are human-only steps (tasks
 O12 a–i) and have not happened. Every live statement in `ci-cd.md` is therefore pending. The feature creates
 the `ci-cd` capability (CICD-1..CICD-16, new `ci-cd.md`) and amends `runtime-deployment` (RD-9, ADR 0044),

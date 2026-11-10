@@ -243,6 +243,17 @@ def test_deploy_role_passes_roles_only_to_agentcore(template, roles):
         assert all("*" != norm(r) for r in as_list(stmt["Resource"]))
 
 
+def test_deploy_role_may_call_create_repository_only_on_the_two_agent_repositories(template, roles):
+    # `agentcore deploy --local-build` calls ecr:CreateRepository on every run and relies on
+    # catching RepositoryAlreadyExists; IAM denies the call first unless it is allowed. The
+    # repositories already exist, so the grant is scoped to exactly those two ARNs.
+    grants = [r for a, r in _allowed(_statements(template, roles["deploy"])) if a == "ecr:CreateRepository"]
+    assert sorted(grants) == [
+        "arn:aws:ecr:REGION:ACCT:repository/bedrock-agentcore-ai_radar_chat",
+        "arn:aws:ecr:REGION:ACCT:repository/bedrock-agentcore-ai_radar_curation",
+    ]
+
+
 # --- smoke role (AC8) -------------------------------------------------------------------------------------------
 
 
