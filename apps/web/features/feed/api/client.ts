@@ -1,8 +1,8 @@
 import type { CardOut, FeedResponse } from './types.generated'
 
-/** Page size requested from feed-api. Its own default is also 20; pinned here
+/** Page size requested from feed-api. Its own default is 20; pinned here
  *  so the drain budget (AD-6) is computable. */
-export const PAGE_SIZE = 20
+export const PAGE_SIZE = 5
 /** Next Data Cache TTL (AD-9). Curation runs daily; 5 min is always fresher. */
 export const REVALIDATE_SECONDS = 300
 export const FETCH_TIMEOUT_MS = 8_000
@@ -41,6 +41,8 @@ export interface FetchFeedParams {
 export interface FeedPage {
   cards: CardOut[]
   nextCursor: string | null
+  /** Opaque `prev_cursor`, normalised like `nextCursor`; null when absent. */
+  prevCursor: string | null
   /** Cards the API returned that failed `isCardOut` and were dropped. */
   skipped: number
   /** How many HTTP requests produced this page (1, or more after a drain). */
@@ -143,5 +145,9 @@ export async function fetchFeed(params: FetchFeedParams = {}): Promise<FeedPage>
   const rawNextCursor = parsed.next_cursor
   const nextCursor = typeof rawNextCursor === 'string' && rawNextCursor !== '' ? rawNextCursor : null
 
-  return { cards, nextCursor, skipped, requests: 1 }
+  const rawPrevCursor: unknown = parsed.prev_cursor
+  const prevCursor =
+    typeof rawPrevCursor === 'string' && rawPrevCursor !== '' ? rawPrevCursor : null
+
+  return { cards, nextCursor, prevCursor, skipped, requests: 1 }
 }

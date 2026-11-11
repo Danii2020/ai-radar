@@ -4,9 +4,6 @@ import { feedHref } from '../lib/href'
 import { topTags } from '../lib/tags'
 import type { CardOut } from '../api/types.generated'
 
-/** Pinned mockup copy (AD-11) — asserted verbatim, not paraphrased. */
-export const CHIP_NOTE = 'Top tags on this page — every tag on a card is clickable.'
-
 export function TagFilter({
   cards,
   activeTag,
@@ -42,7 +39,6 @@ export function TagFilter({
           </Link>
         ) : null}
       </div>
-      <p className={styles.chipNote}>{CHIP_NOTE}</p>
     </div>
   )
 }

@@ -249,3 +249,21 @@ describe("fetchFeed next_cursor normalisation", () => {
     },
   );
 });
+
+describe("fetchFeed prev_cursor normalisation", () => {
+  it.each<[unknown, string | null]>([
+    ["a+b/c=", "a+b/c="],
+    [undefined, null],
+    [null, null],
+    ["", null],
+    [42, null],
+  ])("prev_cursor %p gives prevCursor %p and still resolves", async (value, expected) => {
+    const body: Record<string, unknown> = { cards: [], next_cursor: null };
+    if (value !== undefined) body.prev_cursor = value;
+
+    fetchMock().mockResolvedValueOnce(mockResponse({ ok: true, jsonValue: body }));
+
+    const page = await fetchFeed({ limit: 20 });
+    expect(page.prevCursor).toBe(expected);
+  });
+});

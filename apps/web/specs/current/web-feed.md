@@ -1,6 +1,7 @@
 # Web Feed Specification
 
-> Last synced: 2026-10-24. Owned artifacts: `apps/web/` (Next.js 16 App Router
+> Last synced: 2026-11-10 (`web-feed-prev-page` archived: WEB-3 and WEB-4 amended for `prev_cursor` and the `dir=prev`
+> URL hint, WEB-7 refreshed, ADR 0055, WEB-R5 to WEB-R8). Earlier: 2026-10-24. Owned artifacts: `apps/web/` (Next.js 16 App Router
 > project — `app/`, `features/feed/`, `scripts/generate-api-types.mjs`).
 
 ## Purpose
@@ -48,11 +49,14 @@ fresh regeneration.
 ### Requirement: WEB-3 — Cursor pagination is URL-addressable and opaque
 
 The system SHALL represent pagination as plain URL links
-(`/?tag=<t>&cursor=<c>`), SHALL pass any `cursor` value back to `feed-api`
-byte-identical to the `next_cursor` it was given, and SHALL NOT parse,
-decode, construct, or compare a cursor anywhere in the codebase.
+(`/?tag=<t>&cursor=<c>`, and `/?tag=<t>&cursor=<c>&dir=prev` for the backward
+link), SHALL pass any `cursor` value back to `feed-api` byte-identical to the
+`next_cursor` or the `prev_cursor` it was given, SHALL NOT send `dir` to
+`feed-api`, and SHALL NOT parse, decode, construct, or compare a cursor anywhere
+in the codebase. A request's direction SHALL come only from the web app's own
+`dir=prev` URL hint, never from a cursor (ADR 0055).
 
-**Source:** web-feed-ui · contract.md AD-5, Guarantee 3
+**Source:** web-feed-ui · contract.md AD-5, Guarantee 3; web-feed-prev-page · ADR 0055 (amends the `prev_cursor` wording)
 
 #### Scenario: A page is paginated
 - **WHEN** a user follows "Next page →"
@@ -60,15 +64,24 @@ decode, construct, or compare a cursor anywhere in the codebase.
   previous response's `next_cursor`, unmodified, and browser Back reaches the
   prior page for free (no client-side state)
 
+#### Scenario: A previous page is reached
+- **WHEN** a user follows "‹ Previous page", which is shown only when the page
+  has a non-null `prev_cursor`
+- **THEN** the resulting request's `cursor` query parameter equals the previous
+  response's `prev_cursor`, unmodified, the URL carries `dir=prev`, `dir` is
+  not sent to `feed-api`, and the cards shown are the page before
+
 ### Requirement: WEB-4 — Empty-but-cursored pages are drained, bounded
 
 The system SHALL follow `next_cursor` when a page returns zero cards but a
-live cursor, up to a hard cap of `MAX_DRAIN_REQUESTS` (5) requests per render,
+live cursor, and, for a request marked `dir=prev`, SHALL follow `prev_cursor`
+instead, up to a hard cap of `MAX_DRAIN_REQUESTS` (5) requests per render,
 returning the first non-empty page found or the last empty one (cursor
 intact) if the cap is reached — and SHALL NEVER claim "no matches" for a page
-it did not actually read.
+it did not actually read, nor claim "the first N pages" for a backward drain
+(ADR 0055).
 
-**Source:** web-feed-ui · contract.md AD-6, Guarantees 6 & 7
+**Source:** web-feed-ui · contract.md AD-6, Guarantees 6 & 7; web-feed-prev-page · ADR 0055 (amends the drain direction for backward requests; ADR 0004 is not edited)
 
 #### Scenario: A tag's matches begin on a later page
 - **WHEN** `GET /v1/cards?tag=<t>` returns `{cards: [], next_cursor: <token>}`
@@ -76,6 +89,13 @@ it did not actually read.
   after `Limit`)
 - **THEN** `loadFeed()` follows the cursor rather than reporting a false
   "no matches," up to the 5-request cap
+
+#### Scenario: A backward drain crosses empty pages
+- **WHEN** a request marked `dir=prev` returns `{cards: [], prev_cursor: <B1>,
+  next_cursor: <F>}`
+- **THEN** `loadFeed()` follows `<B1>` byte-identical, never `<F>`, up to the
+  5-request cap, and returns the first non-empty page it reaches, or the last
+  empty one with both cursors intact
 
 ### Requirement: WEB-5 — Exactly one of four render states per request
 
@@ -113,7 +133,8 @@ The system SHALL derive its promoted tag chips from `topTags()` of the
 currently-rendered page only (deterministic frequency + alphabetical
 tie-break, capped at `MAX_TAG_CHIPS`=12), and SHALL make every tag on every
 card clickable regardless of chip promotion — because no `/tags` endpoint
-exists on `feed-api` and the real corpus has 281 distinct tags over 87 cards.
+exists on `feed-api`. When web-feed-ui shipped, the corpus had 281 distinct tags over 87 cards;
+the live table held 16 cards on 2026-11-10 (web-feed-prev-page).
 
 **Source:** web-feed-ui · contract.md AD-11, Guarantee 15
 
@@ -220,6 +241,10 @@ one local dev-server browser check against the real `feed-api`.
 | WEB-R2 | Whether `AbortSignal.timeout` on the feed fetch disables Next's Data Cache for that request (i.e. whether WEB-6's 300s caching genuinely applies) was researched but never empirically confirmed via a live repeat-view request count. Accepted as final, not reopened — worst case is uncached views, still bounded by `MAX_DRAIN_REQUESTS` and backstopped by `AiRadarBudget`. One-line revert (drop `signal`) if ever needed. | LOW (accepted) | `specs/archived/web-feed-ui/audit.md` AD-9/C25 |
 | WEB-R3 | `apps/web/features/feed/conventions.test.ts`'s T29/T30 (no `NEXT_PUBLIC_`/`execute-api` literal, no client-side fetch) scan only `.ts`/`.tsx` under `features/**` and `app/**` — not `scripts/`, `*.mjs`/`*.mts`, or config files — so the guard is narrower than its own description, though no violation exists today. | LOW | `specs/archived/web-feed-ui/audit.md` |
 | WEB-R4 | Duplicate web workflow resolved (the hand-relocated `harny-feedback-web.yml` was removed; `harny-feedback-apps-web.yml` is kept). No green CI run exists against the refactor yet. | LOW | `specs/archived/feed-structure-refactor/audit.md` F3 |
+| WEB-R5 | No green CI run of `harny-feedback-apps-web.yml` against the previous-page work yet, and no `apps/web` per-turn hook record for its edits. Closes with the PR's green run (N > 0 commands). | LOW | `specs/archived/web-feed-prev-page/audit.md` F5 |
+| WEB-R6 | The e2e Previous flow does not assert that `Next page →` is present on the backward first page; that is covered at unit level only. | LOW (accepted) | `specs/archived/web-feed-prev-page/audit.md` F7 |
+| WEB-R7 | On a last page that shows only First and Previous, the `space-between` pager layout puts Previous at the right edge, where Next usually sits. Accepted default (no CSS change, WEB-9). Grouping them needs a design revision under the feature's `design/`. | LOW (accepted) | `specs/archived/web-feed-prev-page/intent.md` open questions |
+| WEB-R8 | With a `tag` filter, a Previous page's boundaries can differ from the forward ones, because `feed-api` applies the filter after `Limit`. The web app does not compensate (no over-fetch, no merge). Root reservation FA-R2, accepted by the human. | LOW (accepted) | `specs/archived/feed-prev-cursor/` (FA-R2); `specs/archived/web-feed-prev-page/audit.md` |
 
 ## Contributing features
 
@@ -229,6 +254,7 @@ one local dev-server browser check against the real `feed-api`.
 | feed-structure-refactor | 2026-10-03 | Zero-behavior-change split of `features/feed/` into `api/`, `components/`, `lib/` behind a three-export `index.ts`; `parseFeedSearchParams` and `loadFeedState` extracted from the page; barrel/deep-import/`"use client"` guards; Playwright e2e tier against a local stub and a pre-refactor baseline. Audit: APPROVED WITH RESERVATIONS. |
 | web-chat-ui | 2026-10-24 | Amended invariant 3 (the page also mounts the chat widget from `@/features/chat`) and the T29 guard to the `execute-api` host form (ADR 0034); the feed itself is unchanged. See [web-chat.md](./web-chat.md). |
 | web-chat-ui-polish | 2026-10-24 | Added `overflow-wrap: anywhere` to `.urlLine` so a long URL wraps inside a feed card on a phone, through a revised design deliverable (ADR 0039); moved WEB-9's deliverable pointer to the latest revision. |
+| web-feed-prev-page | 2026-11-10 | Added the `‹ Previous page` link from `prev_cursor`, the `dir=prev` URL hint and its backward drain (WEB-3 and WEB-4 amended, ADR 0055), backward no-match copy, and the `prev_cursor` normalization in `fetchFeed`. No backend change; no CSS change. Audit: APPROVED WITH RESERVATIONS (round 2). Locally verified against the deployed API; not live until the Vercel deploy. |
 
 ## Related ADRs
 
@@ -243,3 +269,4 @@ one local dev-server browser check against the real `feed-api`.
 | [0007](../archived/web-feed-ui/decisions/0007-deployment-is-a-human-step.md) | Deployment is a human-run step; the automated pipeline stops at local verification | Accepted |
 | [0008](../archived/feed-structure-refactor/decisions/0008-feed-feature-split-by-role-behind-one-entry-point.md) | Split the feed feature by role behind one public entry point, verified by an offline Playwright baseline | Accepted |
 | [0039](../archived/web-chat-ui-polish/decisions/0039-deliverable-revisions-live-with-the-feature.md) | Design deliverable revisions live with the feature that makes them | Accepted |
+| [0055](../archived/web-feed-prev-page/decisions/0055-drain-direction-is-a-web-owned-url-hint-never-read-from-the-cursor.md) | The drain direction is a web-owned `dir=prev` URL hint, never read from the opaque cursor (amends 0004 for backward requests) | Accepted |

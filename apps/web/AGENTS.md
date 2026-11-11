@@ -87,7 +87,9 @@ conversation scroll only). A further dependency needs its own ADR.
 - **WEB-3 — API order is authoritative.** No `.sort(` / `.reverse(` under
   `features/`. Pagination cursors are opaque and URL-addressable.
 - **WEB-4 — bounded drain.** Empty-but-cursored pages are followed at most
-  `MAX_DRAIN_REQUESTS` times.
+  `MAX_DRAIN_REQUESTS` times. A backward request (the web-owned `dir=prev` URL hint)
+  drains by following `prev_cursor`; forward requests follow `next_cursor`. Cursors are
+  still never decoded.
 - **WEB-5 — one render state per request:** ok / empty / error / filtered-empty,
   via `FeedView`.
 - **Barrel-only imports.** `features/feed/index.ts` exports exactly

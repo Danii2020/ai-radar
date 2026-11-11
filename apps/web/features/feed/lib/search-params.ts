@@ -5,8 +5,11 @@ export type FeedSearchParams = { [key: string]: string | string[] | undefined }
 export function parseFeedSearchParams(params: FeedSearchParams): {
   tag: string | undefined
   cursor: string | undefined
+  direction: 'prev' | undefined
 } {
   const tag = typeof params.tag === 'string' && params.tag.trim() ? params.tag : undefined
   const cursor = typeof params.cursor === 'string' && params.cursor ? params.cursor : undefined
-  return { tag, cursor }
+  // Web-owned hint: only the exact value `prev`, and only alongside a cursor.
+  const direction = cursor !== undefined && params.dir === 'prev' ? 'prev' : undefined
+  return { tag, cursor, direction }
 }

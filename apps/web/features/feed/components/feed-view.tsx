@@ -21,6 +21,8 @@ export interface FeedViewProps {
   tag?: string
   /** The cursor this page was rendered from (undefined on the first page). */
   cursor?: string
+  /** `'prev'` when the request came from a Previous link (`dir=prev`). */
+  direction?: 'prev'
 }
 
 const ERROR_BODY_BY_CODE: Record<FeedErrorCode, string> = {
@@ -43,6 +45,7 @@ function FeedList({ page, tag, cursor }: { page: FeedPage; tag?: string; cursor?
   return (
     <div data-testid="feed-list">
       <TagFilter cards={page.cards} activeTag={tag} />
+      <Pagination tag={tag} cursor={cursor} nextCursor={page.nextCursor} prevCursor={page.prevCursor} />
       <ul className={styles.feedList}>
         {page.cards.map((card) => (
           <li key={card.card_id}>
@@ -50,7 +53,7 @@ function FeedList({ page, tag, cursor }: { page: FeedPage; tag?: string; cursor?
           </li>
         ))}
       </ul>
-      <Pagination tag={tag} cursor={cursor} nextCursor={page.nextCursor} />
+      <Pagination tag={tag} cursor={cursor} nextCursor={page.nextCursor} prevCursor={page.prevCursor} />
     </div>
   )
 }
@@ -66,35 +69,77 @@ function FeedEmpty() {
   )
 }
 
-function FeedNoMatch({ page, tag, cursor }: { page: FeedPage; tag?: string; cursor?: string }) {
-  // Guarantee 7: a live next_cursor means the drain cap was reached, not
-  // that the search is complete — the copy (and the next-page link) must
-  // stay honest about having read only the first N pages.
-  const drained = page.nextCursor !== null
+function FeedNoMatch({
+  page,
+  tag,
+  cursor,
+  direction,
+}: {
+  page: FeedPage
+  tag?: string
+  cursor?: string
+  direction?: 'prev'
+}) {
+  // Guarantee 7: a live cursor in the drained direction means the drain cap
+  // was reached, not that the search is complete — the copy (and the page
+  // link) must stay honest about having read only the first N pages.
+  const backward = direction === 'prev'
+  const drained = (backward ? page.prevCursor : page.nextCursor) !== null
   const pageWord = page.requests === 1 ? 'page' : 'pages'
+
+  let heading: string
+  let body: string
+  if (backward) {
+    heading = drained ? 'No earlier matches found yet' : 'No earlier matches'
+    body = drained
+      ? `We searched ${page.requests} ${pageWord} back${
+          tag ? ` for “${tag}”` : ''
+        } and found no matches. More may exist further back — use the previous page link below.`
+      : `There are no earlier cards${tag ? ` tagged “${tag}”` : ''}. Use the next page link below.`
+  } else {
+    heading = drained
+      ? 'No matches found yet'
+      : tag
+        ? `No cards tagged “${tag}”`
+        : 'No cards on this page'
+    body = drained
+      ? `We searched the first ${page.requests} ${pageWord} of the feed${
+          tag ? ` for “${tag}”` : ''
+        } and found no matches. More may exist further in — use the next page link below.`
+      : tag
+        ? `No cards are tagged “${tag}” right now.`
+        : 'There are no cards on this page. Use the page links below.'
+  }
 
   return (
     <div data-testid="feed-no-match">
       <TagFilter cards={page.cards} activeTag={tag} />
       <div className={styles.state}>
-        <h2 className={styles.stateHeading}>
-          {drained ? 'No matches found yet' : `No cards tagged “${tag}”`}
-        </h2>
-        <p className={styles.stateBody}>
-          {drained
-            ? `We searched the first ${page.requests} ${pageWord} of the feed${
-                tag ? ` for “${tag}”` : ''
-              } and found no matches. More may exist further in — use the next page link below.`
-            : `No cards are tagged “${tag}” right now.`}
-        </p>
+        <h2 className={styles.stateHeading}>{heading}</h2>
+        <p className={styles.stateBody}>{body}</p>
       </div>
-      <Pagination tag={tag} cursor={cursor} nextCursor={page.nextCursor} />
+      <Pagination
+        tag={tag}
+        cursor={cursor}
+        nextCursor={page.nextCursor}
+        prevCursor={page.prevCursor}
+      />
     </div>
   )
 }
 
-function FeedError({ code, tag, cursor }: { code: FeedErrorCode; tag?: string; cursor?: string }) {
-  const retryHref = feedHref({ tag, cursor })
+function FeedError({
+  code,
+  tag,
+  cursor,
+  direction,
+}: {
+  code: FeedErrorCode
+  tag?: string
+  cursor?: string
+  direction?: 'prev'
+}) {
+  const retryHref = feedHref({ tag, cursor, direction })
   const firstPageHref = feedHref({ tag })
   const showFirstPageLink = code === 'http' && Boolean(cursor)
 
@@ -128,16 +173,16 @@ function FeedError({ code, tag, cursor }: { code: FeedErrorCode; tag?: string; c
  * tag chip row render alongside 'feed-list'/'feed-no-match' whenever a next
  * cursor exists.
  */
-export function FeedView({ state, tag, cursor }: FeedViewProps) {
+export function FeedView({ state, tag, cursor, direction }: FeedViewProps) {
   return (
     <div className={styles.feedPage}>
       <Masthead />
       {state.status === 'error' ? (
-        <FeedError code={state.code} tag={tag} cursor={cursor} />
+        <FeedError code={state.code} tag={tag} cursor={cursor} direction={direction} />
       ) : state.page.cards.length > 0 ? (
         <FeedList page={state.page} tag={tag} cursor={cursor} />
-      ) : tag !== undefined || state.page.nextCursor !== null ? (
-        <FeedNoMatch page={state.page} tag={tag} cursor={cursor} />
+      ) : tag !== undefined || state.page.nextCursor !== null || state.page.prevCursor !== null ? (
+        <FeedNoMatch page={state.page} tag={tag} cursor={cursor} direction={direction} />
       ) : (
         <FeedEmpty />
       )}

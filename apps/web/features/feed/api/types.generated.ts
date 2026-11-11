@@ -19,14 +19,18 @@ export type CreatedAt = string;
 export type UpdatedAt = string;
 export type Cards = CardOut[];
 export type NextCursor = string | null;
+export type PrevCursor = string | null;
 
 /**
  * One page of the feed. `next_cursor` is opaque: pass it back verbatim as
  * `?cursor=`. It is `None` — and ONLY None — when the feed is exhausted.
+ * `prev_cursor` is the same kind of token for the page before this one; it is
+ * `None` on the first page. Optional and additive, so the schema stays v1.
  */
 export interface FeedResponse {
   cards: Cards;
   next_cursor?: NextCursor;
+  prev_cursor?: PrevCursor;
 }
 /**
  * One curated card, as returned by `GET /v1/cards`.

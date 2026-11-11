@@ -66,7 +66,7 @@ describe("CardItem full fixture", () => {
       expect(text).toContain(takeaway);
     }
     expect(text).toContain(card.type);
-    expect(text).toContain(`relevance ${card.relevance}/10`);
+    expect(text).not.toMatch(/relevance/i);
     expect(text).toContain(card.published);
   });
 });

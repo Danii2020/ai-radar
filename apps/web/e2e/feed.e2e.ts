@@ -1,7 +1,7 @@
 /**
  * Spec: feed-structure-refactor (AC7, AC10) -- characterization suite.
  * Captured against the pre-refactor tree into e2e/__baseline__/, then compared
- * unchanged after the refactor. Never run with --update-snapshots afterwards.
+ * unchanged after the refactor. Re-captured 2026-11-10 for intentional UI changes (top pager, no relevance text, no chip note) and the ok-last-page Previous link (web-feed-prev-page); review the diff.
  *
  * Compared per scenario: normalized FeedView DOM, computed styles of a fixed
  * selector set, browser console output (must hold no errors/warnings), and
@@ -172,7 +172,7 @@ test.describe('navigation', () => {
 
   test('Next page carries next_cursor byte-identical; First page and Back work', async ({ page }) => {
     await page.goto('/')
-    await page.getByRole('link', { name: 'Next page →' }).click()
+    await page.getByRole('link', { name: 'Next page →' }).first().click()
     await expect(page).toHaveURL(/cursor=/)
     expect(new URL(page.url()).searchParams.get('cursor')).toBe(NEXT_CURSOR)
     await expect(page.getByRole('link', { name: 'E2E fixture card 16', exact: true })).toBeVisible()
@@ -181,9 +181,28 @@ test.describe('navigation', () => {
     await expect(page).toHaveURL(`${POPULATED}/`)
     await expect(page.getByRole('link', { name: 'E2E fixture card 1', exact: true })).toBeVisible()
 
-    await page.getByRole('link', { name: 'Next page →' }).click()
-    await page.getByRole('link', { name: '← First page' }).click()
+    await page.getByRole('link', { name: 'Next page →' }).first().click()
+    await page.getByRole('link', { name: '← First page' }).first().click()
     await expect(page).toHaveURL(`${POPULATED}/`)
+  })
+
+  test('Previous page after Next page shows the same cards', async ({ page }) => {
+    const titles = () => page.locator('article h2, article h3').allTextContents()
+    await page.goto('/')
+    const first = await titles()
+    expect(first.length).toBeGreaterThan(0)
+
+    await page.getByRole('link', { name: 'Next page →' }).first().click()
+    await page.getByRole('link', { name: '‹ Previous page' }).first().click()
+    // Client-side navigation: wait for it before reading the URL.
+    await page.waitForURL((u) => u.searchParams.get('dir') === 'prev')
+
+    const url = new URL(page.url())
+    expect(url.searchParams.get('cursor')).toBe(fixtures.prev_cursor)
+    expect(url.searchParams.get('dir')).toBe('prev')
+    await expect(page.getByRole('link', { name: 'E2E fixture card 1', exact: true })).toBeVisible()
+    expect(await titles()).toEqual(first)
+    await expect(page.getByRole('link', { name: '‹ Previous page' })).toHaveCount(0)
   })
 
   test('error page: "Back to the first page" appears for http with a cursor', async ({ page }) => {

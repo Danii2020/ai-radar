@@ -23,6 +23,8 @@ How AI Radar was built, and the live evidence behind its status. This file was s
 | 3 | `chat-api`, `chat-api-auth` | Oct 21 | `POST /v1/chat` behind API Gateway and a Lambda; then SigV4 (`AWS_IAM`) with one dedicated caller; CORS removed |
 | 3 | `web-chat-ui`, `web-chat-ui-polish` (in `apps/web/specs/archived/`) | Oct 24 | Chat widget with a SigV4-signing server route, markdown answers, phone bottom sheet |
 | CI | `backend-cicd-pipeline`, `ci-log-masking` | Oct 28 | GitHub Actions + OIDC checks, PR diff, change-based deploy and smoke; ids moved to secrets. Live: two deploy runs on `main` succeeded Oct 28 |
+| 2 | `feed-prev-cursor` | Nov 10 | `prev_cursor` backward paging on `GET /v1/cards`: direction carried in the cursor, one reversed `Query`, forward cursors unchanged. Deployed by hand, not by CI; live-checked |
+| 2 | `web-feed-prev-page` (in `apps/web/specs/archived/`) | Nov 10 | "‹ Previous page" link from `prev_cursor`; a `dir=prev` URL hint drains backward over empty filtered pages; honest backward no-match copy. Audit APPROVED WITH RESERVATIONS (round 2); local check against the deployed API passed. Not deployed to Vercel |
 
 ## Live-verification record
 
@@ -46,10 +48,12 @@ Highlights only; full evidence is in each spec's `audit.md`.
 
 **CI/CD (Oct 28).** The first deploy run found two real defects, both fixed the same day: the deploy role lacked `ecr:CreateRepository` on the two agent repositories, and the chat API id and account id were printed into public Actions logs. The latter led to repository secrets (ADR 0048) and the log-deletion procedure in [`runbooks.md`](runbooks.md#cicd-one-time-bootstrap). Open live checks and reservations are in [`specs/current/ci-cd.md`](../specs/current/ci-cd.md).
 
+**Feed prev cursor (Nov 10).** `AiRadarFeedApi` redeployed by hand (`cdk deploy`, pinned flags; the change is not yet merged, so CI did not deploy it). Live on a 16-card table at `limit=5`: page 1 `prev_cursor` null; page 2's `prev_cursor` returns page 1 exactly, with `prev_cursor` null; next, prev, next round trip; the full forward walk (4 pages, 16 unique cards) equals the backward walk reversed; a `tag=llm` backward call returns 200; a garbage cursor returns 400 `invalid_cursor`; no 500 and no `AccessDeniedException`. The `limit=1` walk was not run. Audit round 1 approved with reservations (FA-R2 to FA-R4 in `feed-api`).
+
 ## Other facts worth keeping
 
 - **Embedding behavior.** The `embed` node runs after `persist` only when an embedding writer is passed. `DynamoCardStore.set_embeddings` is a conditional `update_item` that never creates an item; `upsert` never writes `embedding`, so a re-upsert leaves a vector intact. A Titan failure leaves the card stored without a vector and never fails the run. `DynamoCardRetriever` runs a paginated `Query` on `feed-by-score` (partition `CARD`), never a `Scan`, ranks by dot product (cosine, since vectors are normalized), and excludes un-embedded and wrong-length cards.
 - **Shared answer step.** `answer_question` in `src/shared/chat.py` holds the prompt, context block, `[n]` numbering and the Sonnet call. `RagChat.ask` delegates to it, so `run_chat.py` and the chat agent send identical model requests.
 - **Single `Dockerfile`.** The toolkit builds only the `Dockerfile` at an agent's `source_path`, so both agents share one file and select their entrypoint with `AGENT_ENTRYPOINT`.
 - **Scale arithmetic.** At 8 new cards per run, 2,000 cards is about eight months of daily runs.
-- **Test counts over time.** 145 (run-observability), 261 (pydantic-settings-config), 349-350 (feed-api), 406 (chat-retrieval), 487 (chat-agent-runtime), 835 (current, after CI and chat API work).
+- **Test counts over time.** 145 (run-observability), 261 (pydantic-settings-config), 349-350 (feed-api), 406 (chat-retrieval), 487 (chat-agent-runtime), 835 (after CI and chat API work), 849 (feed-prev-cursor, 837 baseline plus 12 new cases).

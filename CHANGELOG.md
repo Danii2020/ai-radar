@@ -26,6 +26,79 @@ a version number. Each entry links to its archived SDD spec
 Nothing pending beyond `apps/web/specs/archived/web-feed-ui/` (Phase 2 spec 02, the Next.js
 frontend — still in progress, not yet archived).
 
+## 2026-11-10 — web-feed-prev-page
+
+Specs: `apps/web/specs/archived/web-feed-prev-page/`. Audit: APPROVED WITH RESERVATIONS (round 2, 2026-11-10), accepted
+under the human's standing instruction. Decision: ADR 0055 (amends ADR 0004 for backward requests). Not deployed: the
+Vercel deploy is a human step, and the change is not yet committed or merged to `main`.
+
+### Added
+- A `‹ Previous page` link in the web feed, between `← First page` and `Next page →`, in both pager bars. It appears only
+  when the page has a `prev_cursor`. Its href is `/?tag=<t>&cursor=<prev_cursor>&dir=prev`. `dir=prev` is a web-owned URL
+  hint and is never sent to `feed-api`.
+- A backward drain: a `dir=prev` request follows `prev_cursor` over empty filtered pages, bounded to 5 requests. Forward
+  requests still follow `next_cursor`.
+- Honest backward no-match copy ("We searched N pages back…", "There are no earlier cards…"). It never says "the first N
+  pages".
+
+### Changed
+- `fetchFeed` normalizes `prev_cursor` the way it normalizes `next_cursor`. An older backend without the field still
+  renders, with no Previous link.
+- An empty unfiltered page that has a `prev_cursor` but no `next_cursor` shows "No cards on this page" with the page
+  links. It used to show the empty-feed state.
+- The `web-feed` capability: WEB-3 and WEB-4 are amended so that a cursor may be a `prev_cursor` and `dir=prev` drains
+  along it. Forward behavior is unchanged.
+- Docs: root `README.md`, `docs/runbooks.md` (web browser check: Next then Previous returns the same cards), and
+  `apps/web/AGENTS.md` (WEB-4 names the direction rule).
+
+### Verified
+- Local gates (conductor re-run, 2026-11-10): `npm run lint` (0 errors, 1 pre-existing warning), `npm run typecheck`,
+  `npm test` 403/403, `npm run build`, `npm run test:e2e` 54/54. One baseline re-captured: `e2e/__baseline__/dom/ok-last-page.html`,
+  with the two Previous links added.
+- AC10 local dev-server check against the deployed `feed-api` (16 cards, page size 5), passed 2026-11-10: `/` -> Next ->
+  Previous returns page 1's five cards in the same order.
+- Not run here: the CI run on the PR (`harny-feedback-apps-web.yml`, F5) and the Vercel deploy (human, WEB-R1).
+
+### Notes
+- With a `tag` filter, the boundaries of a Previous page can differ from the forward ones, because `feed-api` applies
+  the filter after `Limit` (FA-R2, accepted by the human). No compensation was added.
+- The Previous link reuses the existing pager style with no CSS change. On the last page (only First and Previous), the
+  `space-between` layout puts Previous at the right edge, where Next usually sits. A grouped layout needs a design revision.
+
+### Also in this change (no spec)
+Working-tree changes from earlier sessions on `feat/feed-prev-cursor` that belong to no spec: feed page size 5
+(`PAGE_SIZE`), a pager bar at the top of the list as well as the bottom, relevance text hidden on cards, and the tag-chip
+note removed. The audit saw them only through the baseline diffs, not as a feature of their own.
+
+## 2026-11-10 — feed-prev-cursor
+
+Specs: `specs/archived/feed-prev-cursor/`. Audit: APPROVED WITH RESERVATIONS (round 1, 2026-11-10), accepted by
+the human. Decisions: ADRs 0051–0054. **Deployed by hand, not by CI:** `cdk deploy AiRadarFeedApi` with the pinned
+flags on 2026-11-10, live-checked against the deployed API (see the README "Feed API live check"). The change is
+not yet committed or merged to `main`.
+
+### Added
+- `GET /v1/cards` returns `prev_cursor` on every 200. Send it back as the same `?cursor=` to get the page before the
+  one you are on. The `next_cursor` of a page reached backward returns to the page you came from. Each request is
+  still one `Query` on `feed-by-score`, and the IAM grant is unchanged.
+- The cursor carries a direction. Cursors issued before this change keep working as forward cursors, and forward
+  cursor tokens are byte-identical to the old ones.
+
+### Changed
+- `FeedResponse` gains an optional, nullable `prev_cursor`. The API stays `v1` (`CARD_SCHEMA_VERSION`, the route and
+  the artifact name are unchanged). `docs/api/feed-api.v1.schema.json` and
+  `apps/web/features/feed/api/types.generated.ts` are regenerated from the model. The `FeedResponse` and
+  `export_api_schema.py` docstrings now say an added optional field is not a breaking change.
+- The frontend does not use `prev_cursor` yet. No `apps/web` behavior changed.
+
+### Notes
+- With a `tag` filter, backward page boundaries can differ from the forward ones, because DynamoDB applies the
+  filter after `Limit`. The cards visited are the same. Accepted by the human (`feed-api` FA-R2).
+- Live check (2026-11-10, table of 16 cards, `limit=5`): page 1 `prev_cursor` null; page 2's `prev_cursor` returns
+  page 1 exactly; next, prev, next round trip; full forward walk equals the reversed backward walk; tag-filtered
+  backward call 200; garbage cursor 400 `invalid_cursor`; no 500 or `AccessDeniedException`. The `limit=1` walk
+  (runbook L6) was not run.
+
 ## 2026-10-28 — ci-log-masking (not yet run on GitHub)
 
 Specs: `specs/archived/ci-log-masking/`. Audit: APPROVED WITH RESERVATIONS (round 1, 2026-10-28), with all

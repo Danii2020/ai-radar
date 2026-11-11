@@ -35,7 +35,12 @@ function respond(prefix, tag, cursor) {
     return { cards: allCards.filter((c) => (c.tags ?? []).includes(tag)), next_cursor: null }
   }
   if (cursor === null) return { cards: fixtures.page1, next_cursor: fixtures.next_cursor }
-  if (cursor === fixtures.next_cursor) return { cards: fixtures.page2, next_cursor: null }
+  if (cursor === fixtures.next_cursor) {
+    return { cards: fixtures.page2, next_cursor: null, prev_cursor: fixtures.prev_cursor }
+  }
+  if (cursor === fixtures.prev_cursor) {
+    return { cards: fixtures.page1, next_cursor: fixtures.next_cursor, prev_cursor: null }
+  }
   return { cards: [], next_cursor: null }
 }
 

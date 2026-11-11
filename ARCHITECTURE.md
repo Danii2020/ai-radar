@@ -149,7 +149,9 @@ Two surfaces, both read-only over what Plane A persisted:
   `upstream_timeout` or `internal_error`. API Gateway owns CORS. Deployed as `AiRadarChatApi`.
 - **Feed API** (`src/api/`) — `GET /v1/cards` via API Gateway HTTP API ->
   Lambda (`api/handler.py`) -> `dynamodb:Query` on a `feed-by-score` index
-  (`api/dynamo.py`), paginated (`api/cursor.py`), returning the versioned
+  (`api/dynamo.py`), paginated in both directions (`api/cursor.py`: the cursor carries
+  its direction, and each page returns `next_cursor` and `prev_cursor`; a backward page is
+  one reversed `Query`, `feed-prev-cursor`), returning the versioned
   `CardOut`/`FeedResponse` contract from `src/contracts/`.
 
 ## The shared contract

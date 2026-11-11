@@ -9,7 +9,7 @@ import type { CardOut } from '../api/types.generated'
  * Models field-rendering map: url -> "the heading's href + a visible link
  * line", using feed.module.css's `.urlLine` class), summary, bulleted
  * takeaways, clickable tag chips, and a meta line
- * `TYPE · relevance n/10 · source · published`.
+ * `source · published` next to a type badge (relevance is a backend ranking signal, not shown).
  * `tags`/`takeaways` are OPTIONAL in the v1 schema — `undefined` renders as
  * nothing, never as a crash.
  * The root element carries `data-type={card.type}` — feed.module.css's
@@ -62,10 +62,6 @@ export function CardItem({ card }: { card: CardOut }) {
       <div className={styles.cardFoot}>
         <span className={styles.badge}>{card.type}</span>
         <p className={styles.meta}>
-          {card.type}
-          <span className={styles.metaSep}>·</span>
-          {`relevance ${card.relevance}/10`}
-          <span className={styles.metaSep}>·</span>
           {card.source}
           <span className={styles.metaSep}>·</span>
           <time dateTime={card.published || undefined}>{publishedText}</time>

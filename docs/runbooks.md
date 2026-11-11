@@ -237,7 +237,7 @@ Human-only; no agent runs `vercel*`, `cdk deploy` or `cdk destroy`. Not yet done
 
 1. Import the repository at <https://vercel.com/new>. Set **Root Directory to `apps/web`**. Framework preset Next.js, default build and install commands.
 2. Environment variables (Production, and Preview if wanted), all server-only: `FEED_API_BASE_URL` (the `FeedApiUrl` output, also in `apps/web/.env.example`), `CHAT_API_BASE_URL`, `CHAT_API_ACCESS_KEY_ID`, `CHAT_API_SECRET_ACCESS_KEY`. No `NEXT_PUBLIC_` prefix. CLI alternative from `apps/web/`: `vercel link`, `vercel env add <NAME> production`, `vercel --prod`.
-3. Browser-check the deployed URL: real cards; a tag chip narrows the feed and the URL becomes `/?tag=<x>`; "Next page" shows different cards; `/?tag=zzz-no-such-tag` renders the no-match state; the chat widget answers with a `[1]` citation.
+3. Browser-check the deployed URL: real cards; a tag chip narrows the feed and the URL becomes `/?tag=<x>`; "Next page" shows different cards, then "‹ Previous page" returns to the same cards (URL carries `dir=prev`, and the first page has no Previous link); `/?tag=zzz-no-such-tag` renders the no-match state; the chat widget answers with a `[1]` citation.
 4. Add the Vercel origin to the feed API CORS allow-list by PR: edit `feed_api_allowed_origins` in `scripts/ci/deploy_context.json` (`http://localhost:3000,https://<project>.vercel.app`; origins must be `http://localhost:<port>` or `https://<host>` with no path). Merge; CI redeploys `AiRadarFeedApi`. Check both halves:
 
    ```bash
