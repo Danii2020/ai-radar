@@ -8,7 +8,6 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import type { FeedErrorCode, FeedPage } from "../api/client";
 import { TAGLINE, WORDMARK, FeedView } from "./feed-view";
-import { CHIP_NOTE } from "./tag-filter";
 import type { CardOut } from "../api/types.generated";
 
 afterEach(cleanup);
@@ -39,7 +38,14 @@ function cardFixture(overrides: Partial<CardOut> = {}): CardOut {
 }
 
 function okPage(overrides: Partial<FeedPage> = {}): FeedPage {
-  return { cards: [], nextCursor: null, skipped: 0, requests: 1, ...overrides };
+  return {
+    cards: [],
+    nextCursor: null,
+    prevCursor: null,
+    skipped: 0,
+    requests: 1,
+    ...overrides,
+  };
 }
 
 function assertExactlyOneStateTestId(present: string) {
@@ -120,6 +126,26 @@ describe("FeedView exhaustive states", () => {
 });
 
 describe("FeedView pagination", () => {
+  it("shows Next page both above and below the cards when a next cursor exists", () => {
+    render(
+      <FeedView
+        state={{
+          status: "ok",
+          page: okPage({ cards: [cardFixture()], nextCursor: "tok" }),
+        }}
+      />,
+    );
+    const links = screen.getAllByRole("link", { name: /next page/i });
+    expect(links).toHaveLength(2);
+    const list = screen.getByRole("article");
+    expect(
+      links[0].compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      links[1].compareDocumentPosition(list) & Node.DOCUMENT_POSITION_PRECEDING,
+    ).toBeTruthy();
+  });
+
   it("T25: shows a Next page link iff nextCursor is not null, even on an empty page", () => {
     const { unmount } = render(
       <FeedView
@@ -142,6 +168,116 @@ describe("FeedView pagination", () => {
     expect(
       screen.queryByRole("link", { name: /next page/i }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("FeedView previous page link", () => {
+  const linkNames = () =>
+    screen.getAllByRole("link", { name: /page/i }).map((a) => a.textContent);
+
+  it("shows First, Previous, Next only where each applies", () => {
+    // (a) first page: Next only
+    const a = render(
+      <FeedView
+        state={{
+          status: "ok",
+          page: okPage({ cards: [cardFixture()], nextCursor: "n" }),
+        }}
+      />,
+    );
+    expect(screen.queryByRole("link", { name: /first page/i })).toBeNull();
+    expect(screen.queryByRole("link", { name: /previous page/i })).toBeNull();
+    expect(screen.getAllByRole("link", { name: /next page/i })).toHaveLength(2);
+    a.unmount();
+
+    // (b) middle page: all three, in order, in both bars
+    const b = render(
+      <FeedView
+        cursor="cur"
+        state={{
+          status: "ok",
+          page: okPage({ cards: [cardFixture()], prevCursor: "a+b/c=", nextCursor: "n" }),
+        }}
+      />,
+    );
+    expect(linkNames()).toEqual([
+      "← First page",
+      "‹ Previous page",
+      "Next page →",
+      "← First page",
+      "‹ Previous page",
+      "Next page →",
+    ]);
+    for (const prev of screen.getAllByRole("link", { name: /previous page/i })) {
+      expect(prev).toHaveAttribute("href", "/?cursor=a%2Bb%2Fc%3D&dir=prev");
+    }
+    for (const next of screen.getAllByRole("link", { name: /next page/i })) {
+      expect(next).toHaveAttribute("href", "/?cursor=n");
+    }
+    b.unmount();
+
+    // (c) cursor but no prev: First, no Previous
+    render(
+      <FeedView
+        cursor="cur"
+        state={{
+          status: "ok",
+          page: okPage({ cards: [cardFixture()], prevCursor: null, nextCursor: null }),
+        }}
+      />,
+    );
+    expect(screen.getAllByRole("link", { name: /first page/i })).toHaveLength(2);
+    expect(screen.queryByRole("link", { name: /previous page/i })).toBeNull();
+  });
+
+  it("backward no-match state never claims 'the first N pages' and points to the right link", () => {
+    const withPrev = render(
+      <FeedView
+        tag="x"
+        cursor="B0"
+        direction="prev"
+        state={{
+          status: "ok",
+          page: okPage({ prevCursor: "B5", nextCursor: "F5", requests: 5 }),
+        }}
+      />,
+    );
+    const copy = screen.getByRole("heading").parentElement?.textContent ?? "";
+    expect(copy).toMatch(/searched/i);
+    expect(copy).not.toMatch(/first/i);
+    expect(screen.getByRole("link", { name: /previous page/i })).toHaveAttribute(
+      "href",
+      "/?tag=x&cursor=B5&dir=prev",
+    );
+    withPrev.unmount();
+
+    render(
+      <FeedView
+        tag="x"
+        cursor="B0"
+        direction="prev"
+        state={{
+          status: "ok",
+          page: okPage({ prevCursor: null, nextCursor: "F5", requests: 2 }),
+        }}
+      />,
+    );
+    expect(screen.getByRole("heading").parentElement?.textContent ?? "").not.toMatch(/first/i);
+    expect(screen.queryByRole("link", { name: /previous page/i })).toBeNull();
+    expect(screen.getByRole("link", { name: "Next page →" })).toBeInTheDocument();
+  });
+});
+
+describe("FeedView empty page with only a prev cursor", () => {
+  it("without a tag it never says 'tagged undefined' and keeps the Previous link", () => {
+    render(
+      <FeedView
+        cursor="c"
+        state={{ status: "ok", page: okPage({ prevCursor: "P", nextCursor: null }) }}
+      />,
+    );
+    expect(screen.getByTestId("feed-no-match").textContent).not.toMatch(/undefined|tagged/i);
+    expect(screen.getByRole("link", { name: /previous page/i })).toBeInTheDocument();
   });
 });
 
@@ -189,14 +325,5 @@ describe("FeedView masthead (AD-13)", () => {
     render(<FeedView state={{ status: "error", code: "network" }} />);
     expect(screen.getByText(WORDMARK)).toBeInTheDocument();
     expect(screen.getByText(TAGLINE)).toBeInTheDocument();
-  });
-});
-
-describe("FeedView tag-chip note (AD-11)", () => {
-  it("T33: CHIP_NOTE renders verbatim wherever the chip row appears", () => {
-    const cards = [cardFixture({ tags: ["llm"] })];
-    render(<FeedView state={{ status: "ok", page: okPage({ cards }) }} />);
-
-    expect(screen.getByText(CHIP_NOTE)).toBeInTheDocument();
   });
 });

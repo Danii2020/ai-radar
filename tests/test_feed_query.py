@@ -174,7 +174,7 @@ def _walk_all_pages_via_cursor(table, *, tag=None, limit):
         # Round-trip through the opaque token, not the raw dict, so this
         # test proves the whole client-facing pagination contract.
         token = encode_cursor(page.last_evaluated_key)
-        exclusive_start_key = decode_cursor(token)
+        _, exclusive_start_key = decode_cursor(token)
     return all_cards
 
 

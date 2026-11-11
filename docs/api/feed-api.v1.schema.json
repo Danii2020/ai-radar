@@ -74,7 +74,7 @@
       "type": "object"
     }
   },
-  "description": "One page of the feed. `next_cursor` is opaque: pass it back verbatim as\n`?cursor=`. It is `None` \u2014 and ONLY None \u2014 when the feed is exhausted.",
+  "description": "One page of the feed. `next_cursor` is opaque: pass it back verbatim as\n`?cursor=`. It is `None` \u2014 and ONLY None \u2014 when the feed is exhausted.\n`prev_cursor` is the same kind of token for the page before this one; it is\n`None` on the first page. Optional and additive, so the schema stays v1.",
   "properties": {
     "cards": {
       "items": {
@@ -94,6 +94,18 @@
       ],
       "default": null,
       "title": "Next Cursor"
+    },
+    "prev_cursor": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Prev Cursor"
     }
   },
   "required": [

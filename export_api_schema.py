@@ -6,8 +6,9 @@
 Spec 02 (`web-feed-ui`) generates its TypeScript types from that file.
 `tests/test_feed_api_contract.py` fails if the committed file drifts from
 `contracts.card.json_schema()`, so regenerating is a required step whenever
-CardOut/FeedResponse changes (which is a BREAKING API change — bump
-CARD_SCHEMA_VERSION and the route/artifact version).
+CardOut/FeedResponse changes (a removal, rename or type change is a BREAKING API change — bump
+CARD_SCHEMA_VERSION and the route/artifact version; an added optional field
+does not).
 """
 from __future__ import annotations
 

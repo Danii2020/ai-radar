@@ -63,4 +63,11 @@ describe("parseFeedSearchParams", () => {
       cursor: undefined,
     });
   });
+
+  it("direction is 'prev' only for dir=prev together with a cursor", () => {
+    expect(parseFeedSearchParams({ cursor: "c", dir: "prev" }).direction).toBe("prev");
+    expect(parseFeedSearchParams({ dir: "prev" }).direction).toBeUndefined();
+    expect(parseFeedSearchParams({ cursor: "c", dir: "other" }).direction).toBeUndefined();
+    expect(parseFeedSearchParams({ cursor: "c", dir: ["prev", "prev"] }).direction).toBeUndefined();
+  });
 });

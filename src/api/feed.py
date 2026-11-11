@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 # words; `title`/`source` are aliased defensively for symmetry.
 _PROJECTION_EXPRESSION = (
     "card_id, #t, #u, #src, summary, tags, #ty, relevance, "
-    "published, takeaways, created_at, updated_at"
+    "published, takeaways, created_at, updated_at, gsi_pk, gsi_sk"
 )
 _EXPRESSION_ATTRIBUTE_NAMES = {"#t": "title", "#u": "url", "#src": "source", "#ty": "type"}
 
@@ -35,6 +35,12 @@ class FeedPage:
     cards: list[CardOut]
     last_evaluated_key: dict | None
     skipped: int
+    #: Index keys of the first/last item kept, in feed order (None if no item).
+    first_key: dict | None = None
+    last_key: dict | None = None
+    #: Backward queries only: an item further from the anchor than this page
+    #: exists (and was dropped from it), so something precedes the page.
+    has_more_before: bool = False
 
 
 def query_feed(
@@ -43,6 +49,7 @@ def query_feed(
     tag: str | None = None,
     limit: int = DEFAULT_PAGE_SIZE,
     exclusive_start_key: dict | None = None,
+    backward: bool = False,
 ) -> FeedPage:
     """ONE `Query` against the `feed-by-score` GSI —
     `KeyConditionExpression=Key("gsi_pk").eq(FEED_GSI_PARTITION)`,
@@ -55,6 +62,11 @@ def query_feed(
     (DynamoDB applies the filter after `Limit`) — that is expected, contractual
     behavior, not an error.
 
+    `backward=True` reads the same index ascending with `Limit=limit + 1`
+    (the extra item only signals that something precedes the page), then
+    reverses the items into feed order and drops the one furthest from the
+    anchor. Still exactly one `Query`.
+
     Per-item resilience: an item that fails `CardOut.model_validate` is logged,
     counted in `skipped`, and omitted — one malformed row never fails the page
     (repo house rule; mirrors `DynamoCardStore.upsert`'s per-card try/except).
@@ -64,8 +76,8 @@ def query_feed(
         "KeyConditionExpression": Key("gsi_pk").eq(FEED_GSI_PARTITION),
         "ProjectionExpression": _PROJECTION_EXPRESSION,
         "ExpressionAttributeNames": dict(_EXPRESSION_ATTRIBUTE_NAMES),
-        "ScanIndexForward": False,
-        "Limit": limit,
+        "ScanIndexForward": backward,
+        "Limit": limit + 1 if backward else limit,
     }
     if tag:
         kwargs["FilterExpression"] = Attr("tags").contains(tag)
@@ -74,9 +86,20 @@ def query_feed(
 
     resp = table.query(**kwargs)
 
+    items = list(resp.get("Items", []))
+    has_more_before = False
+    if backward:
+        items.reverse()
+        if len(items) > limit:
+            items = items[1:]
+            has_more_before = True
+
+    def _key(item: dict) -> dict:
+        return {k: item[k] for k in ("card_id", "gsi_pk", "gsi_sk")}
+
     cards: list[CardOut] = []
     skipped = 0
-    for item in resp.get("Items", []):
+    for item in items:
         try:
             cards.append(CardOut.model_validate(item))
         except ValidationError:
@@ -87,4 +110,7 @@ def query_feed(
         cards=cards,
         last_evaluated_key=resp.get("LastEvaluatedKey"),
         skipped=skipped,
+        first_key=_key(items[0]) if items else None,
+        last_key=_key(items[-1]) if items else None,
+        has_more_before=has_more_before,
     )

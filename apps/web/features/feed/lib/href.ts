@@ -1,6 +1,8 @@
 export interface FeedHrefParams {
   tag?: string | null
   cursor?: string | null
+  /** Web-only hint for a backward request; never forwarded to feed-api. */
+  direction?: 'prev'
 }
 
 /** `/` , `/?tag=agents`, `/?tag=agents&cursor=<encoded>`. Empty/nullish values
@@ -14,6 +16,9 @@ export function feedHref(params: FeedHrefParams = {}): string {
   }
   if (params.cursor) {
     search.set('cursor', params.cursor)
+    if (params.direction === 'prev') {
+      search.set('dir', 'prev')
+    }
   }
 
   const query = search.toString()

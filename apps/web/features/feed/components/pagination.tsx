@@ -6,15 +6,18 @@ export function Pagination({
   tag,
   cursor,
   nextCursor,
+  prevCursor,
 }: {
   tag?: string
   cursor?: string
   nextCursor: string | null
+  prevCursor: string | null
 }) {
   const hasFirstPageLink = Boolean(cursor)
+  const hasPrevPageLink = prevCursor !== null
   const hasNextPageLink = nextCursor !== null
 
-  if (!hasFirstPageLink && !hasNextPageLink) {
+  if (!hasFirstPageLink && !hasPrevPageLink && !hasNextPageLink) {
     return null
   }
 
@@ -27,6 +30,14 @@ export function Pagination({
       ) : (
         <span />
       )}
+      {hasPrevPageLink ? (
+        <Link
+          className={styles.pagerLink}
+          href={feedHref({ tag, cursor: prevCursor, direction: 'prev' })}
+        >
+          ‹ Previous page
+        </Link>
+      ) : null}
       {hasNextPageLink ? (
         <Link className={styles.pagerLink} href={feedHref({ tag, cursor: nextCursor })}>
           Next page →

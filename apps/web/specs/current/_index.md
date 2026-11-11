@@ -1,7 +1,7 @@
 # Current-State Specifications — apps/web (frontend)
 
 > Current truth for the Next.js frontend. Maintained by `harny-sync`; do not hand-edit.
-> Last synced: 2026-10-24 (web-chat-ui and web-chat-ui-polish archived: new `web-chat` capability, ADRs 0032–0039; earlier: feed-structure-refactor archived, component split — this index was carved out of the
+> Last synced: 2026-11-10 (web-feed-prev-page archived: `web-feed` WEB-3, WEB-4 and WEB-7 amended, ADR 0055, reservations WEB-R5 to WEB-R8). Earlier: 2026-10-24 (web-chat-ui and web-chat-ui-polish archived: new `web-chat` capability, ADRs 0032–0039; earlier: feed-structure-refactor archived, component split — this index was carved out of the
 > repo-root `specs/current/_index.md` when `apps/web/` got its own harny harness,
 > `stack: typescript`; see Notes)
 
@@ -15,7 +15,7 @@
 
 | Capability | Current-State Specification | Incorporated Changes |
 |---|---|---|
-| web-feed | [web-feed.md](./web-feed.md) | [web-feed-ui](../archived/web-feed-ui/), [feed-structure-refactor](../archived/feed-structure-refactor/), [web-chat-ui](../archived/web-chat-ui/) (amendments), [web-chat-ui-polish](../archived/web-chat-ui-polish/) (amendments) |
+| web-feed | [web-feed.md](./web-feed.md) | [web-feed-ui](../archived/web-feed-ui/), [feed-structure-refactor](../archived/feed-structure-refactor/), [web-chat-ui](../archived/web-chat-ui/) (amendments), [web-chat-ui-polish](../archived/web-chat-ui-polish/) (amendments), [web-feed-prev-page](../archived/web-feed-prev-page/) (WEB-3, WEB-4, WEB-7 amendments) |
 | web-chat | [web-chat.md](./web-chat.md) | [web-chat-ui](../archived/web-chat-ui/), [web-chat-ui-polish](../archived/web-chat-ui-polish/) |
 
 ## Keyword lookup
@@ -43,6 +43,8 @@
 | react-markdown / safe markdown / use-stick-to-bottom | web-chat |
 | bottom sheet / phone layout / Jump to latest | web-chat |
 | design deliverable revision / `.urlLine` / WEB-9 | web-feed |
+| Previous page / `‹ Previous page` / prev_cursor | web-feed (backend side: root `specs/current/feed-api.md`) |
+| dir=prev / backward drain / drain direction | web-feed (ADR 0055) |
 
 ## Synchronized Changes
 
@@ -52,11 +54,12 @@
 | feed-structure-refactor | [specs/archived/feed-structure-refactor/](../archived/feed-structure-refactor/) | [web-feed.md](./web-feed.md) |
 | web-chat-ui | [specs/archived/web-chat-ui/](../archived/web-chat-ui/) | [web-chat.md](./web-chat.md), [web-feed.md](./web-feed.md) |
 | web-chat-ui-polish | [specs/archived/web-chat-ui-polish/](../archived/web-chat-ui-polish/) | [web-chat.md](./web-chat.md), [web-feed.md](./web-feed.md) |
+| web-feed-prev-page | [specs/archived/web-feed-prev-page/](../archived/web-feed-prev-page/) | [web-feed.md](./web-feed.md) (WEB-3, WEB-4 amended; WEB-7 refreshed; WEB-R5 to WEB-R8) |
 
 ## Decisions (ADR registry)
 
 ADR numbers are **repo-wide monotonic** across both harness roots (this one and
-the repo root's). The next ADR written in either harness is **0040**. (ADRs 0009–0031 were written by the repo-root harness; see its index.)
+the repo root's). The next ADR written in either harness is **0055**. ADRs 0040, 0042–0048 and 0051–0054 are taken by the repo-root harness; 0049 and 0050 are claimed by `web-chat-visitor-rate-limit` (not yet archived); 0041 was never promoted. (ADRs 0009–0031 were written by the repo-root harness; see its index.)
 
 | ADR | Title | Status | Capability | Path |
 |---|---|---|---|---|
@@ -76,6 +79,7 @@ the repo root's). The next ADR written in either harness is **0040**. (ADRs 0009
 | 0037 | Amend the dependency rule for `react-markdown` and `use-stick-to-bottom` | Accepted | web-chat | [specs/archived/web-chat-ui-polish/decisions/0037-dependency-rule-amended-for-react-markdown-and-use-stick-to-bottom.md](../archived/web-chat-ui-polish/decisions/0037-dependency-rule-amended-for-react-markdown-and-use-stick-to-bottom.md) |
 | 0038 | Assistant markdown renders through a safe subset | Accepted | web-chat | [specs/archived/web-chat-ui-polish/decisions/0038-assistant-markdown-renders-through-a-safe-subset.md](../archived/web-chat-ui-polish/decisions/0038-assistant-markdown-renders-through-a-safe-subset.md) |
 | 0039 | Design deliverable revisions live with the feature that makes them | Accepted | web-feed | [specs/archived/web-chat-ui-polish/decisions/0039-deliverable-revisions-live-with-the-feature.md](../archived/web-chat-ui-polish/decisions/0039-deliverable-revisions-live-with-the-feature.md) |
+| 0055 | The drain direction is a web-owned `dir=prev` URL hint, never read from the opaque cursor (amends 0004 for backward requests) | Accepted | web-feed | [specs/archived/web-feed-prev-page/decisions/0055-drain-direction-is-a-web-owned-url-hint-never-read-from-the-cursor.md](../archived/web-feed-prev-page/decisions/0055-drain-direction-is-a-web-owned-url-hint-never-read-from-the-cursor.md) |
 
 ## Open reservations
 
@@ -96,6 +100,10 @@ the repo root's). The next ADR written in either harness is **0040**. (ADRs 0009
 | WEBCHAT-R7 | No green CI run of `harny-feedback-apps-web.yml` against the chat work; no per-turn hook evidence. | MEDIUM | `specs/archived/web-chat-ui/audit.md` F6; `web-chat-ui-polish/audit.md` F2 | web-chat |
 | WEBCHAT-R8 | Red evidence missing for polish outcomes O5–O8; shell freeze rests on mtimes. | LOW | `specs/archived/web-chat-ui-polish/audit.md` F4, F6 | web-chat |
 | WEBCHAT-R9 | Launcher `aria-controls` names an unmounted id while closed; a draft edited while pending is overwritten on failure. | LOW | `specs/archived/web-chat-ui/audit.md` F8, F10 | web-chat |
+| WEB-R5 | No green CI run of `harny-feedback-apps-web.yml` against the previous-page work yet, and no `apps/web` per-turn hook record for its edits. | LOW | `specs/archived/web-feed-prev-page/audit.md` F5 | web-feed |
+| WEB-R6 | The e2e Previous flow does not assert that `Next page →` is present on the backward first page. | LOW (accepted) | `specs/archived/web-feed-prev-page/audit.md` F7 | web-feed |
+| WEB-R7 | On a last page with only First and Previous, `space-between` puts Previous at the right edge. Accepted default; grouping needs a design revision. | LOW (accepted) | `specs/archived/web-feed-prev-page/intent.md` | web-feed |
+| WEB-R8 | With a `tag` filter, a Previous page's boundaries can differ from the forward ones (root FA-R2); the web app does not compensate. | LOW (accepted) | `specs/archived/feed-prev-cursor/` (FA-R2) | web-feed |
 
 ## Notes
 

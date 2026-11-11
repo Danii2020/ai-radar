@@ -21,7 +21,7 @@ import { loadFeedState } from "./load-feed-state";
 
 const mockedLoadFeed = vi.mocked(loadFeed);
 
-const PAGE: FeedPage = { cards: [], nextCursor: "next", skipped: 0, requests: 2 };
+const PAGE: FeedPage = { cards: [], nextCursor: "next", prevCursor: null, skipped: 0, requests: 2 };
 
 let errorSpy: ReturnType<typeof vi.spyOn>;
 
@@ -44,6 +44,14 @@ describe("loadFeedState: success", () => {
     if (state.status === "ok") expect(state.page).toBe(PAGE);
     expect(mockedLoadFeed).toHaveBeenCalledWith({ tag: "agents", cursor: "abc" });
     expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it("passes direction 'prev' through to loadFeed for a backward request", async () => {
+    mockedLoadFeed.mockResolvedValue(PAGE);
+
+    await loadFeedState({ tag: "agents", cursor: "abc", direction: "prev" });
+
+    expect(mockedLoadFeed).toHaveBeenCalledWith({ tag: "agents", cursor: "abc", direction: "prev" });
   });
 });
 

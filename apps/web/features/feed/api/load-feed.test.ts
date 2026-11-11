@@ -46,12 +46,16 @@ function fetchFeedMock() {
   return fetchFeed as unknown as ReturnType<typeof vi.fn>;
 }
 
-function emptyPage(nextCursor: string | null) {
-  return { cards: [], nextCursor, skipped: 0, requests: 1 };
+function emptyPage(nextCursor: string | null, prevCursor: string | null = null) {
+  return { cards: [], nextCursor, prevCursor, skipped: 0, requests: 1 };
 }
 
-function nonEmptyPage(cards: CardOut[], nextCursor: string | null) {
-  return { cards, nextCursor, skipped: 0, requests: 1 };
+function nonEmptyPage(
+  cards: CardOut[],
+  nextCursor: string | null,
+  prevCursor: string | null = null,
+) {
+  return { cards, nextCursor, prevCursor, skipped: 0, requests: 1 };
 }
 
 beforeEach(() => {
@@ -120,5 +124,39 @@ describe("loadFeed empty-page drain", () => {
     expect(fetchFeedMock()).toHaveBeenCalledTimes(MAX_DRAIN_REQUESTS);
     expect(page.cards).toEqual([]);
     expect(page.nextCursor).toBe(`cursor-${MAX_DRAIN_REQUESTS - 1}`);
+  });
+});
+
+describe("loadFeed backward drain (direction prev)", () => {
+  it("follows prevCursor verbatim, never nextCursor, and returns the first non-empty page", async () => {
+    fetchFeedMock()
+      .mockResolvedValueOnce(emptyPage("F1", "B1"))
+      .mockResolvedValueOnce(emptyPage("F2", "B2"))
+      .mockResolvedValueOnce(
+        nonEmptyPage([fullCard({ card_id: "back-1" })], "F3", "B3"),
+      );
+
+    const page = await loadFeed({ tag: "x", cursor: "B0", direction: "prev" });
+
+    const cursors = fetchFeedMock().mock.calls.map((call) => call[0].cursor);
+    expect(cursors).toEqual(["B0", "B1", "B2"]);
+    expect(page.cards[0].card_id).toBe("back-1");
+    expect(page.prevCursor).toBe("B3");
+    expect(page.nextCursor).toBe("F3");
+  });
+
+  it("stops at MAX_DRAIN_REQUESTS and keeps the last prevCursor", async () => {
+    for (let i = 1; i <= MAX_DRAIN_REQUESTS; i += 1) {
+      fetchFeedMock().mockResolvedValueOnce(emptyPage(`F${i}`, `B${i}`));
+    }
+    fetchFeedMock().mockImplementation(() => {
+      throw new Error("loadFeed must not issue a 6th drain request");
+    });
+
+    const page = await loadFeed({ tag: "x", cursor: "B0", direction: "prev" });
+
+    expect(fetchFeedMock()).toHaveBeenCalledTimes(MAX_DRAIN_REQUESTS);
+    expect(page.cards).toEqual([]);
+    expect(page.prevCursor).toBe(`B${MAX_DRAIN_REQUESTS}`);
   });
 });

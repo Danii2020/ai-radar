@@ -5,12 +5,14 @@ import { loadFeed } from './load-feed'
 export async function loadFeedState({
   tag,
   cursor,
+  direction,
 }: {
   tag?: string
   cursor?: string
+  direction?: 'prev'
 }): Promise<FeedViewState> {
   try {
-    return { status: 'ok', page: await loadFeed({ tag, cursor }) }
+    return { status: 'ok', page: await loadFeed({ tag, cursor, direction }) }
   } catch (error) {
     // Structured, single-line log — the idiom of src/api/handler.py's
     // `feed_api_request` record. The message never reaches the browser.

@@ -1,12 +1,14 @@
 import { fetchFeed, type FeedPage } from './client'
 
 /** Bounded so a pathological filter cannot fan one page view into unbounded
- *  billed requests (AD-6). 5 x PAGE_SIZE(20) = 100 > the 87-card corpus. */
+ *  billed requests (AD-6). 5 x PAGE_SIZE(5) = 25 cards scanned at most per filtered view. */
 export const MAX_DRAIN_REQUESTS = 5
 
 export interface LoadFeedParams {
   tag?: string
   cursor?: string
+  /** Web-owned URL hint (`dir=prev`); never read from the cursor, never sent to feed-api. */
+  direction?: 'prev'
 }
 
 /**
@@ -24,12 +26,11 @@ export async function loadFeed(params: LoadFeedParams = {}): Promise<FeedPage> {
   let page = await fetchFeed({ tag: params.tag, cursor })
   let requests = 1
 
-  while (
-    page.cards.length === 0 &&
-    page.nextCursor !== null &&
-    requests < MAX_DRAIN_REQUESTS
-  ) {
-    cursor = page.nextCursor
+  const backward = params.direction === 'prev'
+  const follow = (p: FeedPage) => (backward ? p.prevCursor : p.nextCursor)
+
+  while (page.cards.length === 0 && follow(page) !== null && requests < MAX_DRAIN_REQUESTS) {
+    cursor = follow(page) as string
     page = await fetchFeed({ tag: params.tag, cursor })
     requests += 1
   }
