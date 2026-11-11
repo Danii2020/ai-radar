@@ -47,12 +47,15 @@ class CardOut(BaseModel):
 
 class FeedResponse(BaseModel):
     """One page of the feed. `next_cursor` is opaque: pass it back verbatim as
-    `?cursor=`. It is `None` — and ONLY None — when the feed is exhausted."""
+    `?cursor=`. It is `None` — and ONLY None — when the feed is exhausted.
+    `prev_cursor` is the same kind of token for the page before this one; it is
+    `None` on the first page. Optional and additive, so the schema stays v1."""
 
     model_config = ConfigDict(extra="ignore")
 
     cards: list[CardOut]
     next_cursor: str | None = None
+    prev_cursor: str | None = None
 
 
 def json_schema() -> dict:

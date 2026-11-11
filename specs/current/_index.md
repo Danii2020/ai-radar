@@ -1,7 +1,8 @@
 # Current-State Specifications
 
 > Current truth for this repo. Maintained by `harny-sync`; do not hand-edit.
-> Last synced: 2026-10-28 (`ci-log-masking` archived: ADR 0048 amends ADR 0040 (the chat API id and the account id are
+> Last synced: 2026-11-10 (`feed-prev-cursor` archived: FA-7 added, FA-1 and FA-3 amended for backward pages, ADRs 0051–0054, reservations FA-R2 to FA-R4 — see Notes).
+> Earlier: 2026-10-28 (`ci-log-masking` archived: ADR 0048 amends ADR 0040 (the chat API id and the account id are
 > repository secrets, not variables); the fix is implemented and audit-approved, NOT yet run on GitHub; O4–O6 pending).
 > Earlier: 2026-10-28 (`backend-cicd-pipeline` archived, implemented and audit-approved with
 > reservations, NOT LIVE: new `ci-cd` capability, ADRs 0040 and 0042–0047 (0041 not promoted), amends
@@ -35,12 +36,12 @@
 | scheduling | [scheduling.md](./scheduling.md) | [eventbridge-schedule](../archived/eventbridge-schedule/), [backend-cicd-pipeline](../archived/backend-cicd-pipeline/) (SC-5) |
 | observability | [observability.md](./observability.md) | [run-observability](../archived/run-observability/) |
 | config-loading | [config-loading.md](./config-loading.md) | [pydantic-settings-config](../archived/pydantic-settings-config/), [rename-spike-to-shared](../archived/rename-spike-to-shared/) |
-| feed-api | [feed-api.md](./feed-api.md) | [feed-api](../archived/feed-api/), [backend-cicd-pipeline](../archived/backend-cicd-pipeline/) (FA-6) |
+| feed-api | [feed-api.md](./feed-api.md) | [feed-api](../archived/feed-api/), [backend-cicd-pipeline](../archived/backend-cicd-pipeline/) (FA-6), [feed-prev-cursor](../archived/feed-prev-cursor/) (FA-7 new; FA-1 and FA-3 amended) |
 | chat-retrieval | [chat-retrieval.md](./chat-retrieval.md) | [chat-retrieval](../archived/chat-retrieval/), [chat-agent-runtime](../archived/chat-agent-runtime/) (no requirement change) |
 | chat-agent | [chat-agent.md](./chat-agent.md) | [chat-agent-runtime](../archived/chat-agent-runtime/) |
 | chat-api | [chat-api.md](./chat-api.md) | [chat-api](../archived/chat-api/), [chat-api-auth](../archived/chat-api-auth/) (CAPI-4 amended, CAPI-6 note) |
 | chat-api-auth | [chat-api-auth.md](./chat-api-auth.md) | [chat-api-auth](../archived/chat-api-auth/), [backend-cicd-pipeline](../archived/backend-cicd-pipeline/) (CAAUTH-10; amends ADR 0028 via ADR 0043) |
-| ci-cd | [ci-cd.md](./ci-cd.md) | [backend-cicd-pipeline](../archived/backend-cicd-pipeline/) (new; implemented, NOT LIVE — O12 a–i pending), [ci-log-masking](../archived/ci-log-masking/) (CICD-11, CICD-15, invariants 6–7; ADR 0048; not yet run on GitHub) |
+| ci-cd | [ci-cd.md](./ci-cd.md) | [backend-cicd-pipeline](../archived/backend-cicd-pipeline/) (new; live since 2026-10-28, O12 a–i reservations open), [ci-log-masking](../archived/ci-log-masking/) (CICD-11, CICD-15, invariants 6–7; ADR 0048; not yet run on GitHub) |
 
 ## Keyword lookup
 
@@ -97,6 +98,8 @@
 | shared/ package | config-loading |
 | GET /v1/cards | feed-api |
 | cursor / next_cursor pagination | feed-api (see also apps/web: web-feed) |
+| prev_cursor / backward paging | feed-api |
+| direction in cursor / limit + 1 (backward) | feed-api |
 | CORS (feed-api) | feed-api |
 | CardOut / FeedResponse | feed-api |
 | tag filter | feed-api (see also apps/web: web-feed) |
@@ -139,6 +142,7 @@
 | schedule guard / schedule DISABLED guard | ci-cd, scheduling |
 | SC-5 | scheduling |
 | FA-6 | feed-api |
+| FA-7 | feed-api |
 | CloudFormation execution policy / cdk bootstrap | ci-cd |
 | handler snapshot / omission list | ci-cd |
 | repository protection / ruleset | ci-cd |
@@ -169,11 +173,12 @@
 | chat-api | [specs/archived/chat-api/](../archived/chat-api/) | [chat-api.md](./chat-api.md) (new) |
 | chat-api-auth | [specs/archived/chat-api-auth/](../archived/chat-api-auth/) | [chat-api-auth.md](./chat-api-auth.md) (new), [chat-api.md](./chat-api.md) (CAPI-4 amended, CAPI-6 note, ADR 0027 superseded) |
 | ci-log-masking | [specs/archived/ci-log-masking/](../archived/ci-log-masking/) | [ci-cd.md](./ci-cd.md) (CICD-10 ECR grant, CICD-11, CICD-15, invariants 6–7, CICD-LEAK; ADR 0048 amends ADR 0040). Implemented and audit-approved; NOT yet run on GitHub. |
-| backend-cicd-pipeline | [specs/archived/backend-cicd-pipeline/](../archived/backend-cicd-pipeline/) | [ci-cd.md](./ci-cd.md) (new), [runtime-deployment.md](./runtime-deployment.md) (RD-9), [scheduling.md](./scheduling.md) (SC-5), [chat-api-auth.md](./chat-api-auth.md) (CAAUTH-10, ADR 0043 amends ADR 0028), [feed-api.md](./feed-api.md) (FA-6). Implemented and audit-approved with reservations; not live. |
+| backend-cicd-pipeline | [specs/archived/backend-cicd-pipeline/](../archived/backend-cicd-pipeline/) | [ci-cd.md](./ci-cd.md) (new), [runtime-deployment.md](./runtime-deployment.md) (RD-9), [scheduling.md](./scheduling.md) (SC-5), [chat-api-auth.md](./chat-api-auth.md) (CAAUTH-10, ADR 0043 amends ADR 0028), [feed-api.md](./feed-api.md) (FA-6). Implemented and audit-approved with reservations; live since 2026-10-28. |
+| feed-prev-cursor | [specs/archived/feed-prev-cursor/](../archived/feed-prev-cursor/) | [feed-api.md](./feed-api.md) (FA-7 new; FA-1 and FA-3 amended for backward pages; FA-R2 to FA-R4). Implemented and audit-approved with reservations; deployed by hand 2026-11-10 and live-checked; not yet merged to `main`. |
 
 ## Decisions (ADR registry)
 
-ADR numbers are **repo-wide monotonic** across both harness roots: 0001–0007 belong to `web-feed-ui` and 0008 to `feed-structure-refactor`, both registered in [`apps/web/specs/current/_index.md`](../../apps/web/specs/current/_index.md) (the frontend index still names 0008 as next, and is not edited here). ADRs 0032–0039 were written by `web-chat-ui` and `web-chat-ui-polish` in the frontend harness (see [`apps/web/specs/current/_index.md`](../../apps/web/specs/current/_index.md)). ADRs 0040 and 0042–0047 were written by `backend-cicd-pipeline`. **0041 was never promoted** (the cap of seven ADRs per feature in `harny-adr` was reached), so it stays unassigned. ADR 0048 (`ci-log-masking`) amends ADR 0040 and is recorded in the registry; the next ADR written in either harness is **0049**. ADRs 0028–0031 were written by `chat-api-auth` and supersede ADR 0027. ADR 0043 amends ADR 0028; ADR 0028's file is not edited and its status stays Accepted.
+ADR numbers are **repo-wide monotonic** across both harness roots: 0001–0007 belong to `web-feed-ui` and 0008 to `feed-structure-refactor`, both registered in [`apps/web/specs/current/_index.md`](../../apps/web/specs/current/_index.md) (the frontend index still names 0008 as next, and is not edited here). ADRs 0032–0039 were written by `web-chat-ui` and `web-chat-ui-polish` in the frontend harness (see [`apps/web/specs/current/_index.md`](../../apps/web/specs/current/_index.md)). ADRs 0040 and 0042–0047 were written by `backend-cicd-pipeline`. **0041 was never promoted** (the cap of seven ADRs per feature in `harny-adr` was reached), so it stays unassigned. ADR 0048 (`ci-log-masking`) amends ADR 0040 and is recorded in the registry; ADRs 0051–0054 were written by `feed-prev-cursor`. Numbers 0049 and 0050 are claimed by `apps/web/specs/web-chat-visitor-rate-limit` (not yet archived), so the next unclaimed number is **0056** (ADR 0055 was written by `apps/web` `web-feed-prev-page`, capability `web-feed`). ADRs 0028–0031 were written by `chat-api-auth` and supersede ADR 0027. ADR 0043 amends ADR 0028; ADR 0028's file is not edited and its status stays Accepted.
 
 | ADR | Title | Status | Capability | Path |
 |---|---|---|---|---|
@@ -208,6 +213,11 @@ ADR numbers are **repo-wide monotonic** across both harness roots: 0001–0007 b
 | 0046 | CloudFormation executes under two scoped customer-managed policies, not AdministratorAccess | Accepted | ci-cd | [specs/archived/backend-cicd-pipeline/decisions/0046-cloudformation-execution-scoped-to-the-ai-radar-resources.md](../archived/backend-cicd-pipeline/decisions/0046-cloudformation-execution-scoped-to-the-ai-radar-resources.md) |
 | 0047 | Repository protection is applied by a rerunnable script that dry-runs by default | Accepted | ci-cd | [specs/archived/backend-cicd-pipeline/decisions/0047-repository-protection-as-a-rerunnable-script-that-dry-runs-by-default.md](../archived/backend-cicd-pipeline/decisions/0047-repository-protection-as-a-rerunnable-script-that-dry-runs-by-default.md) |
 | 0048 | The chat API id and the account id are repository secrets, so GitHub masks them in every log line (amends ADR 0040) | Accepted | ci-cd | [specs/archived/ci-log-masking/decisions/0048-ci-identifiers-are-repository-secrets-so-logs-mask-them.md](../archived/ci-log-masking/decisions/0048-ci-identifiers-are-repository-secrets-so-logs-mask-them.md) |
+| 0051 | Backward paging is one reversed Query, with the direction carried in the opaque cursor | Accepted | feed-api | [specs/archived/feed-prev-cursor/decisions/0051-backward-paging-is-a-stateless-reversed-query-with-direction-in-the-cursor.md](../archived/feed-prev-cursor/decisions/0051-backward-paging-is-a-stateless-reversed-query-with-direction-in-the-cursor.md) |
+| 0052 | The forward cursor encoding is frozen, so cursors issued earlier stay valid | Accepted | feed-api | [specs/archived/feed-prev-cursor/decisions/0052-forward-cursor-encoding-is-frozen-so-earlier-cursors-stay-valid.md](../archived/feed-prev-cursor/decisions/0052-forward-cursor-encoding-is-frozen-so-earlier-cursors-stay-valid.md) |
+| 0053 | The backward query reads limit + 1 items to tell the start of the feed from more before | Accepted | feed-api | [specs/archived/feed-prev-cursor/decisions/0053-backward-query-reads-limit-plus-one-to-detect-the-start-of-feed.md](../archived/feed-prev-cursor/decisions/0053-backward-query-reads-limit-plus-one-to-detect-the-start-of-feed.md) |
+| 0054 | An added optional response field does not bump the API version | Accepted | feed-api | [specs/archived/feed-prev-cursor/decisions/0054-an-added-optional-response-field-does-not-bump-the-api-version.md](../archived/feed-prev-cursor/decisions/0054-an-added-optional-response-field-does-not-bump-the-api-version.md) |
+| 0055 | The drain direction is a web-owned `dir=prev` URL hint, never read from the opaque cursor (amends ADR 0004 for backward requests) | Accepted | web-feed | [apps/web/specs/archived/web-feed-prev-page/decisions/0055-drain-direction-is-a-web-owned-url-hint-never-read-from-the-cursor.md](../../apps/web/specs/archived/web-feed-prev-page/decisions/0055-drain-direction-is-a-web-owned-url-hint-never-read-from-the-cursor.md) |
 
 All 10 features archived in the 2026-09-17 bootstrap pass shipped before
 `harny-adr` existed in this project; per that skill's own no-backfill
@@ -226,6 +236,9 @@ first feature archived here with ADRs (0009–0015, from its approved execution 
 | RO-1 | `CURATION_EMIT_METRICS=false` kill switch never exercised live, offline-tested only. | LOW | `specs/archived/run-observability/audit.md` | observability |
 | RO-2 | No unattended/scheduled run has ever produced observability records — depends on ES-2. | MEDIUM (operational) | `specs/archived/run-observability/audit.md` | observability |
 | FA-R1 | Deployed feed-api Lambda's `ReservedConcurrentExecutions` is unreserved (`null`), not the contract's intended `5`, bridged by an account-quota workaround. | LOW (operational) | `specs/archived/feed-api/audit.md` AD-7 | feed-api |
+| FA-R2 | With a `tag` filter, backward page boundaries can differ from the forward pages, because DynamoDB applies the filter after `Limit`. The cards visited are the same. No over-fetch is added. Accepted by the human. | LOW (accepted) | `specs/archived/feed-prev-cursor/intent.md` AC4; ADR 0051 | feed-api |
+| FA-R3 | The live check (2026-11-10) ran a full walk at `limit=5` on a 16-card table, not the `limit=1` walk the runbook recommends. The tie groups (equal `gsi_sk`) in the live table were not recorded. The function was deployed by hand, not by CI. | LOW (open) | `specs/archived/feed-prev-cursor/audit.md` F5; `README.md` § Live state | feed-api |
+| FA-R4 | Audit round 1 findings left open, on record-keeping and test labels: T2 case `keyless-extra-key` (F2), the stale `tasks.md` status and missing red results (F3), the PR CI and `cdk diff` not yet run (F4), the T3 comment (F6). Accepted as non-blocking in round 1. | LOW (open) | `specs/archived/feed-prev-cursor/audit.md` F2, F3, F4, F6 | feed-api |
 | F7 | Not verified in CI or live: the branch is unpushed, so no `harny-feedback.yml` run and no Stop-hook evidence exist; AC7 is verified offline only (no live `run_chat.py` against DynamoDB and Bedrock). | LOW | `specs/archived/chat-retrieval/audit.md` (F7) | chat-retrieval |
 | F11 | Accepted limitation: a card whose `upsert` failed still gets a Titan call (about $0.00002 per card, auditor's estimate); counted in `embed_failed`, AC2 holds. | LOW | `specs/archived/chat-retrieval/audit.md` (F11) | curation-pipeline |
 | CAR-F5 | `tests/test_chat_app.py` `empty-text` param is a bare list (exercises `payload_not_object`); empty text is covered elsewhere. | LOW | `specs/archived/chat-agent-runtime/audit.md` (F5) | chat-agent |
@@ -364,3 +377,12 @@ unedited) and `feed-api` (FA-6). Its ADRs are 0040 and 0042–0047; 0041 was nev
 caps a feature at seven ADRs. Its open reservations are CICD-F8, F10–F15, CICD-ESC, CICD-VERCEL and
 CICD-SOLO, plus CAAUTH-SMOKE. The audit's round-1 findings F1–F6 and F9 are closed, and F7 is closed on reused
 evidence.
+
+**2026-11-10 feed-prev-cursor.** `GET /v1/cards` returns `prev_cursor` on every 200, so a client can page backward. The
+direction lives in the opaque cursor, and each request is one reversed `Query` on `feed-by-score`, with the IAM grant
+unchanged. It creates FA-7 and amends FA-1 (ascending read, descending page) and FA-3 (a backward page always has a
+non-null `next_cursor`) in `feed-api`. Its ADRs are 0051–0054, all in `feed-api`. Its open reservations are FA-R2 (the
+filtered backward boundary, accepted) and FA-R3 and FA-R4 (LOW). The feature passed audit round 1 with reservations and was
+deployed by hand on 2026-11-10 (`cdk deploy AiRadarFeedApi`), then live-checked at `limit=5`. It is not yet merged to `main`.
+The frontend does not use `prev_cursor` yet. Correction: `ci-cd` is live (two `backend deploy` runs on `main` on 2026-10-28,
+per `README.md` § Live state). The 2026-10-28 backend notes above describe ship time, and their "NOT live" wording is historical.

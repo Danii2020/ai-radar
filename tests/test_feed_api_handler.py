@@ -254,3 +254,114 @@ def test_handler_emits_a_structured_feed_api_request_log_record(dynamo_table, ca
         if isinstance(payload, dict) and payload.get("event") == "feed_api_request":
             matches.append(payload)
     assert len(matches) == 1
+
+
+# --- feed-prev-cursor: T3, T4 (through the handler; moto-backed) -------------
+
+
+class _CountingQueryTable:
+    """Counts `.query()` calls on a moto-backed table (one Query per request)."""
+
+    def __init__(self, real_table):
+        self._real_table = real_table
+        self.query_call_count = 0
+
+    def query(self, **kwargs):
+        self.query_call_count += 1
+        return self._real_table.query(**kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self._real_table, name)
+
+
+def _get(limit: int, cursor: str | None = None, tag: str | None = None) -> dict:
+    query = {"limit": str(limit)}
+    if cursor is not None:
+        query["cursor"] = cursor
+    if tag is not None:
+        query["tag"] = tag
+    response = handler(_event(query=query), None)
+    assert response["statusCode"] == 200
+    return _body(response)
+
+
+def _ids(body: dict) -> list[str]:
+    return [c["card_id"] for c in body["cards"]]
+
+
+def _forward_walk(limit: int, tag: str | None = None) -> list[dict]:
+    pages = [_get(limit, tag=tag)]
+    while pages[-1]["next_cursor"] is not None:
+        assert len(pages) < 50, "forward walk did not terminate"
+        pages.append(_get(limit, pages[-1]["next_cursor"], tag))
+    return pages
+
+
+# T3 (AC1, AC2, AC3, AC7): unfiltered, ties across a page boundary.
+def test_prev_cursor_returns_the_previous_page_and_next_cursor_returns_it_back(
+    dynamo_table, put_card_item, monkeypatch
+):
+    for i in range(10):
+        # relevance 9 for ids 0-4 and 3 for 5-9, same date: ties on gsi_sk
+        # straddle the limit=3 boundaries (pages 1/2 and 2/3).
+        put_card_item(f"c{i}", relevance=9 if i < 5 else 3, published="2026-08-01")
+    counting = _CountingQueryTable(dynamo_table)
+    _use_table(monkeypatch, counting)
+
+    pages = _forward_walk(3)
+
+    assert len(pages) == 4
+    assert pages[0]["prev_cursor"] is None
+    assert all(p["prev_cursor"] is not None for p in pages[1:])
+    for k in range(1, len(pages)):
+        before_calls = counting.query_call_count
+        back = _get(3, pages[k]["prev_cursor"])
+        assert counting.query_call_count == before_calls + 1
+        assert _ids(back) == _ids(pages[k - 1])
+        assert (back["prev_cursor"] is None) == (k - 1 == 0)
+        assert _ids(_get(3, back["next_cursor"])) == _ids(pages[k])
+
+
+# T4 (AC1, AC3, AC4): empty filtered pages, leading/trailing non-matching runs.
+@pytest.mark.parametrize("tag", [None, "target"], ids=["no-tag", "tag"])
+def test_backward_walk_yields_the_exact_prefix_and_forward_from_head_the_whole_feed(
+    dynamo_table, put_card_item, monkeypatch, tag
+):
+    matching = {9, 7, 5}
+    for relevance in range(12, 0, -1):  # feed order is 12 .. 1
+        put_card_item(
+            f"r{relevance:02d}",
+            relevance=relevance,
+            published="2026-08-01",
+            tags=["target"] if relevance in matching else ["other"],
+        )
+    _use_table(monkeypatch, dynamo_table)
+    limit = 2
+
+    pages = _forward_walk(limit, tag)
+    full = [cid for p in pages for cid in _ids(p)]
+    assert len(full) == len(set(full))
+
+    for i, page in enumerate(pages):
+        before: list[str] = []
+        head = page
+        cursor = page["prev_cursor"]
+        steps = 0
+        while cursor is not None:
+            steps += 1
+            assert steps < 50, "backward walk did not terminate"
+            head = _get(limit, cursor, tag)
+            before = _ids(head) + before
+            cursor = head["prev_cursor"]
+        assert before == [cid for p in pages[:i] for cid in _ids(p)]
+
+        walked = _ids(head)
+        nxt = head["next_cursor"]
+        steps = 0
+        while nxt is not None:
+            steps += 1
+            assert steps < 50, "forward re-walk did not terminate"
+            body = _get(limit, nxt, tag)
+            walked += _ids(body)
+            nxt = body["next_cursor"]
+        assert walked == full

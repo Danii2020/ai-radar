@@ -19,23 +19,39 @@ class InvalidCursorError(ValueError):
     """Raised for any cursor that is not a well-formed, in-partition key."""
 
 
-def encode_cursor(last_evaluated_key: dict) -> str:
-    """`{"card_id": …, "gsi_pk": "CARD", "gsi_sk": …}` -> URL-safe base64 of its
-    compact, key-sorted JSON, with `=` padding stripped. Deterministic: the
-    same key always yields the same token."""
-    compact = json.dumps(last_evaluated_key, sort_keys=True, separators=(",", ":"))
+_DIR_KEY = "dir"
+_DIRECTIONS: frozenset[str] = frozenset({"next", "prev"})
+
+
+def encode_cursor(key: dict | None, direction: str = "next") -> str:
+    """URL-safe base64 of compact, key-sorted JSON, `=` padding stripped.
+
+    Shapes (the only ones decode accepts): forward with a key is the bare
+    three-key object (byte-identical to cursors issued before backward paging);
+    backward with a key adds `"dir": "prev"`; with no key the payload is just
+    `{"dir": direction}` (`"next"` = start of feed, `"prev"` = end of feed).
+    Deterministic: the same inputs always yield the same token."""
+    if direction not in _DIRECTIONS:
+        raise ValueError(f"unknown cursor direction: {direction!r}")
+    if key is None:
+        payload: dict = {_DIR_KEY: direction}
+    elif direction == "prev":
+        payload = {**key, _DIR_KEY: "prev"}
+    else:
+        payload = key
+    compact = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     token = base64.urlsafe_b64encode(compact.encode("utf-8")).decode("ascii")
     return token.rstrip("=")
 
 
-def decode_cursor(token: str) -> dict:
-    """Inverse of `encode_cursor`. Re-pads, base64url-decodes, JSON-parses, and
-    VALIDATES: a JSON object whose keys are exactly CURSOR_KEYS, all values
-    `str`, and `gsi_pk == config.FEED_GSI_PARTITION`. Anything else (bad
-    base64, bad JSON, wrong/missing keys, non-str value, foreign partition)
-    raises InvalidCursorError. Never returns a partially-trusted dict — the
-    decoded value is passed straight to DynamoDB as ExclusiveStartKey, so this
-    IS the trust boundary."""
+def decode_cursor(token: str) -> tuple[str, dict | None]:
+    """Inverse of `encode_cursor`: `(direction, key | None)`. Re-pads,
+    base64url-decodes, JSON-parses, and VALIDATES exact shapes only: the bare
+    three-key object (forward), the three keys plus `dir == "prev"`, or a
+    lone `dir` of `"next"`/`"prev"` (keyless). Keys are exactly CURSOR_KEYS,
+    all values `str`, `gsi_pk == config.FEED_GSI_PARTITION`. Anything else
+    raises InvalidCursorError. The returned key is passed straight to DynamoDB
+    as ExclusiveStartKey, so this IS the trust boundary."""
     padded = token + "=" * (-len(token) % 4)
     try:
         raw = base64.urlsafe_b64decode(padded.encode("ascii"))
@@ -50,6 +66,16 @@ def decode_cursor(token: str) -> dict:
     if not isinstance(decoded, dict):
         raise InvalidCursorError("cursor must decode to a JSON object")
 
+    direction = "next"
+    if _DIR_KEY in decoded:
+        direction = decoded.pop(_DIR_KEY)
+        if not isinstance(direction, str) or direction not in _DIRECTIONS:
+            raise InvalidCursorError("cursor has an unknown direction")
+        if not decoded:
+            return direction, None
+        if direction != "prev":
+            raise InvalidCursorError("forward cursors carry no direction marker")
+
     if set(decoded.keys()) != CURSOR_KEYS:
         raise InvalidCursorError("cursor has an unexpected key set")
 
@@ -59,4 +85,4 @@ def decode_cursor(token: str) -> dict:
     if decoded["gsi_pk"] != FEED_GSI_PARTITION:
         raise InvalidCursorError("cursor references a foreign gsi partition")
 
-    return decoded
+    return direction, decoded

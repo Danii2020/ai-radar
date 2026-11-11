@@ -28,7 +28,7 @@ WELL_FORMED_KEY = {"card_id": "0a1b2c3d4e5f6071", "gsi_pk": "CARD", "gsi_sk": "0
 # Guarantee 8: decode(encode(k)) == k for a well-formed LastEvaluatedKey.
 def test_decode_of_encode_returns_the_original_key():
     token = encode_cursor(WELL_FORMED_KEY)
-    assert decode_cursor(token) == WELL_FORMED_KEY
+    assert decode_cursor(token) == ("next", WELL_FORMED_KEY)
 
 
 # Guarantee 8: same key -> same token, regardless of the input dict's key
@@ -103,3 +103,44 @@ def test_decode_cursor_rejects_a_foreign_gsi_partition():
 
 def test_invalid_cursor_error_is_a_value_error_subclass():
     assert issubclass(InvalidCursorError, ValueError)
+
+
+# feed-prev-cursor T1 (AC5): encode/decode is an exact inverse for every shape
+# the server issues. Assumed interface (the plan leaves signatures open):
+# `encode_cursor(key | None, direction="next" | "prev")` and
+# `decode_cursor(token) -> (direction, key | None)`; a keyless cursor is the
+# start ("next") or end ("prev") of the feed.
+@pytest.mark.parametrize(
+    ("direction", "key"),
+    [
+        ("next", WELL_FORMED_KEY),
+        ("prev", WELL_FORMED_KEY),
+        ("next", None),
+        ("prev", None),
+    ],
+    ids=["forward-key", "backward-key", "start-of-feed", "end-of-feed"],
+)
+def test_decode_of_encode_returns_the_same_direction_and_key(direction, key):
+    token = encode_cursor(key, direction=direction)
+    assert decode_cursor(token) == (direction, key)
+
+
+# feed-prev-cursor T2 (AC6): near-miss shapes are rejected, never trusted.
+def _token(payload) -> str:
+    return base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        dict(WELL_FORMED_KEY, dir="sideways"),
+        dict(WELL_FORMED_KEY, dir=1),
+        {"dir": "prev", "card_id": "0a1b2c3d4e5f6071"},
+        {"dir": "prev", "extra": "x"},
+        dict(WELL_FORMED_KEY, dir="prev", gsi_pk="NOT-CARD"),
+    ],
+    ids=["unknown-dir", "non-string-dir", "dir-partial-key", "keyless-extra-key", "backward-foreign-pk"],
+)
+def test_decode_cursor_rejects_near_miss_direction_shapes(payload):
+    with pytest.raises(InvalidCursorError):
+        decode_cursor(_token(payload))

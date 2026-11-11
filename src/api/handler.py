@@ -56,7 +56,8 @@ def handler(event: dict, context) -> dict:
     """`GET /v1/cards?tag=<str>&limit=<int>&cursor=<str>` (API Gateway HTTP API,
     payload format 2.0) -> a `FeedResponse` JSON body.
 
-    200 body: {"cards": [CardOut, ...], "next_cursor": str | null}
+    200 body: {"cards": [CardOut, ...], "next_cursor": str | null,
+                "prev_cursor": str | null}
     400 body: {"error": "<code>", "message": "<human-readable>"}
     500 body: {"error": "internal_error", "message": "internal error"}
 
@@ -78,24 +79,48 @@ def handler(event: dict, context) -> dict:
         limit = limit_or_error
 
         raw_cursor = query.get("cursor")
-        exclusive_start_key = None
+        direction, exclusive_start_key = "next", None
         if raw_cursor is not None:
             try:
-                exclusive_start_key = decode_cursor(raw_cursor)
+                direction, exclusive_start_key = decode_cursor(raw_cursor)
             except InvalidCursorError:
                 return _error(
                     400, "invalid_cursor", "cursor is malformed or has been tampered with"
                 )
 
         table = card_table()
-        page = query_feed(table, tag=tag, limit=limit, exclusive_start_key=exclusive_start_key)
-
-        next_cursor = (
-            encode_cursor(page.last_evaluated_key)
-            if page.last_evaluated_key is not None
-            else None
+        backward = direction == "prev"
+        page = query_feed(
+            table,
+            tag=tag,
+            limit=limit,
+            exclusive_start_key=exclusive_start_key,
+            backward=backward,
         )
-        body = FeedResponse(cards=page.cards, next_cursor=next_cursor).model_dump_json()
+        lek = page.last_evaluated_key
+
+        if not backward:
+            next_cursor = encode_cursor(lek) if lek is not None else None
+            if exclusive_start_key is None:
+                prev_cursor = None
+            elif page.first_key is not None:
+                prev_cursor = encode_cursor(page.first_key, "prev")
+            else:
+                prev_cursor = encode_cursor(lek, "prev")  # lek None -> end of feed
+        else:
+            if page.last_key is not None:
+                next_cursor = encode_cursor(page.last_key)
+            else:
+                next_cursor = encode_cursor(lek)  # lek None -> start of feed
+            if page.has_more_before:
+                prev_cursor = encode_cursor(page.first_key, "prev")
+            elif lek is not None:
+                prev_cursor = encode_cursor(lek, "prev")
+            else:
+                prev_cursor = None
+        body = FeedResponse(
+            cards=page.cards, next_cursor=next_cursor, prev_cursor=prev_cursor
+        ).model_dump_json()
         response = {
             "statusCode": 200,
             "headers": {"content-type": "application/json"},
@@ -111,7 +136,9 @@ def handler(event: dict, context) -> dict:
                     "limit": limit,
                     "returned": len(page.cards),
                     "skipped": page.skipped,
+                    "direction": direction,
                     "has_next": next_cursor is not None,
+                    "has_prev": prev_cursor is not None,
                     "duration_ms": duration_ms,
                 }
             )
