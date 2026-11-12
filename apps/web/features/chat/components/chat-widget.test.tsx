@@ -496,3 +496,164 @@ describe("header Close (AC5)", () => {
     await waitFor(() => expect(toggle()).toHaveFocus());
   });
 });
+
+// ---------------------------------------------------------------------------------------------
+// Spec: web-chat-swipe-handle, O2 / O3 (AC3, AC4, AC5, AC7). Phone gestures through Pointer Events.
+// jsdom has no matchMedia, so it is stubbed; "phone" means the (max-width: 640px) query matches.
+// ---------------------------------------------------------------------------------------------
+function stubPhone(isPhone: boolean) {
+  vi.stubGlobal(
+    "matchMedia",
+    (query: string) =>
+      ({
+        matches: isPhone && query.includes("max-width: 640px"),
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        onchange: null,
+        dispatchEvent: () => false,
+      }) as unknown as MediaQueryList,
+  );
+}
+
+function gesture(target: Element, dx: number, dy: number, pointerType = "touch", end = true) {
+  const base = { pointerId: 1, pointerType, isPrimary: true };
+  fireEvent.pointerDown(target, { ...base, clientX: 300, clientY: 500, buttons: 1 });
+  fireEvent.pointerMove(target, { ...base, clientX: 300 + dx / 2, clientY: 500 + dy / 2, buttons: 1 });
+  fireEvent.pointerMove(target, { ...base, clientX: 300 + dx, clientY: 500 + dy, buttons: 1 });
+  if (end) fireEvent.pointerUp(target, { ...base, clientX: 300 + dx, clientY: 500 + dy });
+}
+
+describe("phone gestures", () => {
+  beforeEach(() => stubPhone(true));
+
+  const expectClosed = () => expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  const expectOpen = () => expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+  it("swipe left on the tab opens the sheet with focus in the input, and the trailing click does not close it", () => {
+    render(<ChatWidget />);
+    gesture(toggle(), -60, 8);
+    expectOpen();
+    fireEvent.click(toggle());
+    expectOpen();
+    expect(toggle()).toHaveAttribute("aria-expanded", "true");
+    expect(input()).toHaveFocus();
+  });
+
+  it("a pen swipe left opens the sheet too", () => {
+    render(<ChatWidget />);
+    gesture(toggle(), -60, 0, "pen");
+    expectOpen();
+  });
+
+  it.each([
+    ["mostly vertical", -20, 200],
+    ["too short", -30, 0],
+    ["rightward", 60, 0],
+    ["ratio not met", -60, 31],
+  ])("a %s touch gesture on the tab does not open it", (_name, dx, dy) => {
+    render(<ChatWidget />);
+    gesture(toggle(), dx, dy);
+    expectClosed();
+  });
+
+  it("a cancelled gesture does not open the sheet", () => {
+    render(<ChatWidget />);
+    gesture(toggle(), -60, 0, "touch", false);
+    fireEvent.pointerCancel(toggle(), { pointerId: 1, pointerType: "touch" });
+    fireEvent.pointerUp(toggle(), { pointerId: 1, pointerType: "touch", clientX: 240, clientY: 500 });
+    expectClosed();
+  });
+
+  it("a mouse drag never opens the sheet, but a mouse click still toggles it", () => {
+    render(<ChatWidget />);
+    gesture(toggle(), -60, 0, "mouse");
+    expectClosed();
+    fireEvent.click(toggle());
+    expectOpen();
+  });
+
+  describe("with the sheet open", () => {
+    async function openWithAnswer() {
+      fetchMock.mockResolvedValue(json({ answer: "A kept answer.", sources: [] }));
+      render(<ChatWidget />);
+      open();
+      ask("hello");
+      await screen.findByText(/A kept answer\./);
+    }
+
+    it("swipe right on the message area closes it, focuses the tab, and keeps the conversation", async () => {
+      await openWithAnswer();
+      gesture(screen.getByText(/A kept answer\./), 80, 10);
+      expectClosed();
+      expect(toggle()).toHaveFocus();
+      open();
+      expect(screen.getByText(/A kept answer\./)).toBeInTheDocument();
+    });
+
+    it("swipe right on the dialog itself closes it", () => {
+      render(<ChatWidget />);
+      open();
+      gesture(screen.getByRole("dialog"), 80, 0);
+      expectClosed();
+    });
+
+    it("a swipe right that starts in the textarea does not close it", () => {
+      render(<ChatWidget />);
+      open();
+      gesture(input(), 80, 0);
+      expectOpen();
+    });
+
+    it("a swipe right that starts in a horizontally scrolling code block does not close it", async () => {
+      fetchMock.mockResolvedValue(json({ answer: "```\nconst a = 1\n```", sources: [] }));
+      render(<ChatWidget />);
+      open();
+      ask("code");
+      const pre = (await screen.findByRole("dialog")).querySelector("pre") as HTMLElement;
+      await waitFor(() => expect(pre).toBeTruthy());
+      pre.style.overflowX = "auto";
+      Object.defineProperty(pre, "scrollWidth", { configurable: true, value: 900 });
+      Object.defineProperty(pre, "clientWidth", { configurable: true, value: 300 });
+      gesture(pre, 80, 0);
+      expectOpen();
+    });
+
+    it.each([
+      ["leftward", -80, 0],
+      ["mostly vertical", 10, 120],
+      ["too short", 30, 0],
+    ])("a %s gesture on the sheet does not close it", (_name, dx, dy) => {
+      render(<ChatWidget />);
+      open();
+      gesture(screen.getByRole("dialog"), dx, dy);
+      expectOpen();
+    });
+
+    it("a mouse drag on the sheet does not close it", () => {
+      render(<ChatWidget />);
+      open();
+      gesture(screen.getByRole("dialog"), 80, 0, "mouse");
+      expectOpen();
+    });
+  });
+});
+
+describe("desktop gestures (AC7)", () => {
+  beforeEach(() => stubPhone(false));
+
+  it("a touch swipe left on the launcher opens nothing", () => {
+    render(<ChatWidget />);
+    gesture(toggle(), -60, 0);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("a touch swipe right on the open panel does not close it", () => {
+    render(<ChatWidget />);
+    open();
+    gesture(screen.getByRole("dialog"), 80, 0);
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+});

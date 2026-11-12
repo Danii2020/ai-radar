@@ -39,3 +39,15 @@ message with `use-stick-to-bottom` (a "Jump to latest" button appears when you s
 a phone (640 px and narrower) the panel is a full-width bottom sheet. Both packages are pinned
 exactly; see `AGENTS.md`. Overflow, scrolling and reduced-motion checks live in `e2e/layout.e2e.ts`
 and `e2e/chat.e2e.ts`, because jsdom has no layout engine.
+
+Phone edge tab (`web-chat-swipe-handle`): at 640 px and narrower the launcher is a slim tab (24 px wide,
+64 px tall, with a chat icon and no visible text) flush with the right edge in the lower third of the
+screen. Tapping it, or pressing Enter or Space, opens the sheet; a touch or pen swipe left on it opens
+the sheet too, and a swipe right on the open sheet closes it (a threshold of 40 px with a 2:1
+horizontal-to-vertical ratio, no follow-the-finger). Close and Escape still work, and desktop is unchanged.
+On a real phone the OS or browser may take an edge swipe (Android gesture navigation, iOS Safari), so tap is
+the guaranteed path. The human confirmed on an iPhone (Brave) that tapping the tab opens the chat; the
+swipe gestures on a real phone, and Android gesture navigation, are not confirmed (reservation WEBCHAT-R10).
+To try it from a phone against `npm run dev`, open the page over your LAN address: `next.config.ts` lists
+`allowedDevOrigins` for `192.168.*.*` and `10.*.*.*` (dev only), because Next 16 otherwise blocks the dev
+JavaScript for a non-localhost origin and the page never hydrates.

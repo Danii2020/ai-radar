@@ -1,6 +1,6 @@
 # Web Feed Specification
 
-> Last synced: 2026-11-10 (`web-feed-prev-page` archived: WEB-3 and WEB-4 amended for `prev_cursor` and the `dir=prev`
+> Last synced: 2026-11-11 (`web-chat-swipe-handle` archived: `.pagerLink` CSS revised, WEB-9 pointer moved, WEB-R9). Earlier: 2026-11-10 (`web-feed-prev-page` archived: WEB-3 and WEB-4 amended for `prev_cursor` and the `dir=prev`
 > URL hint, WEB-7 refreshed, ADR 0055, WEB-R5 to WEB-R8). Earlier: 2026-10-24. Owned artifacts: `apps/web/` (Next.js 16 App Router
 > project — `app/`, `features/feed/`, `scripts/generate-api-types.mjs`).
 
@@ -166,6 +166,7 @@ The system SHALL treat `apps/web/app/globals.css` and
 `apps/web/features/feed/components/feed.module.css` as verbatim copies of the
 hand-authored design deliverables (the latest revision: `specs/archived/web-feed-ui/
 claude-design-outputs/` plus the feed CSS revision under
+`specs/archived/web-chat-swipe-handle/design/`, which supersedes the one under
 `specs/archived/web-chat-ui-polish/design/`); no hand-authored colour, spacing, or radius value
 may exist outside those two files' custom properties.
 
@@ -245,6 +246,7 @@ one local dev-server browser check against the real `feed-api`.
 | WEB-R6 | The e2e Previous flow does not assert that `Next page →` is present on the backward first page; that is covered at unit level only. | LOW (accepted) | `specs/archived/web-feed-prev-page/audit.md` F7 |
 | WEB-R7 | On a last page that shows only First and Previous, the `space-between` pager layout puts Previous at the right edge, where Next usually sits. Accepted default (no CSS change, WEB-9). Grouping them needs a design revision under the feature's `design/`. | LOW (accepted) | `specs/archived/web-feed-prev-page/intent.md` open questions |
 | WEB-R8 | With a `tag` filter, a Previous page's boundaries can differ from the forward ones, because `feed-api` applies the filter after `Limit`. The web app does not compensate (no over-fetch, no merge). Root reservation FA-R2, accepted by the human. | LOW (accepted) | `specs/archived/feed-prev-cursor/` (FA-R2); `specs/archived/web-feed-prev-page/audit.md` |
+| WEB-R9 | The `.pagerLink` change (min-height, 8 px vertical padding, 18 px line height, centered text, replacing a fixed 26 px height that overflowed when a label wrapped on a phone) and the regeneration of 11 style baselines in `e2e/__baseline__/styles/` were made in the same working tree as `web-chat-swipe-handle` after its audit. The audit read `feed.module.css` and the baselines as unchanged, so this change is not audit-verified. | LOW | `specs/archived/web-chat-swipe-handle/design/feed.module.css`; session record |
 
 ## Contributing features
 
@@ -255,6 +257,7 @@ one local dev-server browser check against the real `feed-api`.
 | web-chat-ui | 2026-10-24 | Amended invariant 3 (the page also mounts the chat widget from `@/features/chat`) and the T29 guard to the `execute-api` host form (ADR 0034); the feed itself is unchanged. See [web-chat.md](./web-chat.md). |
 | web-chat-ui-polish | 2026-10-24 | Added `overflow-wrap: anywhere` to `.urlLine` so a long URL wraps inside a feed card on a phone, through a revised design deliverable (ADR 0039); moved WEB-9's deliverable pointer to the latest revision. |
 | web-feed-prev-page | 2026-11-10 | Added the `‹ Previous page` link from `prev_cursor`, the `dir=prev` URL hint and its backward drain (WEB-3 and WEB-4 amended, ADR 0055), backward no-match copy, and the `prev_cursor` normalization in `fetchFeed`. No backend change; no CSS change. Audit: APPROVED WITH RESERVATIONS (round 2). Locally verified against the deployed API; not live until the Vercel deploy. |
+| web-chat-swipe-handle | 2026-11-11 | No feed behavior change. Revised `.pagerLink` CSS (wrapped labels no longer overflow on a phone) through a revised design copy under its `design/` (ADR 0039 practice), with 11 feed style baselines regenerated; made after the audit, so not audit-verified (WEB-R9). |
 
 ## Related ADRs
 
