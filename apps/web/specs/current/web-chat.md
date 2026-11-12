@@ -1,6 +1,6 @@
 # Web Chat Specification
 
-> Last synced: 2026-10-24. Owned artifacts: `apps/web/features/chat/`, `apps/web/app/api/chat/route.ts`,
+> Last synced: 2026-11-11 (`web-chat-swipe-handle`: WEBCHAT-1 amended and WEBCHAT-12 widened for the phone edge tab, new WEBCHAT-13, ADR 0056). Earlier: 2026-10-24. Owned artifacts: `apps/web/features/chat/`, `apps/web/app/api/chat/route.ts`,
 > `apps/web/e2e/chat.e2e.ts`, `apps/web/e2e/layout.e2e.ts`.
 
 ## Purpose
@@ -19,14 +19,22 @@ its own contract with the chat API.
 The system SHALL show a floating chat button on the feed page with the panel closed on first load. The
 button toggles a `role="dialog"` panel, carries `aria-expanded` and an accessible name that reflects
 open or closed, moves focus to the input on open, closes on Escape, and returns focus to the button on
-close. The panel has a header Close icon button named "Close chat" (a 44 px hit area, as are the
-launcher and Send).
+close. The panel has a header Close icon button named "Close chat". On a desktop (wider than 640 px) the
+launcher, Send and Close have a 44 px hit area. On a phone (640 px and narrower) the launcher is an edge tab,
+not a floating button: 24 px wide and at least 44 px tall, flush with the right edge in the lower third of
+the viewport, with an `aria-hidden` icon and no visible text, and it is still the one launcher element
+(`data-testid="chat-launcher"`, same names, `aria-expanded`, `aria-controls` and focus return). The tab is
+below 44 by 44 by decision (ADR 0056) and meets WCAG 2.2 AA 2.5.8 (24 by 24).
 
-**Source:** web-chat-ui · intent.md AC1; web-chat-ui-polish · intent.md AC5, AC11
+**Source:** web-chat-ui · intent.md AC1; web-chat-ui-polish · intent.md AC5, AC11; web-chat-swipe-handle · intent.md AC1, AC2, AC7 · ADR 0056
 
 #### Scenario: Open and close
 - **WHEN** a visitor loads `/`, presses the launcher, then presses the header Close
 - **THEN** the panel opens with focus in the input, then closes with focus back on the launcher
+
+#### Scenario: The edge tab on a phone
+- **WHEN** the viewport is 375 by 667 and `/` loads
+- **THEN** the launcher box is flush right (`x + width` in `[374, 375]`), 20 to 24 px wide (CSS 24 px), at least 44 px tall, its top at or below two thirds of the viewport height, with no "Chat" text and no horizontal overflow
 
 ### Requirement: WEBCHAT-2 — Turns show pending, answer and numbered sources
 
@@ -164,15 +172,39 @@ The widget sits outside the `FeedView` root and writes nothing to the browser co
 
 ### Requirement: WEBCHAT-12 — The e2e tier is offline
 
-The system SHALL cover open, ask, answer with sources, error states, phone layout, scrolling and
+The system SHALL cover open, ask, answer with sources, error states, phone layout, the phone edge tab and its
+touch gestures (trusted touch input through a Chromium CDP session), scrolling and
 reduced motion in Playwright against a local chat stub with fake credentials, with no call to AWS, and
 SHALL cover the signed headers with a unit test that never uses the real key.
 
-**Source:** web-chat-ui · intent.md AC9; web-chat-ui-polish · intent.md AC3, AC4
+**Source:** web-chat-ui · intent.md AC9; web-chat-ui-polish · intent.md AC3, AC4; web-chat-swipe-handle · intent.md AC9
 
 #### Scenario: Offline run
 - **WHEN** `npm run test:e2e` runs with no `.env.local`
 - **THEN** every chat scenario passes against the stub
+
+### Requirement: WEBCHAT-13 — Phone swipe gestures open and close the sheet
+
+The system SHALL, on a phone (640 px and narrower, the same query in CSS and JS) and only for touch or pen
+pointers, open the sheet on a swipe left that starts on the edge tab and close it on a swipe right that starts
+inside the open sheet. A swipe is horizontal travel of at least 40 px with `|dx| >= 2 * |dy|`, judged when the
+pointer lifts (no follow-the-finger); a mostly-vertical, short, wrong-direction or cancelled gesture does nothing
+and a vertical drag from the tab still scrolls the page. The click a browser fires after a recognized swipe SHALL
+NOT toggle the sheet again. A swipe right that starts in the textarea, an input, or an element that scrolls
+horizontally (a code block) SHALL NOT close the sheet. Closing by swipe returns focus to the tab and keeps the
+conversation. Tap, Enter and Space open the sheet, and Close and Escape close it, as before. A mouse never
+triggers a gesture, and on a desktop no touch, pen or mouse drag opens or closes anything. The gesture rule lives
+in `features/chat/lib/swipe.ts` (`classifySwipe`). Nothing this adds animates, so reduced motion needs no extra rule.
+
+**Source:** web-chat-swipe-handle · intent.md AC3, AC4, AC5, AC6, AC7 · ADR 0056
+
+#### Scenario: Swipe left on the tab
+- **WHEN** a touch gesture starts on the tab and moves by `(-60, +8)`
+- **THEN** the dialog opens with focus in the input, and it is still open after the trailing click
+
+#### Scenario: Swipe right inside a code block
+- **WHEN** the sheet is open and a touch gesture starts inside a horizontally scrolling `pre` and moves by `(+80, 0)`
+- **THEN** the sheet stays open
 
 ## Invariants
 
@@ -180,7 +212,8 @@ SHALL cover the signed headers with a unit test that never uses the real key.
    browser sees only the six error codes.
 2. **One call per turn.** No retry at any layer (library, route or client).
 3. **`features/chat/lib/`, `features/chat/api/`, `features/chat/index.ts` and the route are the stable
-   shell.** The polish changed components and CSS only.
+   shell.** The polish changed components and CSS only; `web-chat-swipe-handle` added one new pure module
+   (`lib/swipe.ts`) and edited no existing shell file.
 4. **Backend contract is frozen from this side.** A contract change goes to the root harness
    (`chat-api`).
 
@@ -194,9 +227,11 @@ SHALL cover the signed headers with a unit test that never uses the real key.
 | WEBCHAT-R4 | A blank or whitespace history `text` passes the route and is rejected by the backend (`history_item_text_invalid`); not fixed by either feature. | MEDIUM | web-chat-ui audit F1 |
 | WEBCHAT-R5 | Question and history lengths count UTF-16 units, the backend counts code points; the body cap is checked after reading when there is no `Content-Length`; an abort during the body read maps to `upstream_failure`. | LOW | web-chat-ui audit F3, F4, F5 |
 | WEBCHAT-R6 | Source links use `source.url` unfiltered, and an image inside a markdown link leaves an `<a>` with no accessible name. | LOW | web-chat-ui-polish audit F8 |
-| WEBCHAT-R7 | No CI run of `harny-feedback-apps-web.yml` against these changes, and the per-turn hook left no evidence. | MEDIUM | web-chat-ui audit F6; web-chat-ui-polish audit F2 |
+| WEBCHAT-R7 | No CI run of `harny-feedback-apps-web.yml` against these changes, and the per-turn hook left no evidence (also true of `web-chat-swipe-handle`). | MEDIUM | web-chat-ui audit F6; web-chat-ui-polish audit F2; web-chat-swipe-handle audit F3 |
 | WEBCHAT-R8 | Red evidence was not captured for the polish outcomes O5 to O8, and the freeze of the shell rests on mtimes because the files were untracked. Both were accepted at sign-off. | LOW | web-chat-ui-polish audit F4, F6 |
 | WEBCHAT-R9 | The launcher's `aria-controls` names an unmounted panel id while closed (F8), and a draft edited while a turn is pending is overwritten with the question if the turn fails (F10). | LOW | web-chat-ui audit F8, F10 |
+| WEBCHAT-R10 | Phone swipe gestures are verified only with Chromium CDP touch. Android gesture navigation and iOS Safari may take a swipe from a tab flush with the right edge (Back or Forward), so tap is the guaranteed path. The human confirmed on an iPhone (Brave) that tapping the tab opens the chat; swipe left and right on a real phone, and Android gesture navigation, are not confirmed (task O8 stays open). | MEDIUM (human) | web-chat-swipe-handle audit R1 (intent Q1) |
+| WEBCHAT-R11 | The phone tab is 24 by 64, below WEBCHAT-1's old 44 by 44 target (accepted by decision, ADR 0056). `touch-action: pan-y` on the tab and sheet also blocks pinch-zoom that starts there; `pan-y pinch-zoom` was suggested. `ownsHorizontalGesture` keeps a redundant inline-style read (audit F5). | LOW (accepted) | web-chat-swipe-handle audit R2, notes, F5 |
 
 ## Contributing features
 
@@ -204,6 +239,7 @@ SHALL cover the signed headers with a unit test that never uses the real key.
 |---|---|---|
 | web-chat-ui | 2026-10-24 | Created this capability: the `features/chat/` slice, the SigV4 `POST /api/chat` route, the six fixed error codes, history and question caps, the floating widget, the offline chat e2e tier, and the narrowed T29 guard. Audit: APPROVED WITH RESERVATIONS (round 1). |
 | web-chat-ui-polish | 2026-10-24 | Presentation only: markdown through a safe subset, stick-to-bottom scrolling, a bottom sheet on a phone, a branded header, a collapsible Sources list, a dots loader, a bigger composer and an empty state with suggestions; two new pinned dependencies; amended WEBCHAT-1 and WEBCHAT-2 in place of the first feature's text. Audit: APPROVED WITH RESERVATIONS (round 1, plus a fix round for F1, F3, F5 and F7). |
+| web-chat-swipe-handle | 2026-11-11 | Phone edge tab (24 by 64 px, right edge, lower third) in place of the floating button at 640 px and narrower; threshold touch and pen swipe left to open and swipe right to close; amended WEBCHAT-1 and WEBCHAT-12, added WEBCHAT-13 and `lib/swipe.ts`; no new dependency; a dev-only `allowedDevOrigins` setting in `next.config.ts` (human-verified on an iPhone, not audited). Audit: APPROVED WITH RESERVATIONS (round 1). |
 
 ## Related ADRs
 
@@ -216,3 +252,4 @@ SHALL cover the signed headers with a unit test that never uses the real key.
 | [0036](../archived/web-chat-ui-polish/decisions/0036-ai-elements-shaped-local-components-not-shadcn-or-ai-elements.md) | Build AI-Elements-shaped local components, not shadcn/ui or AI Elements | Accepted |
 | [0037](../archived/web-chat-ui-polish/decisions/0037-dependency-rule-amended-for-react-markdown-and-use-stick-to-bottom.md) | Amend the dependency rule for `react-markdown` and `use-stick-to-bottom` | Accepted |
 | [0038](../archived/web-chat-ui-polish/decisions/0038-assistant-markdown-renders-through-a-safe-subset.md) | Assistant markdown renders through a safe subset | Accepted |
+| [0056](../archived/web-chat-swipe-handle/decisions/0056-phone-chat-launcher-is-a-24-by-64-edge-tab-with-threshold-swipes.md) | On phones the chat launcher is a 24 by 64 px edge tab with threshold touch and pen swipes | Accepted |

@@ -8,6 +8,10 @@ const nextConfig: NextConfig = {
   // are otherwise silently re-created with (unrelated to this spec, not in
   // the File Change Map).
   agentRules: false,
+  // Dev only: Next blocks dev assets (including the client JS bundles) for any origin other than
+  // localhost, so opening `next dev` from a phone over the LAN renders the HTML but never hydrates
+  // (buttons look fine and do nothing). Private-range wildcards allow that without naming an address.
+  allowedDevOrigins: ['192.168.*.*', '10.*.*.*'],
 };
 
 export default nextConfig;

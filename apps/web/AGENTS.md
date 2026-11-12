@@ -33,10 +33,11 @@ features/chat/          # The chat feature (floating widget + server route logic
   index.ts              # the ONLY public entry point: ChatWidget, handleChatRequest
   conventions.test.ts   # architecture guards (barrel, deep-import, "use client" and credential-env rules)
   api/                  # server-only: types.ts, backend.ts (SigV4 via aws4fetch, one fetch), handle-chat-request.ts
-  components/           # "use client": chat-widget (state shell), chat-panel (header, composition), AI-Elements-shaped
+  components/           # "use client": chat-widget (state shell; on phones <= 640 px the launcher is a right-edge tab, touch/pen swipe left opens, swipe right on the sheet closes), chat-panel (header, composition), AI-Elements-shaped
                         #   parts: conversation, conversation-empty-state, message, message-response (markdown),
                         #   sources, loader, prompt-input; chat.module.css (tokens only)
-  lib/                  # pure: limits, history, conversation reducer, send-turn (browser fetch to /api/chat)
+  lib/                  # pure: limits, history, conversation reducer, send-turn (browser fetch to /api/chat),
+                        #   swipe (classifySwipe: 40 px, 2:1 rule for the phone edge-tab gestures)
 app/api/chat/route.ts   # thin Node.js route: POST -> handleChatRequest
 scripts/generate-api-types.mjs   # regenerates api/types.generated.ts
 e2e/                    # Playwright tier: feed.e2e.ts, stub/ (node:http feed-api stub), __baseline__/ (do not edit)
