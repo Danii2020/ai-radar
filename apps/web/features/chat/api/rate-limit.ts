@@ -1,5 +1,5 @@
 import { createHmac, randomBytes } from 'node:crypto'
-import { readRateLimitConfig } from './rate-limit-config'
+import { readRateLimitConfig, type RateLimitConfig } from './rate-limit-config'
 import { visitorKey } from './visitor'
 
 export type LimitName = 'burst' | 'daily' | 'global'
@@ -31,18 +31,29 @@ if redis.call('INCR', KEYS[3]) == 1 then redis.call('EXPIRE', KEYS[3], ARGV[5]) 
 return 0
 `
 
+/** Only the burst counter is read and incremented: used for a cache hit, which costs nothing upstream. */
+const BURST_SCRIPT = `
+if (tonumber(redis.call('GET', KEYS[1])) or 0) >= tonumber(ARGV[1]) then return 1 end
+if redis.call('INCR', KEYS[1]) == 1 then redis.call('EXPIRE', KEYS[1], ARGV[2]) end
+return 0
+`
+
+export type CheckMode = 'full' | 'burst'
+
 interface Request {
   keys: [string, string, string]
   limits: [number, number, number]
   burstExpiryS: number
   now: number
+  mode: CheckMode
 }
 
 const memory = new Map<string, { count: number; expiresAt: number }>()
 let processSalt: string | null = null
 
-function memoryCheck({ keys, limits, burstExpiryS, now }: Request): number {
+function memoryCheck({ keys: allKeys, limits, burstExpiryS, now, mode }: Request): number {
   for (const [key, entry] of memory) if (entry.expiresAt <= now) memory.delete(key)
+  const keys = mode === 'burst' ? allKeys.slice(0, 1) : allKeys
   let mask = 0
   keys.forEach((key, i) => {
     if ((memory.get(key)?.count ?? 0) >= limits[i]) mask += 1 << i
@@ -57,7 +68,7 @@ function memoryCheck({ keys, limits, burstExpiryS, now }: Request): number {
 }
 
 async function upstashCheck(
-  { keys, limits, burstExpiryS }: Request,
+  { keys, limits, burstExpiryS, mode }: Request,
   url: string,
   token: string,
 ): Promise<number | null> {
@@ -67,9 +78,11 @@ async function upstashCheck(
     const res = await fetch(url, {
       method: 'POST',
       headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-      body: JSON.stringify([
-        'EVAL', SCRIPT, 3, ...keys, ...limits.map(String), String(burstExpiryS), String(DAY_EXPIRY_S),
-      ]),
+      body: JSON.stringify(
+        mode === 'burst'
+          ? ['EVAL', BURST_SCRIPT, 1, keys[0], String(limits[0]), String(burstExpiryS)]
+          : ['EVAL', SCRIPT, 3, ...keys, ...limits.map(String), String(burstExpiryS), String(DAY_EXPIRY_S)],
+      ),
       signal: controller.signal,
     })
     if (!res.ok) return null
@@ -84,15 +97,26 @@ async function upstashCheck(
   }
 }
 
-/** One limit decision for a validated request: config, visitor digest, one atomic store check. */
-export async function checkRateLimit(headers: Headers): Promise<RateLimitResult> {
-  const cfg = readRateLimitConfig()
-  if (!cfg.ok) return { kind: 'config_invalid', variable: cfg.variable }
-  const c = cfg.config
+/** The keyed-digest salt: the configured one, else one random value per process (memory store only).
+ *  Shared with the response cache so both use one salt source. */
+export function saltFor(config: RateLimitConfig): string {
+  return config.salt ?? (processSalt ??= randomBytes(32).toString('hex'))
+}
 
-  let salt = c.salt
-  if (salt === null) salt = processSalt ??= randomBytes(32).toString('hex')
-  const digest = createHmac('sha256', salt).update(visitorKey(headers)).digest('hex')
+/** One limit decision for a validated request: config, visitor digest, one atomic store check. */
+export async function checkRateLimit(
+  headers: Headers,
+  options: { mode?: CheckMode; config?: RateLimitConfig } = {},
+): Promise<RateLimitResult> {
+  const mode = options.mode ?? 'full'
+  let c = options.config
+  if (c === undefined) {
+    const cfg = readRateLimitConfig()
+    if (!cfg.ok) return { kind: 'config_invalid', variable: cfg.variable }
+    c = cfg.config
+  }
+
+  const digest = createHmac('sha256', saltFor(c)).update(visitorKey(headers)).digest('hex')
 
   const now = Date.now()
   const nowS = Math.floor(now / 1000)
@@ -103,6 +127,7 @@ export async function checkRateLimit(headers: Headers): Promise<RateLimitResult>
     limits: [c.burst, c.daily, c.globalDaily],
     burstExpiryS: 2 * c.burstWindowS,
     now,
+    mode,
   }
 
   const mask =

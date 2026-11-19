@@ -41,6 +41,9 @@ beforeEach(() => {
   vi.stubEnv("CHAT_RATE_LIMIT_BURST", "1000000");
   vi.stubEnv("CHAT_RATE_LIMIT_DAILY", "1000000");
   vi.stubEnv("CHAT_RATE_LIMIT_GLOBAL_DAILY", "1000000");
+  // Response cache (web-chat-response-cache): off for the existing cases, which resend one question and
+  // count backend calls. The cache cases are in their own describe at the end of this file.
+  vi.stubEnv("CHAT_CACHE_TTL_S", "0");
   logged = [];
   for (const method of ["log", "info", "warn", "error"] as const) {
     vi.spyOn(console, method).mockImplementation((...args: unknown[]) => {
@@ -293,5 +296,198 @@ describe("logging: one structured line, never any text or credential (AC5, AC6)"
     for (const line of logged) {
       for (const text of FORBIDDEN) expect(line).not.toContain(text);
     }
+  });
+});
+
+// ------------------------------------------------ web-chat-response-cache, AC1 to AC10
+describe("response cache", () => {
+  const STORE_URL = "https://store.fake.invalid";
+  const STORE_TOKEN = "fake-store-token-do-not-use-0001";
+  const SALT = "fake-salt-0123456789-abcdefghijklmnop-0001";
+  let n = 0;
+  /** A question no other test uses, so the module-level in-process cache never carries over. */
+  const fresh = (label = "q") => `zq-cache-${label}-${++n}: what is new in agent frameworks?`;
+  const ask = (question: string, history: unknown[] = []) => handleChatRequest(post({ question, history }));
+  const lines = () => logged.map((l) => JSON.parse(l) as Record<string, unknown>);
+  const backendCalls = () => fetchMock.mock.calls.filter(([input]) => String(input instanceof Request ? input.url : input).startsWith(BASE_URL));
+
+  beforeEach(() => {
+    vi.stubEnv("CHAT_CACHE_TTL_S", "3600");
+    // a new Response per call: a body can be read once
+    fetchMock.mockImplementation(async () => backendJson(OK_BODY));
+  });
+
+  it("AC1/AC10: the same first-turn question is answered from the cache with an identical response and no backend call", async () => {
+    const q = fresh();
+    const live = await ask(q);
+    const hit = await ask(q);
+    expect(backendCalls()).toHaveLength(1);
+    expect(hit.status).toBe(live.status);
+    expect(await hit.text()).toBe(await live.text());
+    expect(Object.fromEntries(hit.headers)).toEqual(Object.fromEntries(live.headers));
+    expect(lines().map((l) => l.cache)).toEqual(["miss", "hit"]);
+  });
+
+  it("AC2: trivially different spellings share an entry, different wording does not", async () => {
+    const q = fresh("spell");
+    await ask(q);
+    await ask(`  ${q.toUpperCase().replace(/ /g, "   ")}  `);
+    expect(backendCalls()).toHaveLength(1);
+    await ask(q.replace("?", ""));
+    expect(backendCalls()).toHaveLength(2);
+  });
+
+  it("AC3: a request with a history never reads or writes the cache", async () => {
+    const q = fresh("history");
+    await ask(q, turns(1));
+    await ask(q, turns(1));
+    expect(backendCalls()).toHaveLength(2);
+    expect(lines().map((l) => l.cache)).toEqual(["skip", "skip"]);
+    await ask(q); // nothing was stored by the two history turns
+    expect(backendCalls()).toHaveLength(3);
+    expect(lines()[2].cache).toBe("miss");
+  });
+
+  it.each([
+    [400, "invalid_request"], [429, "busy"], [502, "upstream_failure"], [504, "timeout"],
+    [403, "backend_forbidden"], [500, "backend_error"],
+  ])("AC4: a backend %i is never stored", async (status) => {
+    const q = fresh(`err${status}`);
+    fetchMock.mockResolvedValueOnce(backendJson({ error: "x" }, status));
+    expect((await ask(q)).status).not.toBe(200);
+    expect((await ask(q)).status).toBe(200);
+    expect(backendCalls()).toHaveLength(2);
+  });
+
+  it("AC4: an entry expires after CHAT_CACHE_TTL_S and a live call refreshes it", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(Date.UTC(2026, 10, 18));
+      vi.stubEnv("CHAT_CACHE_TTL_S", "100");
+      const q = fresh("ttl");
+      await ask(q);
+      vi.setSystemTime(Date.UTC(2026, 10, 18) + 99_000);
+      await ask(q);
+      expect(backendCalls()).toHaveLength(1);
+      vi.setSystemTime(Date.UTC(2026, 10, 18) + 100_000);
+      await ask(q);
+      expect(backendCalls()).toHaveLength(2);
+      await ask(q);
+      expect(backendCalls()).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("AC9: the log line carries only the cache field in addition, and it is absent when the cache is off", async () => {
+    const q = fresh("log");
+    await ask(q);
+    await ask(q);
+    await ask(q, turns(1));
+    vi.stubEnv("CHAT_CACHE_TTL_S", "0");
+    await ask(q);
+    const all = lines();
+    expect(all.map((l) => l.cache)).toEqual(["miss", "hit", "skip", undefined]);
+    for (const line of all) {
+      expect(line.outcome).toBe("ok");
+      expect(Object.keys(line).filter((k) => k !== "cache").sort()).toEqual(["duration_ms", "event", "outcome"]);
+    }
+  });
+
+  it("AC7: an invalid setting bypasses the cache, answers live, and names the variable but not the value", async () => {
+    vi.stubEnv("CHAT_CACHE_TTL_S", "zq-bad-value");
+    const q = fresh("invalid");
+    expect((await ask(q)).status).toBe(200);
+    expect((await ask(q)).status).toBe(200);
+    expect(backendCalls()).toHaveLength(2);
+    for (const line of logged) {
+      expect(JSON.parse(line)).toMatchObject({ outcome: "ok", cache: "error", variable: "CHAT_CACHE_TTL_S" });
+      expect(line).not.toContain("zq-bad-value");
+    }
+  });
+
+  describe("with the Upstash store", () => {
+    let commands: unknown[][];
+    let storeReply: (command: unknown[]) => Response | Promise<Response>;
+    const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
+    beforeEach(() => {
+      vi.stubEnv("CHAT_RATE_LIMIT_STORE", "upstash");
+      vi.stubEnv("KV_REST_API_URL", STORE_URL);
+      vi.stubEnv("KV_REST_API_TOKEN", STORE_TOKEN);
+      vi.stubEnv("CHAT_RATE_LIMIT_SALT", SALT);
+      commands = [];
+      storeReply = (c) => (c[0] === "GET" ? json({ result: null }) : c[0] === "SET" ? json({ result: "OK" }) : json({ result: 0 }));
+      fetchMock.mockImplementation(async (input: unknown, init?: RequestInit) => {
+        const url = String(input instanceof Request ? input.url : input);
+        if (url.startsWith(STORE_URL)) {
+          const command = JSON.parse(String(init?.body)) as unknown[];
+          commands.push(command);
+          return storeReply(command);
+        }
+        return backendJson(OK_BODY);
+      });
+    });
+    const names = () => commands.map((c) => c[0]);
+
+    it("AC6: validation, missing configuration and an invalid limiter setting make no cache call", async () => {
+      await handleChatRequest(post("{"));
+      await handleChatRequest(post({ question: "", history: [] }));
+      vi.stubEnv("CHAT_API_SECRET_ACCESS_KEY", "");
+      await ask(fresh("noconf"));
+      vi.stubEnv("CHAT_API_SECRET_ACCESS_KEY", SECRET);
+      vi.stubEnv("CHAT_RATE_LIMIT_BURST", "abc");
+      expect((await ask(fresh("badlimit"))).status).toBe(503);
+      expect(commands).toHaveLength(0);
+    });
+
+    it("AC6: a limiter store failure still answers 503 on a hit and on a miss, with no backend call", async () => {
+      const q = fresh("limfail");
+      storeReply = (c) => (c[0] === "GET" ? json({ result: JSON.stringify(OK_BODY) }) : json({ error: "down" }, 500));
+      expect((await ask(q)).status).toBe(503); // hit, burst check fails
+      storeReply = (c) => (c[0] === "GET" ? json({ result: null }) : json({ error: "down" }, 500));
+      const miss = await ask(q);
+      expect(miss.status).toBe(503);
+      expect(await miss.json()).toEqual({ error: "unavailable" });
+      expect(backendCalls()).toHaveLength(0);
+    });
+
+    it.each([
+      ["a read that throws", (c: unknown[]) => { if (c[0] === "GET") throw new TypeError("fetch failed"); return json({ result: c[0] === "SET" ? "OK" : 0 }); }, "error"],
+      ["a read with a non-success status", (c: unknown[]) => (c[0] === "GET" ? json({ error: "x" }, 500) : json({ result: c[0] === "SET" ? "OK" : 0 })), "error"],
+      ["a stored value that is not a chat response", (c: unknown[]) => (c[0] === "GET" ? json({ result: "{\"answer\":1}" }) : json({ result: c[0] === "SET" ? "OK" : 0 })), "error"],
+      ["a write that fails", (c: unknown[]) => (c[0] === "SET" ? json({ error: "x" }, 500) : json({ result: c[0] === "GET" ? null : 0 })), "error"],
+    ])("AC7: %s is a miss: the visitor gets the live answer and the log says cache error", async (_name, reply, cache) => {
+      storeReply = reply as typeof storeReply;
+      const res = await ask(fresh("fail"));
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual(OK_BODY);
+      expect(backendCalls()).toHaveLength(1);
+      expect(lines().at(-1)).toMatchObject({ outcome: "ok", cache });
+    });
+
+    it("AC8: no question, answer or digest reaches a log line or a store key", async () => {
+      const q = `${QUESTION} ${++n}`;
+      await ask(q);
+      const keys = commands.filter((c) => c[0] === "GET" || c[0] === "SET").map((c) => String(c[1]));
+      expect(keys.length).toBeGreaterThan(0);
+      for (const key of keys) {
+        expect(key).toMatch(/^chat-cache:\{v1\}:[0-9a-f]{64}$/);
+        expect(key).not.toContain("zq-question-marker");
+        for (const line of logged) expect(line).not.toContain(key.slice("chat-cache:{v1}:".length));
+      }
+      for (const line of logged) {
+        expect(line).not.toContain("zq-question-marker");
+        expect(line).not.toContain(ANSWER);
+      }
+    });
+
+    it("AC4: a hit makes one read and the burst check, a miss one read, the full check and one write with an expiry", async () => {
+      const q = fresh("shape");
+      await ask(q);
+      expect(names()).toEqual(["GET", "EVAL", "SET"]);
+      const set = commands[2];
+      expect(set.slice(3)).toEqual(["EX", "3600"]);
+      expect(JSON.parse(String(set[2]))).toEqual(OK_BODY);
+    });
   });
 });

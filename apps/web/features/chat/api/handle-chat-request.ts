@@ -1,7 +1,9 @@
 import { isValidHistory, trimHistory } from '../lib/history'
 import { BODY_MAX_BYTES, QUESTION_MAX_CHARS } from '../lib/limits'
 import { callChatBackend } from './backend'
-import { checkRateLimit } from './rate-limit'
+import { checkRateLimit, type RateLimitResult } from './rate-limit'
+import { readRateLimitConfig } from './rate-limit-config'
+import { cacheKey, readCache, readCacheSettings, writeCache } from './response-cache'
 import type { ChatErrorCode } from './types'
 
 type Outcome =
@@ -45,6 +47,7 @@ interface LogExtra {
   limit?: string
   variable?: string
   retryAfterS?: number
+  cache?: 'hit' | 'miss' | 'skip' | 'error'
 }
 
 /** One text-free line: outcome and duration only (never question, history, answer, credentials). */
@@ -55,6 +58,7 @@ function log(outcome: Outcome, start: number, extra: LogExtra): void {
     duration_ms: Math.round(performance.now() - start),
     ...(extra.limit ? { limit: extra.limit } : {}),
     ...(extra.variable ? { variable: extra.variable } : {}),
+    ...(extra.cache ? { cache: extra.cache } : {}),
   })
   if (outcome === 'ok') console.info(line)
   else console.error(line)
@@ -63,6 +67,21 @@ function log(outcome: Outcome, start: number, extra: LogExtra): void {
 function envValue(name: string): string | null {
   const value = process.env[name]?.trim()
   return value ? value : null
+}
+
+/** Maps a limiter verdict to the failure outcome (recording `limit` and `retryAfterS`), or null if admitted. */
+function limiterOutcome(verdict: RateLimitResult, extra: LogExtra): Exclude<Outcome, 'ok'> | null {
+  if (verdict.kind === 'config_invalid') {
+    extra.variable = verdict.variable
+    return 'limiter_config_invalid'
+  }
+  if (verdict.kind === 'unavailable') return 'limiter_unavailable'
+  if (verdict.kind === 'limited') {
+    extra.limit = verdict.limit
+    extra.retryAfterS = verdict.retryAfterS
+    return 'rate_limited'
+  }
+  return null
 }
 
 async function handle(request: Request, extra: LogExtra): Promise<Response | Exclude<Outcome, 'ok'>> {
@@ -89,17 +108,39 @@ async function handle(request: Request, extra: LogExtra): Promise<Response | Exc
   const secretAccessKey = envValue('CHAT_API_SECRET_ACCESS_KEY')
   if (!baseUrl || !accessKeyId || !secretAccessKey) return 'missing_config'
 
-  const verdict = await checkRateLimit(request.headers)
-  if (verdict.kind === 'config_invalid') {
-    extra.variable = verdict.variable
+  const limiter = readRateLimitConfig()
+  if (!limiter.ok) {
+    extra.variable = limiter.variable
     return 'limiter_config_invalid'
   }
-  if (verdict.kind === 'unavailable') return 'limiter_unavailable'
-  if (verdict.kind === 'limited') {
-    extra.limit = verdict.limit
-    extra.retryAfterS = verdict.retryAfterS
-    return 'rate_limited'
+
+  // Response cache: first turns only; every cache failure is a miss, never an error response.
+  const settings = readCacheSettings()
+  let key: string | null = null
+  if (settings.kind === 'invalid') {
+    extra.cache = 'error'
+    extra.variable = settings.variable
+  } else if (settings.kind === 'on') {
+    if (history.length > 0) {
+      extra.cache = 'skip'
+    } else {
+      key = cacheKey(question, limiter.config)
+      const read = await readCache(key, limiter.config)
+      extra.cache = read.kind
+      if (read.kind === 'hit') {
+        // A hit costs nothing upstream, so it counts against the burst limit only.
+        const refused = limiterOutcome(await checkRateLimit(request.headers, { mode: 'burst', config: limiter.config }), extra)
+        if (refused !== null) return refused
+        return new Response(JSON.stringify({ answer: read.data.answer, sources: read.data.sources }), {
+          status: 200,
+          headers: HEADERS,
+        })
+      }
+    }
   }
+
+  const refused = limiterOutcome(await checkRateLimit(request.headers, { config: limiter.config }), extra)
+  if (refused !== null) return refused
 
   const result = await callChatBackend({
     baseUrl: baseUrl.replace(/\/+$/, ''),
@@ -109,6 +150,10 @@ async function handle(request: Request, extra: LogExtra): Promise<Response | Exc
     history: trimHistory(history),
   })
   if (!result.ok) return result.outcome
+  if (key !== null && settings.kind === 'on') {
+    const stored = await writeCache(key, result.data, settings.ttlS, limiter.config)
+    if (!stored) extra.cache = 'error'
+  }
   return new Response(JSON.stringify({ answer: result.data.answer, sources: result.data.sources }), {
     status: 200,
     headers: HEADERS,
