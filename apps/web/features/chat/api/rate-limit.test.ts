@@ -65,6 +65,9 @@ beforeEach(async () => {
   storeReply = () => new Response(JSON.stringify({ result: 0 }), { status: 200 });
   vi.stubGlobal("fetch", fetchMock);
   for (const name of ALL_ENV) vi.stubEnv(name, undefined);
+  // The response cache (web-chat-response-cache) is off here: these cases resend one question and count
+  // admitted turns, so a cache hit would change what they measure. Cache hits are covered at the end.
+  vi.stubEnv("CHAT_CACHE_TTL_S", "0");
   env({
     CHAT_API_BASE_URL: BASE_URL, CHAT_API_ACCESS_KEY_ID: "FAKE-TEST-KEY-ID-0001",
     CHAT_API_SECRET_ACCESS_KEY: "fake-secret-value-do-not-use-0001",
@@ -709,5 +712,92 @@ describe("no new service locally (AC13)", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(urlOf(fetchMock.mock.calls[0][0])).toContain(BASE_URL);
     expect(logs.filter((l) => l.method === "error")).toHaveLength(0);
+  });
+});
+
+// ------------------------------------------------ web-chat-response-cache, AC5
+describe("a cache hit counts against the burst limit only (response-cache AC5)", () => {
+  const Q = { question: "zq what is new in agent frameworks?", history: [] };
+  const OTHER = { question: "zq something else entirely", history: [] };
+  beforeEach(() => {
+    env({ CHAT_CACHE_TTL_S: "3600", CHAT_RATE_LIMIT_BURST: "1000" });
+  });
+
+  it("hits do not use the per-visitor daily cap", async () => {
+    env({ CHAT_RATE_LIMIT_DAILY: "2" });
+    expect((await ask("198.51.100.30", Q)).status).toBe(200);
+    for (let i = 0; i < 10; i++) expect((await ask("198.51.100.30", Q)).status).toBe(200);
+    expect(backendCalls()).toHaveLength(1);
+    expect((await ask("198.51.100.30", OTHER)).status).toBe(200);
+    await expectLimited(await ask("198.51.100.30", { question: "zq a third new question", history: [] }));
+    expect(lastLine()).toMatchObject({ outcome: "rate_limited", limit: "daily" });
+  });
+
+  it("hits do not use the global ceiling: another visitor still gets the cached answer, not a new one", async () => {
+    env({ CHAT_RATE_LIMIT_GLOBAL_DAILY: "1" });
+    expect((await ask("198.51.100.31", Q)).status).toBe(200);
+    expect((await ask("198.51.100.32", Q)).status).toBe(200);
+    expect(backendCalls()).toHaveLength(1);
+    await expectLimited(await ask("198.51.100.32", OTHER));
+    expect(lastLine()).toMatchObject({ outcome: "rate_limited", limit: "global" });
+  });
+
+  it("hits do count against the burst limit: a visitor at the limit is refused even for a cached question", async () => {
+    env({ CHAT_RATE_LIMIT_BURST: "2" });
+    expect((await ask("198.51.100.33", Q)).status).toBe(200); // miss, burst 1
+    expect((await ask("198.51.100.33", Q)).status).toBe(200); // hit, burst 2
+    const limited = await ask("198.51.100.33", Q);
+    await expectLimited(limited);
+    expect(limited.headers.get("retry-after")).toMatch(/^[1-9][0-9]*$/);
+    expect(backendCalls()).toHaveLength(1);
+    expect(lastLine()).toMatchObject({ outcome: "rate_limited", limit: "burst" });
+  });
+
+  describe("with the Upstash store", () => {
+    let commands: unknown[][];
+    let cached: string | null;
+    beforeEach(() => {
+      env({ ...UPSTASH_ENV, CHAT_RATE_LIMIT_BURST: "1000" });
+      commands = [];
+      cached = null;
+      fetchMock.mockImplementation(async (input: unknown, init?: RequestInit) => {
+        if (!urlOf(input).startsWith(STORE_URL)) {
+          return new Response(JSON.stringify(ANSWER), { status: 200, headers: { "content-type": "application/json" } });
+        }
+        const command = JSON.parse(String(init?.body)) as unknown[];
+        commands.push(command);
+        if (command[0] === "GET") return new Response(JSON.stringify({ result: cached }), { status: 200 });
+        if (command[0] === "SET") {
+          cached = String(command[2]);
+          return new Response(JSON.stringify({ result: "OK" }), { status: 200 });
+        }
+        return new Response(JSON.stringify({ result: 0 }), { status: 200 });
+      });
+    });
+
+    it("a miss runs the full three-counter check and a hit runs a one-counter burst check", async () => {
+      expect((await ask("198.51.100.34", Q)).status).toBe(200);
+      expect(commands.map((c) => c[0])).toEqual(["GET", "EVAL", "SET"]);
+      expect(commands[1][2]).toBe(3);
+      commands.length = 0;
+      expect((await ask("198.51.100.34", Q)).status).toBe(200);
+      expect(commands.map((c) => c[0])).toEqual(["GET", "EVAL"]);
+      expect(commands[1][2]).toBe(1);
+      expect(String(commands[1][3])).toContain(":b:");
+      expect(backendCalls()).toHaveLength(1);
+    });
+
+    it("a store that reports the burst limit on a hit gives 429 and no backend call", async () => {
+      await ask("198.51.100.35", Q);
+      const before = backendCalls().length;
+      fetchMock.mockImplementation(async (input: unknown, init?: RequestInit) => {
+        const command = JSON.parse(String(init?.body)) as unknown[];
+        void input;
+        if (command[0] === "GET") return new Response(JSON.stringify({ result: cached }), { status: 200 });
+        return new Response(JSON.stringify({ result: 1 }), { status: 200 });
+      });
+      await expectLimited(await ask("198.51.100.35", Q));
+      expect(backendCalls()).toHaveLength(before);
+    });
   });
 });

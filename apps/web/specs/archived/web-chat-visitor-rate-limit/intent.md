@@ -1,6 +1,7 @@
 # Intent: Web Chat Visitor Rate Limit
 
 Revision: 2
+Shipped: 2026-11-18
 Approval: Approved.
 
 ## Outcome

@@ -94,9 +94,15 @@ const credentialEnvReads = (file: string, source: string) =>
   CREDENTIAL_ENV.test(source) ? [`${file} reads a CHAT_API_* variable outside features/chat/api/`] : [];
 
 // The limiter's server-only settings (visitor limits, salt, store choice, Upstash REST pair).
-const LIMITER_ENV = /CHAT_RATE_LIMIT_[A-Z_]+|KV_REST_API_[A-Z_]+|UPSTASH_REDIS_REST_[A-Z_]+/;
+// and the response cache's lifetime setting (web-chat-response-cache).
+const LIMITER_ENV = /CHAT_RATE_LIMIT_[A-Z_]+|CHAT_CACHE_[A-Z_]+|KV_REST_API_[A-Z_]+|UPSTASH_REDIS_REST_[A-Z_]+/;
 const limiterEnvReads = (file: string, source: string) =>
   LIMITER_ENV.test(source) ? [`${file} names a limiter variable outside features/chat/api/`] : [];
+
+// Vercel Web Analytics is mounted once, by the root layout, and nowhere else (web-chat-response-cache AC14).
+const ANALYTICS_LAYOUT = join(WEB_ROOT, "app/layout.tsx");
+const analyticsImports = (file: string, source: string) =>
+  file !== ANALYTICS_LAYOUT && /@vercel\/analytics/.test(source) ? [`${file} imports @vercel/analytics outside app/layout.tsx`] : [];
 
 const read = (file: string) => readFileSync(file, "utf-8");
 const chatSource = walk(CHAT_DIR).filter((f) => !isTestFile(f));
@@ -145,7 +151,12 @@ describe("web-chat-ui: the key and the backend stay on the server (WEB-1 extende
     expect(files.flatMap((f) => credentialEnvReads(f, read(f)))).toEqual([]);
   });
 
-  it("the limiter variables (CHAT_RATE_LIMIT_*, KV_REST_API_*, UPSTASH_REDIS_REST_*) are named only inside features/chat/api/", () => {
+  it("@vercel/analytics is imported only by app/layout.tsx", () => {
+    const files = walk(WEB_ROOT).filter((f) => !isTestFile(f));
+    expect(files.flatMap((f) => analyticsImports(f, read(f)))).toEqual([]);
+  });
+
+  it("the limiter and cache variables (CHAT_RATE_LIMIT_*, CHAT_CACHE_*, KV_REST_API_*, UPSTASH_REDIS_REST_*) are named only inside features/chat/api/", () => {
     const files = walk(WEB_ROOT, (full) => full === join(CHAT_DIR, "api")).filter((f) => !isTestFile(f));
     expect(files.flatMap((f) => limiterEnvReads(f, read(f)))).toEqual([]);
   });
@@ -179,6 +190,13 @@ describe("web-chat-ui: the guards fire on violations", () => {
     expect(limiterEnvReads(FAKE_OUTSIDE, "process.env.CHAT_RATE_LIMIT_SALT")).toHaveLength(1);
     expect(limiterEnvReads(FAKE_OUTSIDE, "process.env.KV_REST_API_TOKEN")).toHaveLength(1);
     expect(limiterEnvReads(FAKE_OUTSIDE, "process.env.UPSTASH_REDIS_REST_URL")).toHaveLength(1);
+    expect(limiterEnvReads(FAKE_OUTSIDE, "process.env.CHAT_CACHE_TTL_S")).toHaveLength(1);
     expect(limiterEnvReads(FAKE_OUTSIDE, "const x = 1")).toEqual([]);
+  });
+
+  it("analytics import", () => {
+    expect(analyticsImports(FAKE_OUTSIDE, "import { Analytics } from '@vercel/analytics/next'")).toHaveLength(1);
+    expect(analyticsImports(ANALYTICS_LAYOUT, "import { Analytics } from '@vercel/analytics/next'")).toEqual([]);
+    expect(analyticsImports(FAKE_OUTSIDE, "const x = 1")).toEqual([]);
   });
 });

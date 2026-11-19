@@ -249,6 +249,49 @@ Human-only; no agent runs `vercel*`, `cdk deploy` or `cdk destroy`. Not yet done
 
 Teardown: delete the Vercel project and revert the origin list by PR.
 
+### Chat response cache and Web Analytics
+
+Human-only. `POST /api/chat` keeps the answer to a first-turn question (no history) in the same Upstash store as the
+visitor limit, for `CHAT_CACHE_TTL_S` seconds (default 21600, six hours; `0` turns the cache off; set it in the
+project settings, server-side only). The same question, after trimming, collapsing whitespace and lower-casing,
+is then answered with no chat API call. A hit counts only against the burst limit, not the daily or global ones.
+Any cache failure is treated as a miss.
+
+- Watch it work: the function log's `chat_request` lines carry `cache: "hit"`, `"miss"`, `"skip"` (a turn with a
+  history) or `"error"`; the Upstash data browser shows only `chat-cache:{v1}:<digest>` keys, each with an expiry.
+- Clear one answer or all of them by key prefix (`chat-cache:`) in the Upstash data browser or with a `SCAN` and
+  `DEL` over that prefix. Never use a database-wide flush: it also resets the limiter's counters.
+- Switch it off without a deploy: set `CHAT_CACHE_TTL_S=0` and redeploy (environment variables apply to new
+  deployments).
+- Vercel Web Analytics: enable it for the project (Project, Analytics, Enable). The site renders the `Analytics`
+  component only when `VERCEL` is set, so page views appear in the dashboard after the next deploy and nothing
+  runs locally.
+
+### Chat visitor limit (Upstash)
+
+Human-only. `POST /api/chat` limits turns per visitor and for everyone together (`web-chat-visitor-rate-limit`). The
+defaults are 5 per visitor per 60 s, 20 per visitor per UTC day and 50 across all visitors per UTC day. The route
+fails closed: if the counter store cannot be reached or a limiter setting is invalid, visitors see "Chat is
+unavailable at the moment" and no backend call is made.
+
+1. Create an Upstash Redis database from the Vercel Marketplace and connect it to the project (Production, and
+   Preview only if wanted). It injects `KV_REST_API_URL` and `KV_REST_API_TOKEN`; the app also reads
+   `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`. Check the names on the project's Environment Variables
+   page. Never run `vercel env pull` into `.env.local` for these: off Vercel the in-process store is used and needs no
+   variable.
+2. Confirm "Enable access to System Environment Variables" is on for the project, so `VERCEL=1` reaches the app. The
+   in-process store is refused on Vercel.
+3. Set `CHAT_RATE_LIMIT_SALT` in the project settings (server-side only): a random value of at least 32 characters,
+   for example `openssl rand -hex 32`, generated locally and never pasted into chat or logs. Optional overrides:
+   `CHAT_RATE_LIMIT_BURST`, `CHAT_RATE_LIMIT_BURST_WINDOW_S`, `CHAT_RATE_LIMIT_DAILY`, `CHAT_RATE_LIMIT_GLOBAL_DAILY`
+   (whole numbers). A bad value makes every turn answer 503 and the function log line names the variable (never its
+   value).
+4. Optional outer shield: a Vercel WAF rate-limit rule on `/api/chat` (Hobby allows one rule, fixed windows of 10 s to
+   10 min), for example 30 requests per 60 s per IP. The app does not depend on it.
+5. Live check after deploy: six quick turns from one browser give five answers and then the "reached the chat limit"
+   message; the Upstash data browser shows only digest keys (no IP); the function log shows `chat_request` lines with
+   `outcome: "rate_limited"` and `limit: "burst"`. This also proves the database accepts `EVAL`.
+
 ## CI/CD one-time bootstrap
 
 Done on 2026-10-28 (CI access stack, both secrets, the protection ruleset, and the first two deploy runs). Keep this section for rebuilding in a new account or repository. Use your own administrator credentials. `<chat-api-id>` is the chat API id (deliberately not written in this repo).

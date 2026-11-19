@@ -1,6 +1,6 @@
 # Web Chat Specification
 
-> Last synced: 2026-11-11 (`web-chat-swipe-handle`: WEBCHAT-1 amended and WEBCHAT-12 widened for the phone edge tab, new WEBCHAT-13, ADR 0056). Earlier: 2026-10-24. Owned artifacts: `apps/web/features/chat/`, `apps/web/app/api/chat/route.ts`,
+> Last synced: 2026-11-18 (`web-chat-response-cache`: WEBCHAT-8 amended for the `cache` log field, new WEBCHAT-15 and WEBCHAT-16, WEBCHAT-R13 added, ADRs 0057 and 0058). Earlier: 2026-11-18 (`web-chat-visitor-rate-limit`: WEBCHAT-8 amended to seven codes, new WEBCHAT-14, WEBCHAT-R1 closed, WEBCHAT-R12 added, ADRs 0049 and 0050, ADR 0035 superseded). Earlier: 2026-11-11 (`web-chat-swipe-handle`: WEBCHAT-1 amended and WEBCHAT-12 widened for the phone edge tab, new WEBCHAT-13, ADR 0056). Earlier: 2026-10-24. Owned artifacts: `apps/web/features/chat/`, `apps/web/app/api/chat/route.ts`,
 > `apps/web/e2e/chat.e2e.ts`, `apps/web/e2e/layout.e2e.ts`.
 
 ## Purpose
@@ -116,19 +116,84 @@ The backend stays authoritative.
 - **WHEN** the visitor sends 1001 characters, or a direct `POST` carries them
 - **THEN** the UI shows an inline message and sends nothing; the route answers 400 without calling the backend
 
-### Requirement: WEBCHAT-8 — Six fixed error states, text-free logging
+### Requirement: WEBCHAT-8 — Seven fixed error states, text-free logging
 
-The system SHALL map each failure to one of six codes (`invalid_request` 400, `busy` 429, `timeout` 504,
-`upstream_failure` 502, `unavailable` 503, `internal_error` 500) with a body of exactly `{"error": code}`,
-show generic copy per code with Retry, keep the conversation and the question, and write one structured
-JSON log line (outcome and duration) that never holds the question, history, answer, credential, URL or
-backend detail.
+The system SHALL map each failure to one of seven codes (`invalid_request` 400, `busy` 429, `timeout` 504,
+`upstream_failure` 502, `unavailable` 503, `rate_limited` 429, `internal_error` 500) with a body of exactly
+`{"error": code}`, show generic copy per code with Retry, keep the conversation and the question, and write one
+structured JSON log line (outcome and duration, plus `limit` for a limited request, `variable` for an invalid
+limiter or cache setting, and `cache` (`hit`, `miss`, `skip`, `error`; absent when the cache is off)) that never holds the question, history, answer, credential, URL, backend detail, IP or visitor
+digest. `rate_limited` carries a `Retry-After` header and the copy "You've reached the chat limit for now. Please
+try again later."; a backend 429 stays `busy`. `unavailable` also covers a limiter store outage and an invalid
+limiter setting, with the copy unchanged and no mention of a limiter or store.
 
-**Source:** web-chat-ui · intent.md AC5 · ADR 0033
+**Source:** web-chat-ui · intent.md AC5 · web-chat-visitor-rate-limit · intent.md AC6, AC11, AC12 · web-chat-response-cache · intent.md AC9 · ADR 0033, ADR 0050, ADR 0057
 
 #### Scenario: The backend answers 429
 - **WHEN** the backend returns 429
 - **THEN** the panel shows the "busy" copy and the input keeps the question
+
+### Requirement: WEBCHAT-14 — A per-visitor and global limit runs before the backend call, and fails closed
+
+The system SHALL, after body, question and history validation and the `CHAT_API_*` check and before the one backend
+call, admit at most `CHAT_RATE_LIMIT_BURST` (default 5) turns per visitor per fixed window of
+`CHAT_RATE_LIMIT_BURST_WINDOW_S` seconds (default 60), `CHAT_RATE_LIMIT_DAILY` (20) per visitor per UTC day, and
+`CHAT_RATE_LIMIT_GLOBAL_DAILY` (50) in total per UTC day. Otherwise it SHALL answer 429 `rate_limited` with
+`Retry-After` and make no backend call. A rejected request SHALL count against none of the limits; an admitted turn
+counts even if the backend then fails. The visitor SHALL be the client IP from the first present of
+`x-vercel-forwarded-for`, `x-real-ip` and `x-forwarded-for` (IPv6 reduced to its /64, absent or unparseable to one
+shared `unknown` bucket), stored only as an HMAC-SHA-256 digest keyed by `CHAT_RATE_LIMIT_SALT`, with every entry
+expiring on its own. Counters SHALL live in Upstash Redis over REST (one `EVAL` per check, no retry, 1 s timeout)
+on Vercel, and in an in-process store off Vercel. A store failure or an invalid limiter setting SHALL answer 503
+`unavailable` with no backend call.
+
+**Source:** web-chat-visitor-rate-limit · intent.md AC1 to AC11, AC13 · ADR 0049
+
+#### Scenario: Six turns from one visitor in one window
+- **WHEN** one IP sends six valid requests inside one 60 second window
+- **THEN** five are answered and the sixth gets 429 `rate_limited` with a `Retry-After` of at least 1 and the backend is not called for it
+
+#### Scenario: The counter store is down
+- **WHEN** the Upstash host refuses connections
+- **THEN** the route answers 503 `unavailable` and makes no backend call
+
+### Requirement: WEBCHAT-15 — First-turn answers are cached, and a cache problem is never an error
+
+The system SHALL, for a request with an empty or absent `history`, look up an answer stored under a key that is an
+HMAC-SHA-256 digest (keyed by the limiter's salt source, with its own prefix `chat-cache:{v1}:` and a domain tag) of the
+question after trimming, collapsing whitespace to single spaces and lower-casing, and on a hit answer 200 with the stored
+`{answer, sources}` and no backend call, with a response indistinguishable from a live one. The lookup SHALL run after
+validation, the `CHAT_API_*` check and the limiter-configuration check; a hit SHALL count only against the burst limit
+(a burst-only check, so a burst-limited visitor still gets 429), and a miss SHALL take the full limiter check, the one
+backend call, and then one write with an expiry of `CHAT_CACHE_TTL_S` seconds (default 21600; `0` is off; otherwise 60
+to 86400). Only a validated successful answer SHALL be stored; no error outcome is. A request with a history SHALL never
+read or write the cache. Every cache failure (network error, non-success or malformed reply, a stored value that fails
+the response shape, no reply within 1 s, an invalid setting) SHALL be treated as a miss, answered live, and logged as
+`cache: "error"`; the cache SHALL NOT produce an error response. Keys, logs and bodies SHALL hold no question, answer or
+IP. The store is the limiter's: Upstash over REST on Vercel, in-process off Vercel.
+
+**Source:** web-chat-response-cache · intent.md AC1 to AC12 · ADR 0057
+
+#### Scenario: The same question twice
+- **WHEN** a visitor asks a first-turn question and another visitor then asks it again, with different casing and extra spaces, within the lifetime
+- **THEN** the second gets the same answer and sources with no backend call, and the global daily ceiling is not used
+
+#### Scenario: The cache store is down
+- **WHEN** the cache read or write fails
+- **THEN** the visitor gets the live answer and the log line shows `cache: "error"`
+
+### Requirement: WEBCHAT-16 — Vercel Web Analytics records page views only, and only on Vercel
+
+The system SHALL render the `Analytics` component from `@vercel/analytics/next` in `app/layout.tsx` only when
+`process.env.VERCEL` is set, record page views only (no custom event, no chat content), add no cookie, change no response
+or UI state, and keep local, unit and e2e runs free of any request to a Vercel script. `@vercel/analytics` SHALL be
+imported only by `app/layout.tsx` and pinned exactly. Enabling Web Analytics for the project is a human step.
+
+**Source:** web-chat-response-cache · intent.md AC14 · ADR 0058
+
+#### Scenario: Off Vercel
+- **WHEN** the app runs with `VERCEL` unset (local, unit or e2e)
+- **THEN** the layout renders no `Analytics` and the e2e console stays empty
 
 ### Requirement: WEBCHAT-9 — The route signs with SigV4, calls once and keeps the key server-side
 
@@ -208,8 +273,8 @@ in `features/chat/lib/swipe.ts` (`classifySwipe`). Nothing this adds animates, s
 
 ## Invariants
 
-1. **The key never leaves the server.** Only `features/chat/api/` reads the credential variables, and the
-   browser sees only the six error codes.
+1. **The key never leaves the server.** Only `features/chat/api/` reads the credential and limiter variables, and the
+   browser sees only the seven error codes.
 2. **One call per turn.** No retry at any layer (library, route or client).
 3. **`features/chat/lib/`, `features/chat/api/`, `features/chat/index.ts` and the route are the stable
    shell.** The polish changed components and CSS only; `web-chat-swipe-handle` added one new pure module
@@ -221,7 +286,6 @@ in `features/chat/lib/swipe.ts` (`classifySwipe`). Nothing this adds animates, s
 
 | ID | Reservation | Severity | Source |
 |---|---|---|---|
-| WEBCHAT-R1 | No per-visitor limit: one visitor can use the shared throttle (5 req/s, burst 10); `AiRadarBudget` is the cost backstop (ADR 0035). | MEDIUM (accepted) | web-chat-ui plan Decision 13 |
 | WEBCHAT-R2 | Not exercised against the real API. The human puts the key in `.env.local`, asks one question, and records the latency and a `[1]` citation (H1). | LOW (human) | web-chat-ui audit F7 |
 | WEBCHAT-R3 | Vercel function duration versus the route's `maxDuration` 40 is unchecked, and the three `CHAT_API_*` variables are not set (H2). | LOW (human) | web-chat-ui audit |
 | WEBCHAT-R4 | A blank or whitespace history `text` passes the route and is rejected by the backend (`history_item_text_invalid`); not fixed by either feature. | MEDIUM | web-chat-ui audit F1 |
@@ -231,6 +295,8 @@ in `features/chat/lib/swipe.ts` (`classifySwipe`). Nothing this adds animates, s
 | WEBCHAT-R8 | Red evidence was not captured for the polish outcomes O5 to O8, and the freeze of the shell rests on mtimes because the files were untracked. Both were accepted at sign-off. | LOW | web-chat-ui-polish audit F4, F6 |
 | WEBCHAT-R9 | The launcher's `aria-controls` names an unmounted panel id while closed (F8), and a draft edited while a turn is pending is overwritten with the question if the turn fails (F10). | LOW | web-chat-ui audit F8, F10 |
 | WEBCHAT-R10 | Phone swipe gestures are verified only with Chromium CDP touch. Android gesture navigation and iOS Safari may take a swipe from a tab flush with the right edge (Back or Forward), so tap is the guaranteed path. The human confirmed on an iPhone (Brave) that tapping the tab opens the chat; swipe left and right on a real phone, and Android gesture navigation, are not confirmed (task O8 stays open). | MEDIUM (human) | web-chat-swipe-handle audit R1 (intent Q1) |
+| WEBCHAT-R12 | The limiter's expire-on-create (Lua) and the memory store's expiry have no test (F2); its `tasks.md` records O0 without a pre-change baseline (F3), has stale working state (F5), and no CI run of `harny-feedback-apps-web.yml` exists for it (F4). The live check with the real Upstash database (`EVAL` accepted, shared counts, digest keys only) is a human step. | MEDIUM | web-chat-visitor-rate-limit audit F2 to F5, H5 |
+| WEBCHAT-R13 | The response cache: no red evidence for the handler cache cases, the conventions guards and the e2e file (F2); no per-turn hook record or CI run for it (F3); the audit was a self-audit by the implementing session (F4); the in-process cache has no size bound or pruning test (F5); `GET` and `SET ... EX` have not been run against the real Upstash database and the Web Analytics dashboard is not yet enabled (human live check). | MEDIUM | web-chat-response-cache audit F2 to F5, H1 to H3 |
 | WEBCHAT-R11 | The phone tab is 24 by 64, below WEBCHAT-1's old 44 by 44 target (accepted by decision, ADR 0056). `touch-action: pan-y` on the tab and sheet also blocks pinch-zoom that starts there; `pan-y pinch-zoom` was suggested. `ownsHorizontalGesture` keeps a redundant inline-style read (audit F5). | LOW (accepted) | web-chat-swipe-handle audit R2, notes, F5 |
 
 ## Contributing features
@@ -240,6 +306,8 @@ in `features/chat/lib/swipe.ts` (`classifySwipe`). Nothing this adds animates, s
 | web-chat-ui | 2026-10-24 | Created this capability: the `features/chat/` slice, the SigV4 `POST /api/chat` route, the six fixed error codes, history and question caps, the floating widget, the offline chat e2e tier, and the narrowed T29 guard. Audit: APPROVED WITH RESERVATIONS (round 1). |
 | web-chat-ui-polish | 2026-10-24 | Presentation only: markdown through a safe subset, stick-to-bottom scrolling, a bottom sheet on a phone, a branded header, a collapsible Sources list, a dots loader, a bigger composer and an empty state with suggestions; two new pinned dependencies; amended WEBCHAT-1 and WEBCHAT-2 in place of the first feature's text. Audit: APPROVED WITH RESERVATIONS (round 1, plus a fix round for F1, F3, F5 and F7). |
 | web-chat-swipe-handle | 2026-11-11 | Phone edge tab (24 by 64 px, right edge, lower third) in place of the floating button at 640 px and narrower; threshold touch and pen swipe left to open and swipe right to close; amended WEBCHAT-1 and WEBCHAT-12, added WEBCHAT-13 and `lib/swipe.ts`; no new dependency; a dev-only `allowedDevOrigins` setting in `next.config.ts` (human-verified on an iPhone, not audited). Audit: APPROVED WITH RESERVATIONS (round 1). |
+| web-chat-visitor-rate-limit | 2026-11-18 | Per-visitor (5 per 60 s, 20 per UTC day) and global (50 per UTC day) turn limits in the route, counted in Upstash Redis over REST (one `EVAL`, no new dependency) with an in-process store off Vercel; a seventh error code `rate_limited` with `Retry-After`; fail closed on a store failure or invalid setting; amended WEBCHAT-8, added WEBCHAT-14, closed WEBCHAT-R1, added WEBCHAT-R12; supersedes ADR 0035 and amends ADR 0033. Audit: APPROVED WITH RESERVATIONS (round 2; round 1 was REJECTED). |
+| web-chat-response-cache | 2026-11-18 | First-turn answer cache in the route, in the limiter's Upstash or in-process store (`CHAT_CACHE_TTL_S`, default 6 h, `0` off), a burst-only limiter mode for hits, fail-open on every cache failure, a text-free `cache` log field; plus Vercel Web Analytics rendered only on Vercel (`@vercel/analytics` 2.0.1); amended WEBCHAT-8, added WEBCHAT-15 and WEBCHAT-16 and WEBCHAT-R13; ADRs 0057 and 0058. Audit: APPROVED WITH RESERVATIONS (round 1, a self-audit). |
 
 ## Related ADRs
 
@@ -248,8 +316,12 @@ in `features/chat/lib/swipe.ts` (`classifySwipe`). Nothing this adds animates, s
 | [0032](../archived/web-chat-ui/decisions/0032-sign-with-aws4fetch-sign-and-our-own-single-fetch.md) | Sign chat requests with aws4fetch `sign()` and our own single `fetch` | Accepted |
 | [0033](../archived/web-chat-ui/decisions/0033-the-next-route-is-the-only-chat-caller-with-fixed-error-codes.md) | The Next.js route is the only chat caller, and it answers with six fixed error codes | Accepted |
 | [0034](../archived/web-chat-ui/decisions/0034-narrow-the-execute-api-guard-to-the-host-form.md) | Narrow the `execute-api` guard to the host form | Accepted |
-| [0035](../archived/web-chat-ui/decisions/0035-no-per-visitor-limit-on-the-chat-route-in-v1.md) | No per-visitor limit on the chat route in v1 | Accepted |
+| [0035](../archived/web-chat-ui/decisions/0035-no-per-visitor-limit-on-the-chat-route-in-v1.md) | No per-visitor limit on the chat route in v1 | Superseded by ADR 0049 |
 | [0036](../archived/web-chat-ui-polish/decisions/0036-ai-elements-shaped-local-components-not-shadcn-or-ai-elements.md) | Build AI-Elements-shaped local components, not shadcn/ui or AI Elements | Accepted |
 | [0037](../archived/web-chat-ui-polish/decisions/0037-dependency-rule-amended-for-react-markdown-and-use-stick-to-bottom.md) | Amend the dependency rule for `react-markdown` and `use-stick-to-bottom` | Accepted |
 | [0038](../archived/web-chat-ui-polish/decisions/0038-assistant-markdown-renders-through-a-safe-subset.md) | Assistant markdown renders through a safe subset | Accepted |
+| [0049](../archived/web-chat-visitor-rate-limit/decisions/0049-per-visitor-and-global-chat-limits-counted-in-upstash-over-rest-failing-closed.md) | Limit chat turns per visitor and globally, counted in Upstash Redis over REST, failing closed | Accepted |
+| [0050](../archived/web-chat-visitor-rate-limit/decisions/0050-the-chat-route-answers-with-seven-fixed-error-codes.md) | The chat route answers with seven fixed error codes | Accepted |
+| [0057](../archived/web-chat-response-cache/decisions/0057-first-turn-chat-answers-are-cached-in-the-route-in-upstash-and-fail-open.md) | Cache first-turn chat answers in the route, in the limiter's Upstash store, failing open | Accepted |
+| [0058](../archived/web-chat-response-cache/decisions/0058-dependency-rule-amended-for-vercel-analytics-rendered-only-on-vercel.md) | Amend the dependency rule for `@vercel/analytics`, rendered only on Vercel | Accepted |
 | [0056](../archived/web-chat-swipe-handle/decisions/0056-phone-chat-launcher-is-a-24-by-64-edge-tab-with-threshold-swipes.md) | On phones the chat launcher is a 24 by 64 px edge tab with threshold touch and pen swipes | Accepted |

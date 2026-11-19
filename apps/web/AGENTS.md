@@ -32,7 +32,10 @@ features/feed/          # The feed feature (all non-routing code), split by role
 features/chat/          # The chat feature (floating widget + server route logic), split by role
   index.ts              # the ONLY public entry point: ChatWidget, handleChatRequest
   conventions.test.ts   # architecture guards (barrel, deep-import, "use client" and credential-env rules)
-  api/                  # server-only: types.ts, backend.ts (SigV4 via aws4fetch, one fetch), handle-chat-request.ts
+  api/                  # server-only: types.ts, backend.ts (SigV4 via aws4fetch, one fetch), handle-chat-request.ts,
+                        #   rate-limit.ts (per-visitor and global limit, in-process or Upstash REST store),
+                        #   rate-limit-config.ts (CHAT_RATE_LIMIT_* parsing), visitor.ts (client IP to visitor key),
+                        #   response-cache.ts (first-turn answer cache, same store as the limiter, fails open)
   components/           # "use client": chat-widget (state shell; on phones <= 640 px the launcher is a right-edge tab, touch/pen swipe left opens, swipe right on the sheet closes), chat-panel (header, composition), AI-Elements-shaped
                         #   parts: conversation, conversation-empty-state, message, message-response (markdown),
                         #   sources, loader, prompt-input; chat.module.css (tokens only)
@@ -51,8 +54,14 @@ Code outside `features/feed/` imports only from `@/features/feed` (the barrel), 
 tests sit next to their source.
 
 Config (all server-only; see `.env.example`): `FEED_API_BASE_URL`, and for chat `CHAT_API_BASE_URL`,
-`CHAT_API_ACCESS_KEY_ID`, `CHAT_API_SECRET_ACCESS_KEY`. The chat variables are read per request, only
-inside `features/chat/api/`; never `NEXT_PUBLIC_`, never logged or returned.
+`CHAT_API_ACCESS_KEY_ID`, `CHAT_API_SECRET_ACCESS_KEY`. The visitor limiter adds `CHAT_RATE_LIMIT_SALT` (32+ characters, required with the
+Upstash store), the store's `KV_REST_API_URL` and `KV_REST_API_TOKEN` (or `UPSTASH_REDIS_REST_URL` and
+`UPSTASH_REDIS_REST_TOKEN`, set by the Vercel Marketplace integration), and optional overrides
+`CHAT_RATE_LIMIT_BURST` (5), `CHAT_RATE_LIMIT_BURST_WINDOW_S` (60), `CHAT_RATE_LIMIT_DAILY` (20),
+`CHAT_RATE_LIMIT_GLOBAL_DAILY` (50) and `CHAT_RATE_LIMIT_STORE` (`memory` or `upstash`). The response cache adds
+`CHAT_CACHE_TTL_S` (default 21600; `0` turns it off; otherwise 60 to 86400). All of them are read per
+request, only inside `features/chat/api/`; never `NEXT_PUBLIC_`, never logged or returned. A limited request gets
+429 `rate_limited` with `Retry-After`; a limiter store failure or invalid limiter setting fails closed as 503.
 
 ## Validation
 
@@ -70,7 +79,8 @@ The per-turn Stop hook runs eslint + tsc; CI runs `harny-feedback-apps-web.yml`.
 Package manager is **npm** (no workspaces, no pnpm/yarn). Beyond the base
 toolchain the only sanctioned extra dependencies are `@playwright/test` (dev, e2e tier only),
 `aws4fetch` (runtime, pinned exactly; SigV4 signing for the chat route via `AwsClient.sign()`, never `AwsClient.fetch()`),
-`react-markdown` (runtime, pinned exactly; renders assistant answers only, through the safe subset in
+`@vercel/analytics` (runtime, pinned exactly; the `Analytics` component, imported only by `app/layout.tsx` and rendered
+only when `VERCEL` is set; page views only), `react-markdown` (runtime, pinned exactly; renders assistant answers only, through the safe subset in
 `message-response.tsx`; never with a raw-HTML plugin) and `use-stick-to-bottom` (runtime, pinned exactly; the
 conversation scroll only). A further dependency needs its own ADR.
 

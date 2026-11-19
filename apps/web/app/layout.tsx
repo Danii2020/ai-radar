@@ -1,3 +1,4 @@
+import { Analytics } from "@vercel/analytics/next";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
@@ -18,6 +19,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         }}
       >
         {children}
+        {/* Page views only, and only on Vercel: elsewhere the component would request a Vercel script. */}
+        {process.env.VERCEL ? <Analytics /> : null}
       </body>
     </html>
   );

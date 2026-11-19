@@ -108,13 +108,23 @@ function chatReply(req, rawBody) {
 }
 
 export function startStub(port = STUB_PORT) {
+  // Chat requests seen per prefix (`/<prefix>/v1/chat`), readable at GET /_count/<prefix>, so an e2e
+  // test can prove a cached answer made no backend call.
+  const chatCounts = new Map()
   const server = createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://stub.local')
     if (url.pathname === '/health') {
       res.writeHead(200).end('ok')
       return
     }
+    const counted = /^\/_count\/([a-z]+)$/.exec(url.pathname)
+    if (req.method === 'GET' && counted) {
+      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ count: chatCounts.get(counted[1]) ?? 0 }))
+      return
+    }
     if (req.method === 'POST' && /^\/[a-z]+\/v1\/chat$/.test(url.pathname)) {
+      const prefix = url.pathname.split('/')[1]
+      chatCounts.set(prefix, (chatCounts.get(prefix) ?? 0) + 1)
       let raw = ''
       req.on('data', (chunk) => (raw += chunk))
       req.on('end', () => {

@@ -1,6 +1,6 @@
 # ADR 0035: No per-visitor limit on the chat route in v1
 
-- **Status**: Accepted
+- **Status**: Superseded by ADR 0049
 - **Date**: 2026-10-24
 - **Feature**: web-chat-ui
 - **Capability**: web-chat
