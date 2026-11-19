@@ -40,6 +40,23 @@ a phone (640 px and narrower) the panel is a full-width bottom sheet. Both packa
 exactly; see `AGENTS.md`. Overflow, scrolling and reduced-motion checks live in `e2e/layout.e2e.ts`
 and `e2e/chat.e2e.ts`, because jsdom has no layout engine.
 
+Visitor limit (`web-chat-visitor-rate-limit`): before any backend call the route admits at most 5 turns per
+visitor per 60 s, 20 per visitor per UTC day and 50 across all visitors per UTC day (the visitor is the client IP,
+IPv6 reduced to its /64). A limited visitor gets the 429 `rate_limited` code and the message "You've reached the chat
+limit for now. Please try again later." with the question kept. Counters live in Upstash Redis (Vercel
+Marketplace) over its REST API with the platform `fetch`, keyed by an HMAC of the visitor, and fail closed: a store
+outage or an invalid limiter setting shows the "unavailable" state. Off Vercel an in-process store is used, so local
+runs and tests need no new variable. Setup and the live check are in
+[`docs/runbooks.md`](../../docs/runbooks.md#chat-visitor-limit-upstash), "Chat visitor limit (Upstash)".
+
+Response cache (`web-chat-response-cache`): the route keeps the answer to a first-turn question (no history) in the
+same store as the visitor limit (Upstash on Vercel, in-process locally) for `CHAT_CACHE_TTL_S` seconds (default
+21600; `0` turns it off). The same question, after trimming, collapsing whitespace and lower-casing, is answered with
+no chat API call. A hit counts only against the burst limit, not the daily or global ones; any cache failure is a
+miss, never an error; the log line gains a text-free `cache` field (`hit`, `miss`, `skip`, `error`). Runbook:
+[`docs/runbooks.md`](../../docs/runbooks.md#chat-response-cache-and-web-analytics). The root layout also renders
+Vercel Web Analytics (page views only) when `VERCEL` is set.
+
 Phone edge tab (`web-chat-swipe-handle`): at 640 px and narrower the launcher is a slim tab (24 px wide,
 64 px tall, with a chat icon and no visible text) flush with the right edge in the lower third of the
 screen. Tapping it, or pressing Enter or Space, opens the sheet; a touch or pen swipe left on it opens

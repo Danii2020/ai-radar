@@ -1,7 +1,7 @@
 # Current-State Specifications — apps/web (frontend)
 
 > Current truth for the Next.js frontend. Maintained by `harny-sync`; do not hand-edit.
-> Last synced: 2026-11-11 (web-chat-swipe-handle archived: `web-chat` WEBCHAT-1 amended, WEBCHAT-12 widened, WEBCHAT-13 added, ADR 0056, reservations WEBCHAT-R10 and R11; `web-feed` WEB-9 pointer moved, WEB-R9). Earlier: 2026-11-10 (web-feed-prev-page archived: `web-feed` WEB-3, WEB-4 and WEB-7 amended, ADR 0055, reservations WEB-R5 to WEB-R8). Earlier: 2026-10-24 (web-chat-ui and web-chat-ui-polish archived: new `web-chat` capability, ADRs 0032–0039; earlier: feed-structure-refactor archived, component split — this index was carved out of the
+> Last synced: 2026-11-18 (web-chat-response-cache archived: `web-chat` WEBCHAT-8 amended, WEBCHAT-15 and WEBCHAT-16 added, WEBCHAT-R13 added, ADRs 0057 and 0058). Earlier: 2026-11-18 (web-chat-visitor-rate-limit archived: `web-chat` WEBCHAT-8 amended, WEBCHAT-14 added, WEBCHAT-R1 closed, WEBCHAT-R12 added, ADRs 0049 and 0050, ADR 0035 superseded). Earlier: 2026-11-11 (web-chat-swipe-handle archived: `web-chat` WEBCHAT-1 amended, WEBCHAT-12 widened, WEBCHAT-13 added, ADR 0056, reservations WEBCHAT-R10 and R11; `web-feed` WEB-9 pointer moved, WEB-R9). Earlier: 2026-11-10 (web-feed-prev-page archived: `web-feed` WEB-3, WEB-4 and WEB-7 amended, ADR 0055, reservations WEB-R5 to WEB-R8). Earlier: 2026-10-24 (web-chat-ui and web-chat-ui-polish archived: new `web-chat` capability, ADRs 0032–0039; earlier: feed-structure-refactor archived, component split — this index was carved out of the
 > repo-root `specs/current/_index.md` when `apps/web/` got its own harny harness,
 > `stack: typescript`; see Notes)
 
@@ -16,7 +16,7 @@
 | Capability | Current-State Specification | Incorporated Changes |
 |---|---|---|
 | web-feed | [web-feed.md](./web-feed.md) | [web-feed-ui](../archived/web-feed-ui/), [feed-structure-refactor](../archived/feed-structure-refactor/), [web-chat-ui](../archived/web-chat-ui/) (amendments), [web-chat-ui-polish](../archived/web-chat-ui-polish/) (amendments), [web-feed-prev-page](../archived/web-feed-prev-page/) (WEB-3, WEB-4, WEB-7 amendments), [web-chat-swipe-handle](../archived/web-chat-swipe-handle/) (WEB-9 pointer, `.pagerLink` CSS) |
-| web-chat | [web-chat.md](./web-chat.md) | [web-chat-ui](../archived/web-chat-ui/), [web-chat-ui-polish](../archived/web-chat-ui-polish/), [web-chat-swipe-handle](../archived/web-chat-swipe-handle/) |
+| web-chat | [web-chat.md](./web-chat.md) | [web-chat-ui](../archived/web-chat-ui/), [web-chat-ui-polish](../archived/web-chat-ui-polish/), [web-chat-swipe-handle](../archived/web-chat-swipe-handle/), [web-chat-visitor-rate-limit](../archived/web-chat-visitor-rate-limit/), [web-chat-response-cache](../archived/web-chat-response-cache/) |
 
 ## Keyword lookup
 
@@ -38,7 +38,10 @@
 | loadFeedState / parseFeedSearchParams | web-feed |
 | server-only fetch / "use client" | web-feed, web-chat |
 | chat widget / floating button / ChatWidget | web-chat |
-| /api/chat route / handleChatRequest / six error codes | web-chat |
+| /api/chat route / handleChatRequest / seven error codes | web-chat |
+| rate limit / visitor limit / rate_limited / Upstash / CHAT_RATE_LIMIT_* / Retry-After | web-chat (ADRs 0049, 0050) |
+| response cache / chat cache / CHAT_CACHE_TTL_S / cache hit / `cache` log field | web-chat (ADR 0057) |
+| @vercel/analytics / Web Analytics / Analytics component | web-chat (ADR 0058) |
 | SigV4 / aws4fetch / CHAT_API_* env | web-chat (backend side: root `specs/current/chat-api-auth.md`) |
 | react-markdown / safe markdown / use-stick-to-bottom | web-chat |
 | bottom sheet / phone layout / Jump to latest | web-chat |
@@ -57,11 +60,13 @@
 | web-chat-ui-polish | [specs/archived/web-chat-ui-polish/](../archived/web-chat-ui-polish/) | [web-chat.md](./web-chat.md), [web-feed.md](./web-feed.md) |
 | web-feed-prev-page | [specs/archived/web-feed-prev-page/](../archived/web-feed-prev-page/) | [web-feed.md](./web-feed.md) (WEB-3, WEB-4 amended; WEB-7 refreshed; WEB-R5 to WEB-R8) |
 | web-chat-swipe-handle | [specs/archived/web-chat-swipe-handle/](../archived/web-chat-swipe-handle/) | [web-chat.md](./web-chat.md) (WEBCHAT-1 amended, WEBCHAT-12 widened, WEBCHAT-13; WEBCHAT-R10, R11), [web-feed.md](./web-feed.md) (WEB-9 pointer; WEB-R9) |
+| web-chat-visitor-rate-limit | [specs/archived/web-chat-visitor-rate-limit/](../archived/web-chat-visitor-rate-limit/) | [web-chat.md](./web-chat.md) (WEBCHAT-8 amended, WEBCHAT-14; WEBCHAT-R1 closed, WEBCHAT-R12) |
+| web-chat-response-cache | [specs/archived/web-chat-response-cache/](../archived/web-chat-response-cache/) | [web-chat.md](./web-chat.md) (WEBCHAT-8 amended, WEBCHAT-15, WEBCHAT-16; WEBCHAT-R13) |
 
 ## Decisions (ADR registry)
 
 ADR numbers are **repo-wide monotonic** across both harness roots (this one and
-the repo root's). The next ADR written in either harness is **0057**. ADRs 0040, 0042–0048 and 0051–0054 are taken by the repo-root harness; 0049 and 0050 are claimed by `web-chat-visitor-rate-limit` (not yet archived); 0055 was written by `web-feed-prev-page` and 0056 by `web-chat-swipe-handle`; 0041 was never promoted. (ADRs 0009–0031 were written by the repo-root harness; see its index.)
+the repo root's). The next ADR written in either harness is **0059**. ADRs 0040, 0042–0048 and 0051–0054 are taken by the repo-root harness; 0049 and 0050 were written by `web-chat-visitor-rate-limit`, 0057 and 0058 by `web-chat-response-cache`; 0055 was written by `web-feed-prev-page` and 0056 by `web-chat-swipe-handle`; 0041 was never promoted. (ADRs 0009–0031 were written by the repo-root harness; see its index.)
 
 | ADR | Title | Status | Capability | Path |
 |---|---|---|---|---|
@@ -76,13 +81,17 @@ the repo root's). The next ADR written in either harness is **0057**. ADRs 0040,
 | 0032 | Sign chat requests with aws4fetch `sign()` and our own single `fetch` | Accepted | web-chat | [specs/archived/web-chat-ui/decisions/0032-sign-with-aws4fetch-sign-and-our-own-single-fetch.md](../archived/web-chat-ui/decisions/0032-sign-with-aws4fetch-sign-and-our-own-single-fetch.md) |
 | 0033 | The Next.js route is the only chat caller, and it answers with six fixed error codes | Accepted | web-chat | [specs/archived/web-chat-ui/decisions/0033-the-next-route-is-the-only-chat-caller-with-fixed-error-codes.md](../archived/web-chat-ui/decisions/0033-the-next-route-is-the-only-chat-caller-with-fixed-error-codes.md) |
 | 0034 | Narrow the `execute-api` guard to the host form | Accepted | web-chat | [specs/archived/web-chat-ui/decisions/0034-narrow-the-execute-api-guard-to-the-host-form.md](../archived/web-chat-ui/decisions/0034-narrow-the-execute-api-guard-to-the-host-form.md) |
-| 0035 | No per-visitor limit on the chat route in v1 | Accepted | web-chat | [specs/archived/web-chat-ui/decisions/0035-no-per-visitor-limit-on-the-chat-route-in-v1.md](../archived/web-chat-ui/decisions/0035-no-per-visitor-limit-on-the-chat-route-in-v1.md) |
+| 0035 | No per-visitor limit on the chat route in v1 | Superseded by ADR 0049 | web-chat | [specs/archived/web-chat-ui/decisions/0035-no-per-visitor-limit-on-the-chat-route-in-v1.md](../archived/web-chat-ui/decisions/0035-no-per-visitor-limit-on-the-chat-route-in-v1.md) |
 | 0036 | Build AI-Elements-shaped local components, not shadcn/ui or AI Elements | Accepted | web-chat | [specs/archived/web-chat-ui-polish/decisions/0036-ai-elements-shaped-local-components-not-shadcn-or-ai-elements.md](../archived/web-chat-ui-polish/decisions/0036-ai-elements-shaped-local-components-not-shadcn-or-ai-elements.md) |
 | 0037 | Amend the dependency rule for `react-markdown` and `use-stick-to-bottom` | Accepted | web-chat | [specs/archived/web-chat-ui-polish/decisions/0037-dependency-rule-amended-for-react-markdown-and-use-stick-to-bottom.md](../archived/web-chat-ui-polish/decisions/0037-dependency-rule-amended-for-react-markdown-and-use-stick-to-bottom.md) |
 | 0038 | Assistant markdown renders through a safe subset | Accepted | web-chat | [specs/archived/web-chat-ui-polish/decisions/0038-assistant-markdown-renders-through-a-safe-subset.md](../archived/web-chat-ui-polish/decisions/0038-assistant-markdown-renders-through-a-safe-subset.md) |
 | 0039 | Design deliverable revisions live with the feature that makes them | Accepted | web-feed | [specs/archived/web-chat-ui-polish/decisions/0039-deliverable-revisions-live-with-the-feature.md](../archived/web-chat-ui-polish/decisions/0039-deliverable-revisions-live-with-the-feature.md) |
+| 0049 | Limit chat turns per visitor and globally, counted in Upstash Redis over REST, failing closed (supersedes 0035) | Accepted | web-chat | [specs/archived/web-chat-visitor-rate-limit/decisions/0049-per-visitor-and-global-chat-limits-counted-in-upstash-over-rest-failing-closed.md](../archived/web-chat-visitor-rate-limit/decisions/0049-per-visitor-and-global-chat-limits-counted-in-upstash-over-rest-failing-closed.md) |
+| 0050 | The chat route answers with seven fixed error codes (amends 0033) | Accepted | web-chat | [specs/archived/web-chat-visitor-rate-limit/decisions/0050-the-chat-route-answers-with-seven-fixed-error-codes.md](../archived/web-chat-visitor-rate-limit/decisions/0050-the-chat-route-answers-with-seven-fixed-error-codes.md) |
 | 0055 | The drain direction is a web-owned `dir=prev` URL hint, never read from the opaque cursor (amends 0004 for backward requests) | Accepted | web-feed | [specs/archived/web-feed-prev-page/decisions/0055-drain-direction-is-a-web-owned-url-hint-never-read-from-the-cursor.md](../archived/web-feed-prev-page/decisions/0055-drain-direction-is-a-web-owned-url-hint-never-read-from-the-cursor.md) |
 | 0056 | On phones the chat launcher is a 24 by 64 px edge tab with threshold touch and pen swipes (amends WEBCHAT-1's 44 px hit area at 640 px and narrower) | Accepted | web-chat | [specs/archived/web-chat-swipe-handle/decisions/0056-phone-chat-launcher-is-a-24-by-64-edge-tab-with-threshold-swipes.md](../archived/web-chat-swipe-handle/decisions/0056-phone-chat-launcher-is-a-24-by-64-edge-tab-with-threshold-swipes.md) |
+| 0057 | Cache first-turn chat answers in the route, in the limiter's Upstash store, failing open | Accepted | web-chat | [specs/archived/web-chat-response-cache/decisions/0057-first-turn-chat-answers-are-cached-in-the-route-in-upstash-and-fail-open.md](../archived/web-chat-response-cache/decisions/0057-first-turn-chat-answers-are-cached-in-the-route-in-upstash-and-fail-open.md) |
+| 0058 | Amend the dependency rule for `@vercel/analytics`, rendered only on Vercel | Accepted | web-chat | [specs/archived/web-chat-response-cache/decisions/0058-dependency-rule-amended-for-vercel-analytics-rendered-only-on-vercel.md](../archived/web-chat-response-cache/decisions/0058-dependency-rule-amended-for-vercel-analytics-rendered-only-on-vercel.md) |
 
 ## Open reservations
 
@@ -94,7 +103,6 @@ the repo root's). The next ADR written in either harness is **0057**. ADRs 0040,
 | WEB-R2 | Whether `AbortSignal.timeout` on the feed fetch disables Next's Data Cache was researched but never empirically confirmed live. Accepted as final, not reopened. | LOW (accepted) | `specs/archived/web-feed-ui/audit.md` AD-9/C25 | web-feed |
 | WEB-R3 | `conventions.test.ts`'s no-`NEXT_PUBLIC_`/no-`execute-api` guard scans only `features/**`/`app/**`, not `scripts/`/`*.mjs`/`*.mts`/configs — narrower than its own description, no violation exists today. | LOW | `specs/archived/web-feed-ui/audit.md` | web-feed |
 | WEB-R4 | Duplicate web workflow resolved (the hand-relocated `harny-feedback-web.yml` was removed; `harny-feedback-apps-web.yml` is kept). No green CI run exists against the refactor yet. | LOW | `specs/archived/feed-structure-refactor/audit.md` F3 | web-feed |
-| WEBCHAT-R1 | No per-visitor limit on `/api/chat`; the shared throttle can be used up by one visitor (ADR 0035). | MEDIUM (accepted) | `specs/archived/web-chat-ui/execution-plan.md` | web-chat |
 | WEBCHAT-R2 | Not exercised against the real API; the human live check (H1) is open. | LOW (human) | `specs/archived/web-chat-ui/audit.md` F7 | web-chat |
 | WEBCHAT-R3 | Vercel function duration vs `maxDuration` 40 unchecked; `CHAT_API_*` not set in Vercel (H2). | LOW (human) | `specs/archived/web-chat-ui/audit.md` | web-chat |
 | WEBCHAT-R4 | A blank history `text` passes the route and is rejected by the backend. | MEDIUM | `specs/archived/web-chat-ui/audit.md` F1 | web-chat |
@@ -109,6 +117,8 @@ the repo root's). The next ADR written in either harness is **0057**. ADRs 0040,
 | WEB-R8 | With a `tag` filter, a Previous page's boundaries can differ from the forward ones (root FA-R2); the web app does not compensate. | LOW (accepted) | `specs/archived/feed-prev-cursor/` (FA-R2) | web-feed |
 | WEBCHAT-R10 | Phone swipe gestures verified only with Chromium CDP touch; the OS or browser may take an edge swipe. Human confirmed tap on an iPhone (Brave) only; swipes and Android gesture navigation unconfirmed (O8 open). | MEDIUM (human) | `specs/archived/web-chat-swipe-handle/audit.md` R1 | web-chat |
 | WEBCHAT-R11 | Phone tab is 24 by 64, below the old 44 by 44 target (ADR 0056); `touch-action: pan-y` blocks pinch-zoom that starts on the tab or sheet; redundant inline-style read in `ownsHorizontalGesture`. | LOW (accepted) | `specs/archived/web-chat-swipe-handle/audit.md` R2, F5 | web-chat |
+| WEBCHAT-R12 | Limiter expire-on-create and memory-store expiry untested (F2); O0 without a baseline (F3); no CI run of `harny-feedback-apps-web.yml` for it (F4); stale `tasks.md` working state (F5). The live check with the real Upstash database is a human step. | MEDIUM | `specs/archived/web-chat-visitor-rate-limit/audit.md` F2 to F5, H5 | web-chat |
+| WEBCHAT-R13 | Response cache: no red evidence for part of its tests (F2); no hook record or CI run (F3); self-audit (F4); in-process cache unbounded (F5); `GET`/`SET ... EX` not yet run against the real Upstash database and Web Analytics not yet enabled. | MEDIUM | `specs/archived/web-chat-response-cache/audit.md` F2 to F5, H1 to H3 | web-chat |
 | WEB-R9 | The `.pagerLink` CSS change and 11 regenerated style baselines were made after the `web-chat-swipe-handle` audit and are not audit-verified. | LOW | `specs/archived/web-chat-swipe-handle/design/feed.module.css` | web-feed |
 
 ## Notes
